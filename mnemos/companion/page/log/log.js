@@ -1,5 +1,6 @@
 /* The log. Reads ../data/life.json (small, every 20 seconds) and ../data/memories.json (when the memory changes), both
- * made read-only on request by `mnemos log` for whichever mind it was started with. Nothing here writes anywhere. */
+ * made on request by `mnemos log` for whichever mind it was started with. It writes one thing: the person's own words,
+ * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
 import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName } from '../shared/words.js';
@@ -191,6 +192,19 @@ function start() {
     hooks: {
       route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
       transition,
+      // what you write on the page: a reply, an answer or a note, sent to `mnemos log` (and on to the memory) as yours
+      send: async (request) => {
+        const r = await fetch('../act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        const answer = await r.json().catch(() => ({ error: 'It couldn’t be sent just now.' }));
+        if (answer.result) await look();
+        return answer;
+      },
+      // its notes you've read here, so it knows you have
+      read: async (ids) => {
+        const r = await fetch('../act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'read', note_ids: ids }) });
+        if (!r.ok) throw new Error('not marked');
+        await look();
+      },
       mindLink: (id) => `../mind/#memory/${encodeURIComponent(id)}`,
       picture: (src, cap) => { $('full-img').src = src; $('full-img').alt = cap; $('full-cap').textContent = cap; $('full').showModal(); },
       hour: (id) => {

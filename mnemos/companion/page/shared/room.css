@@ -187,3 +187,38 @@
   .thumb{width:72px;height:72px}
 }
 @media (prefers-reduced-motion:reduce){.tab,.chip,.rowb,.kindb,.thumb,.thumb img,.fold,.back,.textlink,.search{transition:none}}
+
+/* notes: a conversation per note, and the person's own words in reply */
+.thread .turn .meta{align-items:center}
+.thread .turn .meta .k{color:var(--ink-2)}
+.thread .turn .text{margin-top:var(--s2)}
+.thread .turn.later{margin-top:var(--s5);padding-left:var(--s4)}            /* a reply sits a step in, under what it answers */
+.thread .turn.yours .text{color:var(--ink-2)}
+.thread.asked{box-shadow:inset 2px 0 0 var(--signal)}                       /* blue: something for you to do */
+.asked-h{margin:var(--s5) 0 var(--s3);font:450 var(--t-small)/1.3 var(--sans);color:var(--ink-3)}
+.unread{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
+.reply-open{all:unset;cursor:pointer;display:inline-block;margin-top:var(--s4);color:var(--ink-3);font-size:var(--t-small);
+  border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.reply-open:hover{color:var(--ink-1)}
+.reply-open:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
+.compose{margin-top:var(--s4)}
+.compose.new{margin:0 0 var(--s4)}
+.field{display:block;box-sizing:border-box;width:100%;min-height:72px;resize:vertical;padding:12px 14px;border-radius:12px;border:1px solid transparent;
+  background:var(--surface-1);color:var(--ink-1);font:400 var(--t-read)/1.6 var(--sans);transition:border-color var(--quick)}
+.compose.new .field{background:var(--card)}
+.field::placeholder{color:var(--ink-4)}
+.field:focus{outline:none;border-color:var(--focus)}
+.acts{display:flex;align-items:center;justify-content:flex-end;gap:var(--s4);margin-top:var(--s2)}
+.acts .hint{margin-right:auto;color:var(--ink-4);font-size:var(--t-micro)}
+.acts .hint.flag{color:var(--ink-1)}
+.cancel{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);border-bottom:1px solid transparent;transition:color var(--quick)}
+.cancel:hover{color:var(--ink-1)}
+.cancel:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
+.send{all:unset;cursor:pointer;padding:8px 18px;border-radius:999px;background:var(--ink-1);color:var(--floor);font:500 var(--t-small)/1.2 var(--sans);
+  transition:opacity var(--quick),transform var(--quick)}
+.send:hover{opacity:.88}
+.send:active{transform:scale(.97)}
+.send:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.send[disabled]{cursor:default;opacity:.3;transform:none}
+@media (max-width:640px){.thread .turn.later{padding-left:var(--s3)}}
+@media (prefers-reduced-motion:reduce){.send,.cancel,.reply-open,.field{transition:none}}

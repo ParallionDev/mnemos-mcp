@@ -12,6 +12,7 @@ import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, ques
 
 const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours' };
 const PAGE = 60;
+const SEEN_AFTER = 1200;                  // a note of its own is read once it has stayed on your screen this long
 
 export class Room {
   constructor({ tabsEl, bodyEl, tabs, sticky = false, ctx, hooks = {} }) {
@@ -19,6 +20,16 @@ export class Room {
     this.s = { tab: tabs[0], memory: null, query: '', sort: 'newest', filter: 'all', qkind: 'all', shown: PAGE };
     this.whole = new Set();                 // entries opened in full, kept across live redraws
     this.texts = new Map();
+    this.drafts = new Map();                // what you're writing, by the note it answers ('new' for a note of your own)
+    this.opened = new Set();                // the reply boxes you opened
+    this.closed = new Set();                // the ones you closed on a question it asked you
+    this.notices = new Map();               // why something couldn't be sent, by box
+    this.sending = null;
+    this.seen = new Set();                  // its notes you've read here, said once to the memory
+    this.readTimers = new Map();
+    this.reading = null;
+    this.toMark = new Set();
+    this.present = false;                   // someone has touched the page: moved, scrolled, typed
     this.bind();
   }
 
@@ -28,6 +39,9 @@ export class Room {
     const { life, mems } = this.ctx();
     return { log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
       journal: life.journal.length, notes: life.notes.length, hours: life.hours.length }[tab];
+  }
+  /* its notes to you no one has read yet: the tab says so in the one colour that means "for you" */
+  unread() { return this.ctx().life.notes.filter((n) => n.author === 'agent' && !n.read && !this.seen.has(n.id)).length;
   }
   hash() { return this.s.memory ? `#read/memory/${this.s.memory}` : `#read/${this.s.tab}`; }
   go({ tab = this.s.tab, memory = null } = {}, keepPage = false) {
@@ -48,7 +62,8 @@ export class Room {
   render(toTop = false) {
     this.tabsEl.innerHTML = this.tabs.map((k) => {
       const n = this.count(k);
-      return `<button class="tab" role="tab" data-tab="${k}" aria-selected="${this.s.tab === k}">${LABEL[k]}${n == null ? '' : `<small>${n.toLocaleString('en-US')}</small>`}</button>`;
+      const fresh = k === 'notes' && this.unread() ? '<span class="unread" role="img" aria-label="new"></span>' : '';
+      return `<button class="tab" role="tab" data-tab="${k}" aria-selected="${this.s.tab === k}">${fresh}${LABEL[k]}${n == null ? '' : `<small>${n.toLocaleString('en-US')}</small>`}</button>`;
     }).join('');
     const { byId } = this.ctx();
     const open = this.s.memory && byId.has(this.s.memory);
@@ -56,6 +71,7 @@ export class Room {
     const top = scroller.scrollTop;
     // a live redraw never takes the search box away from someone typing in it
     const typing = document.activeElement?.id === 'room-search' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+    const a = document.activeElement, typingIn = a?.dataset?.draft ? [a.dataset.draft, a.selectionStart, a.selectionEnd] : null;
     this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory)
       : { log: () => this.logHTML(), memories: () => this.memoriesHTML(), beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(),
         journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML() }[this.s.tab]();
@@ -63,6 +79,9 @@ export class Room {
     if (toTop) this.toTop(); else scroller.scrollTop = top;
     const search = this.bodyEl.querySelector('#room-search');
     if (typing && search) { search.focus({ preventScroll: true }); search.setSelectionRange(...typing); }
+    const draft = typingIn && this.bodyEl.querySelector(`[data-draft="${CSS.escape(typingIn[0])}"]`);
+    if (draft) { draft.focus({ preventScroll: true }); draft.setSelectionRange(typingIn[1], typingIn[2]); }
+    this.watchReading();
     const more = this.bodyEl.querySelector('.more-rows');
     if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.sticky ? this.bodyEl : null, rootMargin: '400px' }).observe(more);
   }
@@ -72,7 +91,8 @@ export class Room {
     const y = this.tabsEl.getBoundingClientRect().top + scrollY - 8;
     if (scrollY > y) scrollTo({ top: y });
   }
-  refresh() { this.render(); }
+  /* a live redraw waits while you're writing, so nothing you type is lost or jumps */
+  refresh() { if (!this.bodyEl.contains(document.activeElement) || !document.activeElement.matches('[data-draft]')) this.render(); }
 
   /* the folded text of a long entry, with its button; the whole text is kept for the button */
   own(id, text, cls = 'text', long = 520) {
@@ -278,11 +298,107 @@ export class Room {
     return life.journal.map((e) => `<div class="jentry"><div class="meta"><span>${longDay(at(e.at))}, ${clock(at(e.at))}</span><span>${e.written === 'between_sessions' ? 'written between conversations' : 'written in conversation'}</span>${e.mood ? `<span>mood, in its words: ${esc(e.mood)}</span>` : ''}</div>
       ${this.entry(e.id, e.text)}</div>`).join('');
   }
+  /* ---------- notes: what it has to say to you, and what you say back ---------- */
+
+  /* its notes and yours, gathered into conversations: each note with the replies under it, oldest first; the
+     conversation with the newest word comes first */
+  threads() {
+    const { life } = this.ctx();
+    const byId = new Map(life.notes.map((n) => [n.id, n]));
+    const root = (n) => { let x = n; for (let i = 0; i < 50 && x.replyTo && byId.has(x.replyTo); i++) x = byId.get(x.replyTo); return x; };
+    const groups = new Map();
+    for (const n of life.notes) { const r = root(n).id; if (!groups.has(r)) groups.set(r, []); groups.get(r).push(n); }
+    const time = (n) => Date.parse(n.at);
+    return [...groups.values()].map((list) => list.sort((a, b) => time(a) - time(b)))
+      .sort((a, b) => time(b[b.length - 1]) - time(a[a.length - 1]));
+  }
+  /* the question it left you, if its last word in a conversation asks one and you haven't answered yet */
+  asks(list) {
+    const last = list[list.length - 1];
+    return last.author === 'agent' && /\?\s*$/.test(last.text.trim()) ? last : null;
+  }
   notesHTML() {
-    const { who, life } = this.ctx();
-    if (!life.notes.length) return `<p class="empty">No notes yet. It leaves one only when it passes the room test: something it would say if ${esc(person(who) === 'you' ? 'you' : person(who))} walked in right now. Notes written in practice hours stay in their copies; you’ll find them with their hour in the log.</p>`;
-    return life.notes.map((n) => `<div class="jentry"><div class="meta"><span>${n.author === 'agent' ? `To ${esc(person(who))}` : `From ${esc(person(who))}`}</span><span>${longDay(at(n.at))}, ${clock(at(n.at))}</span>${n.kind ? `<span>${esc(n.kind)}</span>` : ''}${n.author === 'agent' ? `<span>${n.read ? 'read' : 'not yet read'}</span>` : ''}</div>
-      ${this.own(n.id, n.text, 'text note')}</div>`).join('');
+    const { who } = this.ctx(), threads = this.threads();
+    const composer = this.box('new', `Leave ${who.name} a note`, 'It wakes with it, once, in its next session.');
+    if (!threads.length) return composer + `<p class="empty">No notes yet. It leaves one only when it passes the room test: something it would say if ${esc(person(who) === 'you' ? 'you' : person(who))} walked in right now.</p>`;
+    const open = threads.filter((t) => this.asks(t)), rest = threads.filter((t) => !this.asks(t));
+    return composer
+      + (open.length ? `<h3 class="asked-h">It asked ${person(who) === 'you' ? 'you' : esc(person(who))} ${open.length === 1 ? 'something' : `${open.length} things`}</h3>${open.map((t) => this.threadHTML(t)).join('')}` : '')
+      + (open.length && rest.length ? '<h3 class="asked-h">Everything else</h3>' : '')
+      + rest.map((t) => this.threadHTML(t)).join('');
+  }
+  threadHTML(list) {
+    const { who } = this.ctx();
+    const by = (n) => (n.author === 'agent' ? esc(who.name) : who.person ? esc(who.person) : 'You');
+    const dot = (n) => n.author === 'agent' && !n.read && !this.seen.has(n.id);
+    const head = (n) => `<div class="meta">${dot(n) ? '<span class="unread" role="img" aria-label="new"></span>' : ''}<span class="k">${by(n)}</span>`
+      + `<span>${longDay(at(n.at))}, ${clock(at(n.at))}</span>${n.kind === 'pickup' ? '<span>after our hour</span>' : ''}`
+      + `${n.author === 'person' ? `<span>${n.delivered ? 'it has woken with this' : 'it hasn’t woken since'}</span>` : ''}</div>`;
+    const watched = (n) => (n.author === 'agent' && !n.read && !this.seen.has(n.id) ? ` data-unread="${esc(n.id)}"` : '');
+    const turn = (n, i) => `<div class="turn${i ? ' later' : ''}${n.author === 'person' ? ' yours' : ''}"${watched(n)}>${head(n)}${this.own(n.id, n.text, 'text note', 600)}</div>`;
+    const answer = [...list].reverse().find((n) => n.author === 'agent');   // a reply answers its newest word here
+    const asked = this.asks(list);
+    // a question it asked you comes with its answer box already open
+    if (asked && !this.closed.has(asked.id)) this.opened.add(asked.id);
+    return `<article class="jentry thread${asked ? ' asked' : ''}">${list.map(turn).join('')}${answer ? this.box(answer.id, asked ? 'Answer' : 'Reply', '') : ''}</article>`;
+  }
+
+  /* a place to write: closed, one quiet word; open, a field and Send. What you type stays while the page refreshes
+     itself and while you look elsewhere. */
+  box(key, label, hint) {
+    const open = key === 'new' || this.opened.has(key), draft = this.drafts.get(key) || '', k = esc(key);
+    if (!open) return `<button class="reply-open" type="button" data-reply="${k}">${esc(label)}</button>`;
+    const notice = this.notices.get(key);
+    const place = key === 'new' ? label : label === 'Answer' ? 'Your answer, in your own words' : 'Your reply, in your own words';
+    return `<div class="compose${key === 'new' ? ' new' : ''}">
+      <textarea class="field" rows="${key === 'new' ? 2 : 3}" data-draft="${k}" placeholder="${esc(place)}" aria-label="${esc(key === 'new' ? label : label === 'Answer' ? 'Your answer' : 'Your reply')}">${esc(draft)}</textarea>
+      <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || hint)}</span>${key === 'new' ? '' : `<button class="cancel" type="button" data-cancel="${k}">Cancel</button>`}<button class="send" type="button" data-send="${k}"${draft.trim() && this.sending !== key ? '' : ' disabled'}>${this.sending === key ? 'Sending…' : 'Send'}</button></div></div>`;
+  }
+  async send(key) {
+    const text = (this.drafts.get(key) || '').trim();
+    if (!text || this.sending || !this.hooks.send) return;
+    this.sending = key; this.notices.delete(key); this.render();
+    let answer;
+    try { answer = await this.hooks.send(key === 'new' ? { command: 'note', text } : { command: 'reply', note_id: key, text }); }
+    catch { answer = { error: 'It couldn’t be sent just now. Is `mnemos log` still running?' }; }
+    this.sending = null;
+    if (answer?.result) { this.drafts.delete(key); this.opened.delete(key); }
+    else this.notices.set(key, answer?.error || 'It couldn’t be sent.');
+    this.render();
+  }
+
+  /* A note of its own counts as read once most of it (or most of your screen) has shown it for a moment, on a page in
+     front of someone who has touched it. Nothing short of that counts: a page open in a tab no one looks at, or one an
+     agent reads for itself, marks nothing, since a note marked read unseen is a note lost. Each is said once. */
+  watchReading() {
+    this.reading?.disconnect();
+    for (const t of this.readTimers.values()) clearTimeout(t);
+    this.readTimers.clear();
+    if (!this.hooks.read || !this.present || document.visibilityState !== 'visible') return;
+    const notes = this.bodyEl.querySelectorAll('[data-unread]');
+    if (!notes.length) return;
+    const root = this.sticky ? this.bodyEl : null;
+    this.reading = new IntersectionObserver((entries) => {
+      const view = root ? root.clientHeight : innerHeight;
+      for (const e of entries) {
+        const id = e.target.dataset.unread;
+        const showing = e.isIntersecting && e.intersectionRect.height >= Math.min(e.boundingClientRect.height, view) * 0.6;
+        if (showing && !this.readTimers.has(id)) this.readTimers.set(id, setTimeout(() => this.markSeen(id), SEEN_AFTER));
+        if (!showing && this.readTimers.has(id)) { clearTimeout(this.readTimers.get(id)); this.readTimers.delete(id); }
+      }
+    }, { root, threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
+    notes.forEach((n) => this.reading.observe(n));
+  }
+  markSeen(id) {
+    this.readTimers.delete(id);
+    if (!this.present || document.visibilityState !== 'visible' || this.seen.has(id)) return;
+    this.seen.add(id); this.toMark.add(id);
+    clearTimeout(this.marking);
+    this.marking = setTimeout(() => {
+      const ids = [...this.toMark]; this.toMark.clear();
+      // not said? then it's still unread, and the next look tries again
+      this.hooks.read(ids).catch(() => ids.forEach((i) => this.seen.delete(i)));
+    }, 300);
   }
   hoursHTML() {
     const { life } = this.ctx();
@@ -307,6 +423,14 @@ export class Room {
         fold.setAttribute('aria-expanded', open); fold.textContent = open ? 'Show less' : 'Read the whole entry';
         return;
       }
+      const open = e.target.closest('[data-reply]');
+      if (open) {
+        this.opened.add(open.dataset.reply); this.closed.delete(open.dataset.reply); this.render();
+        return this.bodyEl.querySelector(`[data-draft="${CSS.escape(open.dataset.reply)}"]`)?.focus();
+      }
+      const cancel = e.target.closest('[data-cancel]');
+      if (cancel) { const k = cancel.dataset.cancel; this.opened.delete(k); this.closed.add(k); this.drafts.delete(k); this.notices.delete(k); return this.render(); }
+      const send = e.target.closest('[data-send]'); if (send) return this.send(send.dataset.send);
       const pic = e.target.closest('[data-pic]'); if (pic) return this.hooks.picture?.(pic.dataset.pic, pic.dataset.cap);
       const m = e.target.closest('[data-mem]'); if (m && !m.disabled) return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem });
       if (e.target.closest('[data-back]')) return this.go({ tab: this.s.tab, memory: null });
@@ -315,7 +439,18 @@ export class Room {
       const k = e.target.closest('[data-qkind]'); if (k) { this.s.qkind = this.s.qkind === k.dataset.qkind ? 'all' : k.dataset.qkind; this.s.shown = PAGE; return this.render(); }
       const h = e.target.closest('[data-hour]'); if (h && this.hooks.hour) return this.hooks.hour(h.dataset.hour);
     });
+    body.addEventListener('keydown', (e) => {
+      // ⌘↩ or Ctrl↩ sends what you wrote
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) { e.preventDefault(); this.send(e.target.dataset.draft); }
+    });
     body.addEventListener('input', (e) => {
+      const key = e.target.dataset?.draft;
+      if (key) {
+        this.drafts.set(key, e.target.value);
+        const send = this.bodyEl.querySelector(`[data-send="${CSS.escape(key)}"]`);
+        if (send) send.disabled = !e.target.value.trim() || this.sending === key;
+        return;
+      }
       if (e.target.id !== 'room-search') return;
       this.s.query = e.target.value; this.s.shown = PAGE;
       this.render();
@@ -326,6 +461,10 @@ export class Room {
     body.addEventListener('pointerover', touch);
     body.addEventListener('focusin', touch);
     body.addEventListener('pointerleave', () => this.hooks.hover?.(null));
+    // someone is here: only then does a note on screen count as read
+    const here = () => { if (!this.present) { this.present = true; this.watchReading(); } };
+    for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, here, { passive: true, once: true });
+    document.addEventListener('visibilitychange', () => this.watchReading());
   }
   restoreOpen() { for (const d of this.bodyEl.querySelectorAll('details[data-key]')) if (this.whole.has(d.dataset.key)) d.open = true; }
 }
