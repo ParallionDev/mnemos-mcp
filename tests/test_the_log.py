@@ -677,3 +677,55 @@ def test_an_agents_page_says_when_there_is_nothing_yet(capsys):
     assert answer.startswith("Your page is open: ") and "Nothing is kept here yet" in answer, answer
     assert not store_path().exists()                                   # opening it made no store
     assert capsys.readouterr().out == ""
+
+
+# ---------- 8. The quiet hours, on or off, and when ----------
+# The one setting that's the person's: whether the agent's quiet hours run, and when. The page asks for exactly what
+# `mnemos daemon install --hours --write` (or `uninstall --hours --write`) does for this scope; here the scheduler is
+# stood in for, so no test touches the machine's own jobs.
+
+def test_the_page_turns_the_quiet_hours_on_at_its_times_and_off(mind, monkeypatch):
+    from mnemos import cli
+
+    asked = []
+    monkeypatch.setattr(cli, "_cmd_daemon", lambda args: asked.append(vars(args).copy()) or print("Scheduled.") or 0)
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, answer = post(server, {"command": "hours", "on": True, "mine": "07:15", "ours": "", "dream": "3:05"})
+        assert status == 200, answer
+        assert answer["result"] == "Scheduled."
+        status, answer = post(server, {"command": "hours", "on": False})
+        assert status == 200, answer
+    on, off = asked
+    assert (on["daemon_command"], on["hours"], on["write"]) == ("install", True, True)
+    assert (on["mine_at"], on["ours_at"], on["dream_at"]) == ((7, 15), None, (3, 5))   # an empty time keeps its default
+    assert on["agent_id"] == AGENT
+    assert (off["daemon_command"], off["hours"], off["write"]) == ("uninstall", True, True)
+
+
+def test_the_quiet_hours_take_only_a_yes_or_no_and_times_of_day(mind, monkeypatch):
+    from mnemos import cli
+
+    asked = []
+    monkeypatch.setattr(cli, "_cmd_daemon", lambda args: asked.append(args) or 0)
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        for request in ({"command": "hours", "on": "yes"}, {"command": "hours"},
+                        {"command": "hours", "on": True, "mine": "25:00"}, {"command": "hours", "on": True, "dream": "8am"},
+                        {"command": "hours", "on": True, "ours": 1900}):
+            status, answer = post(server, request)
+            assert status == 400 and "error" in answer, request
+        assert post(server, {"command": "hours", "on": True}, origin="https://example.com")[0] == 403
+    assert asked == []
+
+
+def test_a_schedule_that_cant_be_made_says_why(mind, monkeypatch):
+    from mnemos import cli
+
+    def refuse(args):
+        print("No supported scheduler found on this system.", file=sys.stderr)
+        return 1
+
+    monkeypatch.setattr(cli, "_cmd_daemon", refuse)
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, answer = post(server, {"command": "hours", "on": True})
+    assert status == 400
+    assert answer["error"] == "No supported scheduler found on this system."

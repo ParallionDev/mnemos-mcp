@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import socketserver
 import sqlite3
@@ -49,8 +50,10 @@ from .export import MOST_BYTES, Exporter
 logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 5.0
-# What the page may write: only the person's own words, and which notes they read.
-ACTS = ("reply", "note", "read")
+# What the page may write: only the person's own words, which notes they read, and whether and when the agent's
+# quiet hours run (the one setting that's the person's to decide; the rest of Mnemos tunes itself).
+ACTS = ("reply", "note", "read", "hours")
+CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 MOST_READ = 200
 MOST_ACT_BYTES = 32 * 1024
 TYPES = {
@@ -107,6 +110,7 @@ class LogServer(ThreadingHTTPServer):
         self.token = token or secrets.token_urlsafe(16)
         self.files = page_files()
         self._lock = threading.Lock()
+        self._settings = threading.Lock()  # one change to the schedule at a time
         self._documents: tuple[float, bytes] | None = None
         self._memories: tuple[str | None, bytes] | None = None
         super().__init__(("127.0.0.1", port), _Handler)
@@ -139,6 +143,8 @@ class LogServer(ThreadingHTTPServer):
 
         if request.get("command") == "read":
             return self._read(request.get("note_ids"))
+        if request.get("command") == "hours":
+            return self._hours(request)
         scope = self.exporter.scope
         interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id,
                               person_id=scope.person_id, project_scope=scope.project_scope)
@@ -147,6 +153,50 @@ class LogServer(ThreadingHTTPServer):
         with self._lock:
             self._documents = None
         return answer
+
+    def _hours(self, request: dict) -> dict:
+        """Turn the agent's quiet hours on, at the times given (each HH:MM, or
+        its own default), or off: exactly what `mnemos daemon install --hours
+        --write` and `mnemos daemon uninstall --hours --write` do for this
+        scope, answered ``{"result": what it said}`` or ``{"error": ...}``."""
+        import argparse
+        import contextlib
+        import io
+
+        from .. import cli
+
+        on = request.get("on")
+        if not isinstance(on, bool):
+            return {"error": '"on" says whether the quiet hours run: true or false.'}
+        times: dict[str, tuple[int, int] | None] = {}
+        for key in ("mine", "ours", "dream"):
+            value = request.get(key)
+            if value in (None, ""):
+                times[key] = None
+                continue
+            match = CLOCK.match(value) if isinstance(value, str) else None
+            if not match:
+                return {"error": f'"{key}" is a time of day, like 08:00.'}
+            times[key] = (int(match.group(1)), int(match.group(2)))
+        scope = self.exporter.scope
+        args = argparse.Namespace(
+            daemon_command="install" if on else "uninstall", hours=True, write=True,
+            mine_at=times["mine"] if on else None, ours_at=times["ours"] if on else None,
+            dream_at=times["dream"] if on else None,
+            db_path=scope.db_path, agent_id=scope.agent_id, person_id=scope.person_id,
+            project_scope=scope.project_scope)
+        said, failed = io.StringIO(), io.StringIO()
+        with self._settings, contextlib.redirect_stdout(said), contextlib.redirect_stderr(failed):
+            try:
+                code = cli._cmd_daemon(args)
+            except Exception as exc:  # anything else is one plain line, never a trace
+                code, _ = 1, failed.write(f"{exc}")
+        with self._lock:
+            self._documents = None
+        if code != 0:
+            words = " ".join(failed.getvalue().split()) or " ".join(said.getvalue().split())
+            return {"error": words[:400] or "The quiet hours couldn't be changed."}
+        return {"result": " ".join(said.getvalue().split())[:400]}
 
     def _read(self, ids: object) -> dict:
         """Mark these notes of the agent's read, each once (one already read
@@ -229,7 +279,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             request = None
         if not isinstance(request, dict) or request.get("command") not in ACTS:
-            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, or say a note was read, and nothing else."})
+            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, say a note was read, or turn the quiet hours on or off, and nothing else."})
         answer = server.act(request)
         return self._json(HTTPStatus.OK if "result" in answer else HTTPStatus.BAD_REQUEST, answer)
 

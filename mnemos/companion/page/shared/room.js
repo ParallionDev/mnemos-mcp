@@ -10,7 +10,7 @@
 import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
   forPerson, temperature, tempWord, KIND, ASK, ASK_ORDER, RELATION, trailSentence, modelName, sameModel } from './words.js';
 
-const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours' };
+const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours', settings: 'Settings' };
 const PAGE = 60;
 const SEEN_AFTER = 1200;                  // a note of its own is read once it has stayed on your screen this long
 
@@ -30,6 +30,7 @@ export class Room {
     this.reading = null;
     this.toMark = new Set();
     this.present = false;                   // someone has touched the page: moved, scrolled, typed
+    this.hours = null;                      // the quiet hours as you're setting them, until saved
     this.bind();
   }
 
@@ -38,7 +39,7 @@ export class Room {
   count(tab) {
     const { life, mems } = this.ctx();
     return { log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
-      journal: life.journal.length, notes: life.notes.length, hours: life.hours.length }[tab];
+      journal: life.journal.length, notes: life.notes.length, hours: life.hours.length, settings: null }[tab];
   }
   /* its notes to you no one has read yet: the tab says so in the one colour that means "for you" */
   unread() { return this.ctx().life.notes.filter((n) => n.author === 'agent' && !n.read && !this.seen.has(n.id)).length;
@@ -74,7 +75,7 @@ export class Room {
     const a = document.activeElement, typingIn = a?.dataset?.draft ? [a.dataset.draft, a.selectionStart, a.selectionEnd] : null;
     this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory)
       : { log: () => this.logHTML(), memories: () => this.memoriesHTML(), beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(),
-        journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML() }[this.s.tab]();
+        journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML(), settings: () => this.settingsHTML() }[this.s.tab]();
     this.restoreOpen();
     if (toTop) this.toTop(); else scroller.scrollTop = top;
     const search = this.bodyEl.querySelector('#room-search');
@@ -408,6 +409,62 @@ export class Room {
         <div class="q">${esc(trailSentence(h))}</div>${h.journal.length ? `<div class="ex">${esc(firstLine(h.journal[h.journal.length - 1].text, 200))}</div>` : ''}</button></li>`; }).join('')}</ul>`;
   }
 
+  /* ---------- settings: what's the person's to decide ---------- */
+
+  /* The quiet hours are the one setting that's yours: whether it has them, and when each starts. Everything else in
+     Mnemos tunes itself. What's set here is what `mnemos daemon install --hours` would do, on this machine. */
+  settingsHTML() {
+    const { who, life } = this.ctx();
+    const plan = life.schedule || [], at = (k) => plan.find((p) => p.kind === k);
+    const hhmm = (w) => (w ? `${String(w.Hour ?? 0).padStart(2, '0')}:${String(w.Minute ?? 0).padStart(2, '0')}` : '');
+    const DEFAULT = { mine: '08:00', ours: '19:00', dream: '03:30' };
+    const saved = { on: plan.length > 0, mine: hhmm(at('mine')?.when) || DEFAULT.mine, ours: hhmm(at('ours')?.when) || DEFAULT.ours, dream: hhmm(at('dream')?.when) || DEFAULT.dream };
+    const h = this.hours || saved, changed = JSON.stringify(h) !== JSON.stringify(saved);
+    const notice = this.notices.get('hours');
+    const off = plan.filter((p) => !p.loaded);
+    const row = (k, label, what) => `<label class="set-row"><span><span class="set-k">${label}</span><span class="set-d">${what}</span></span>
+      <input class="set-time" type="time" data-hours-time="${k}" value="${esc(h[k])}"${h.on ? '' : ' disabled'} aria-label="${label}, starts at"></label>`;
+    return `<section class="settings">
+      <div class="belief set">
+        <div class="set-head"><div><div class="set-title">Quiet hours</div>
+          <p class="set-d">Time between conversations that’s ${esc(who.name)}’s own: an hour a day to itself, half an hour for the day’s work, and a short time each night to dream over its memory. They run Claude on its own and use ${person(who) === 'you' ? 'your' : `${esc(person(who))}’s`} Claude plan.</p></div>
+          <button class="switch" type="button" role="switch" aria-checked="${h.on}" data-hours-on="${h.on ? 'off' : 'on'}"><span class="knob" aria-hidden="true"></span><span class="vh">Quiet hours</span></button></div>
+        <div class="set-rows">${row('mine', 'Its own hour', 'an hour to itself')}${row('ours', 'Our hour', 'half an hour for the day’s work')}${row('dream', 'The dream', 'a short time each night')}</div>
+        ${off.length ? `<p class="set-d flag">${off.length === plan.length ? 'Scheduled, but not loaded: they won’t run until they are.' : `${plural(off.length, 'hour')} scheduled but not loaded.`}</p>` : ''}
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (changed ? 'Not saved yet.' : h.on ? 'On, on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
+          ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
+          <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
+      </div>
+      <div class="belief set">
+        <div class="set-title">Where it lives</div>
+        <dl class="set-facts">
+          <dt>Its memory</dt><dd>${esc(who.store || '')}${life.memory?.storeBytes ? ` · ${(life.memory.storeBytes / 1e6).toFixed(0)} MB` : ''}</dd>
+          <dt>Memories</dt><dd>${(life.memory?.count || 0).toLocaleString('en-US')} it can reach${life.memory?.states?.archived ? `, ${life.memory.states.archived.toLocaleString('en-US')} let go` : ''}</dd>
+          <dt>Agent</dt><dd>${esc(who.agentId || '')}${who.model ? ` · signs as ${esc(who.name)}` : ''}</dd>
+          <dt>You</dt><dd>${who.person ? esc(who.person) : 'not named: start the page with --person-name, or set MNEMOS_PERSON_NAME'}</dd>
+        </dl>
+        <p class="set-d">On this machine only. Nothing here leaves it.</p>
+      </div>
+    </section>`;
+  }
+  currentHours() {
+    if (this.hours) return this.hours;
+    const plan = this.ctx().life.schedule || [], at = (k) => plan.find((p) => p.kind === k)?.when;
+    const hhmm = (w, d) => (w ? `${String(w.Hour ?? 0).padStart(2, '0')}:${String(w.Minute ?? 0).padStart(2, '0')}` : d);
+    return { on: plan.length > 0, mine: hhmm(at('mine'), '08:00'), ours: hhmm(at('ours'), '19:00'), dream: hhmm(at('dream'), '03:30') };
+  }
+  async saveHours() {
+    const h = this.hours;
+    if (!h || this.sending || !this.hooks.send) return;
+    this.sending = 'hours'; this.notices.delete('hours'); this.render();
+    let answer;
+    try { answer = await this.hooks.send({ command: 'hours', on: h.on, mine: h.mine, ours: h.ours, dream: h.dream }); }
+    catch { answer = { error: 'It couldn’t be changed just now. Is `mnemos log` still running?' }; }
+    this.sending = null;
+    if (answer?.result) this.hours = null; else this.notices.set('hours', answer?.error || 'It couldn’t be changed.');
+    this.render();
+  }
+
   /* ---------- events ---------- */
 
   bind() {
@@ -431,6 +488,10 @@ export class Room {
       const cancel = e.target.closest('[data-cancel]');
       if (cancel) { const k = cancel.dataset.cancel; this.opened.delete(k); this.closed.add(k); this.drafts.delete(k); this.notices.delete(k); return this.render(); }
       const send = e.target.closest('[data-send]'); if (send) return this.send(send.dataset.send);
+      const sw = e.target.closest('[data-hours-on]');
+      if (sw) { this.hours = { ...this.currentHours(), on: sw.dataset.hoursOn === 'on' }; this.notices.delete('hours'); return this.render(); }
+      if (e.target.closest('[data-hours-reset]')) { this.hours = null; this.notices.delete('hours'); return this.render(); }
+      if (e.target.closest('[data-hours-save]')) return this.saveHours();
       const pic = e.target.closest('[data-pic]'); if (pic) return this.hooks.picture?.(pic.dataset.pic, pic.dataset.cap);
       const m = e.target.closest('[data-mem]'); if (m && !m.disabled) return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem });
       if (e.target.closest('[data-back]')) return this.go({ tab: this.s.tab, memory: null });
@@ -444,6 +505,14 @@ export class Room {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) { e.preventDefault(); this.send(e.target.dataset.draft); }
     });
     body.addEventListener('input', (e) => {
+      const time = e.target.dataset?.hoursTime;
+      if (time) {
+        // the field keeps its focus: only the Save button and the hint change while you set a time
+        this.hours = { ...this.currentHours(), [time]: e.target.value };
+        const save = this.bodyEl.querySelector('[data-hours-save]'); if (save) save.disabled = false;
+        const hint = this.bodyEl.querySelector('.set .acts .hint'); if (hint) { hint.textContent = 'Not saved yet.'; hint.classList.remove('flag'); }
+        return;
+      }
       const key = e.target.dataset?.draft;
       if (key) {
         this.drafts.set(key, e.target.value);
