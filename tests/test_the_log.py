@@ -514,15 +514,15 @@ def test_every_font_ships_with_its_license():
     files = page_files()
     css = files["shared/fonts.css"].decode("utf-8")
     fonts = re.findall(r"url\(\.\./fonts/([\w.-]+)\)", css)
-    assert len(fonts) == 6
+    assert len(fonts) == 9
     for font in fonts:
         assert f"fonts/{font}" in files, font
     # the mind's light is set in JetBrains Mono, loaded by its script rather than the stylesheet
     assert "fonts/jetbrains-mono-nl.woff" in files and "../fonts/jetbrains-mono-nl.woff" in files["mind/mind.js"].decode("utf-8")
-    for family in ("Inter", "InterTight", "Silkscreen", "CormorantGaramond", "JetBrainsMono"):
+    for family in ("Inter", "InterTight", "Silkscreen", "Newsreader", "JetBrainsMono"):
         license_text = files[f"fonts/OFL-{family}.txt"].decode("utf-8")
         assert "SIL Open Font License" in license_text or "SIL OPEN FONT LICENSE" in license_text, family
-    for family in ("Inter", "Inter Tight", "Silkscreen", "Cormorant Garamond"):
+    for family in ("Inter", "Inter Tight", "Silkscreen", "Newsreader"):
         assert f'font-family:"{family}"' in css
 
 
