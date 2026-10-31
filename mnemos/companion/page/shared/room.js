@@ -326,8 +326,8 @@ export class Room {
     if (!threads.length) return composer + `<p class="empty">No notes yet. It leaves one only when it passes the room test: something it would say if ${esc(person(who) === 'you' ? 'you' : person(who))} walked in right now.</p>`;
     const open = threads.filter((t) => this.asks(t)), rest = threads.filter((t) => !this.asks(t));
     return composer
-      + (open.length ? `<h3 class="asked-h">It asked ${person(who) === 'you' ? 'you' : esc(person(who))} ${open.length === 1 ? 'something' : `${open.length} things`}</h3>${open.map((t) => this.threadHTML(t)).join('')}` : '')
-      + (open.length && rest.length ? '<h3 class="asked-h">Everything else</h3>' : '')
+      + (open.length ? `<h3 class="asked-h first label"><span class="unread" aria-hidden="true"></span>Waiting on ${person(who) === 'you' ? 'you' : esc(person(who))}<span class="n">${open.length}</span></h3>${open.map((t) => this.threadHTML(t)).join('')}` : '')
+      + (open.length && rest.length ? `<h3 class="asked-h label">Earlier<span class="n">${rest.length}</span></h3>` : '')
       + rest.map((t) => this.threadHTML(t)).join('');
   }
   threadHTML(list) {
@@ -343,7 +343,7 @@ export class Room {
     const asked = this.asks(list);
     // a question it asked you comes with its answer box already open
     if (asked && !this.closed.has(asked.id)) this.opened.add(asked.id);
-    return `<article class="jentry thread${asked && !who.unfiled ? ' asked' : ''}">${list.map(turn).join('')}${answer && !who.unfiled ? this.box(answer.id, asked ? 'Answer' : 'Reply', '') : ''}</article>`;
+    return `<article class="jentry thread">${list.map(turn).join('')}${answer && !who.unfiled ? this.box(answer.id, asked ? 'Answer' : 'Reply', '') : ''}</article>`;
   }
 
   /* a place to write: closed, one quiet word; open, a field and Send. What you type stays while the page refreshes
@@ -433,9 +433,9 @@ export class Room {
         <div class="set-head"><div><div class="set-title">Quiet hours</div>
           <p class="set-d">Time between conversations that’s ${esc(who.name)}’s own: an hour a day to itself, half an hour for the day’s work, and a short time each night to dream over its memory. They run Claude on its own and use ${person(who) === 'you' ? 'your' : `${esc(person(who))}’s`} Claude plan.</p></div>
           <button class="switch" type="button" role="switch" aria-checked="${h.on}" data-hours-on="${h.on ? 'off' : 'on'}"><span class="knob" aria-hidden="true"></span><span class="vh">Quiet hours</span></button></div>
-        <div class="set-rows">${row('mine', 'Its own hour', 'an hour to itself')}${row('ours', 'Our hour', 'half an hour for the day’s work')}${row('dream', 'The dream', 'a short time each night')}</div>
+        <div class="set-rows">${row('mine', 'Its own hour', 'An hour to itself')}${row('ours', 'Our hour', 'Half an hour for the day’s work')}${row('dream', 'The dream', 'A short time each night')}</div>
         ${off.length ? `<p class="set-d flag">${off.length === plan.length ? 'Scheduled, but not loaded: they won’t run until they are.' : `${plural(off.length, 'hour')} scheduled but not loaded.`}</p>` : ''}
-        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (changed ? 'Not saved yet.' : h.on ? 'On, on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (changed ? 'Not saved yet.' : h.on ? 'Scheduled on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
           ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
           <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
       </div>`}
@@ -447,7 +447,7 @@ export class Room {
           <dt>Agent</dt><dd>${esc(who.agentId || '')}${who.model ? ` · signs as ${esc(who.name)}` : ''}</dd>
           <dt>You</dt><dd>${who.person ? esc(who.person) : 'not named: start the page with --person-name, or set MNEMOS_PERSON_NAME'}</dd>
         </dl>
-        <p class="set-d">On this machine only. Nothing here leaves it.</p>
+        <p class="set-d set-foot">On this machine only. Nothing here leaves it.</p>
       </div>
     </section>`;
   }
