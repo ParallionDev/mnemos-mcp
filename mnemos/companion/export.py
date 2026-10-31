@@ -216,7 +216,8 @@ class _Reading:
             f"""SELECT id, content, {self.col('engrams', 'impact')}, kind, accessibility, state, created_at,
             last_accessed, {self.col('engrams', 'author_kind', "'unknown'")}, {self.col('engrams', 'author_model')},
             {self.col('engrams', 'author_session')}, {self.col('engrams', 'lineage', "'{}'")},
-            {self.col('engrams', 'standing', '0')}
+            {self.col('engrams', 'standing', '0')}, {self.col('engrams', 'strength', '0.5')},
+            {self.col('engrams', 'stability', '0.5')}
             FROM engrams WHERE {clause} AND state IN ({marks}) ORDER BY created_at, id
             LIMIT ? OFFSET ?""", (*scope, *states, -1 if limit is None else limit, offset)))
 
@@ -255,10 +256,13 @@ class _Reading:
                 f"SELECT target_id FROM reflection_queue WHERE {q_clause} AND answered_at IS NULL "
                 f"AND kind NOT IN ({retired})", (*q_scope, *RETIRED_REFLECTION_KINDS))}
         recalls: dict[str, int] = {}
+        recalled: list[list[str]] = []
         if self.has("session_reinforcements"):
-            for (engram_id,) in self.c.execute("SELECT engram_id FROM session_reinforcements"):
+            for engram_id, at in self.c.execute(
+                    "SELECT engram_id, reinforced_at FROM session_reinforcements ORDER BY reinforced_at"):
                 if engram_id in ids:
                     recalls[engram_id] = recalls.get(engram_id, 0) + 1
+                    recalled.append([engram_id, iso(when(at))])
         ties: dict[str, list] = {i: [] for i in ids}
         lessons: set[str] = set()
         seen: set[tuple] = set()
@@ -277,8 +281,9 @@ class _Reading:
                     continue
                 seen.add(key)
                 weight = round(r["strength"] or 0, 3)
-                ties[source].append([target, r["relation"], weight])
-                ties[target].append([source, r["relation"], weight])
+                # who it goes from, so the drawing can send a fibre the right way; when, and what made it
+                ties[source].append([target, r["relation"], weight, iso(born), r["formed_by"] or "", 1])
+                ties[target].append([source, r["relation"], weight, iso(born), r["formed_by"] or "", 0])
                 if r["relation"] == "distilled_into":
                     lessons.add(target)
         out = []
@@ -290,13 +295,16 @@ class _Reading:
                 "asked": r["id"] in asked, "state": r["state"], "author": r["author_kind"] or "unknown",
                 "model": r["author_model"] or "", "acc": round(r["accessibility"] or 0, 3),
                 "recalls": recalls.get(r["id"], 0), "ties": sorted(ties[r["id"]], key=lambda tie: -tie[2]),
+                "strength": round(r["strength"] if r["strength"] is not None else 0.5, 3),
+                "stability": round(r["stability"] if r["stability"] is not None else 0.5, 3),
                 "content": content, "impact": impact if impact != content else "",
             })
         digest = hashlib.sha1(usedforsecurity=False)  # a version stamp, not a secret
+        digest.update(f"recalled {len(recalled)}".encode())
         for m in out:
             digest.update(f"{m['id']}|{m['state']}|{len(m['content'])}|{len(m['impact'])}|{m['standing']}"
                           f"|{m['asked']}|{len(m['ties'])}".encode())
-        return out, digest.hexdigest()[:12]
+        return out, recalled, digest.hexdigest()[:12]
 
     def questions(self) -> list[dict]:
         """Every question its memory asked it, newest first. One of a kind no
@@ -713,7 +721,7 @@ class Exporter:
             newest = conn.execute(f"SELECT max(created_at) FROM engrams WHERE {clause}", scope).fetchone()[0]
             beliefs = reading.beliefs()
             handoffs = reading.handoffs()
-            memories, version = reading.memories()
+            memories, recalled, version = reading.memories()
             hours = self.hours(files, reading)
         finally:
             conn.close()
@@ -744,4 +752,4 @@ class Exporter:
             "beliefs": beliefs,
             "handoffs": handoffs,
         }
-        return life, {"version": version, "made": iso(now), "memories": memories}
+        return life, {"version": version, "made": iso(now), "memories": memories, "recalled": recalled}

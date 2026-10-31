@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>The mind</title>
+<link rel="stylesheet" href="../shared/fonts.css">
+<style>
+/* The mind. An agent's real memory, drawn by What Lights Up's anatomy: every cell a memory in its real place among
+   the ones it's tied to, every fibre a real link. The frame speaks of the mind in the third person; only its own
+   words say "I", in the serif. */
+:root{
+  --floor:#060608; --ink-1:rgba(236,239,244,.94); --ink-2:rgba(236,239,244,.66); --ink-3:rgba(236,239,244,.44);
+  --ink-4:rgba(236,239,244,.27); --hair:rgba(255,255,255,.08); --hair-2:rgba(255,255,255,.14); --focus:rgba(255,255,255,.5);
+  --display:"Inter Tight",system-ui,sans-serif; --sans:"Inter",system-ui,sans-serif; --lit:"Cormorant Garamond",Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--floor);color:var(--ink-1);overflow:hidden}
+body{font:400 13px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+canvas#mind{position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:none}
+canvas#mind.dragging{cursor:grabbing}
+.ui{position:fixed;pointer-events:none;z-index:2;text-shadow:0 0 14px rgba(6,6,8,.95),0 0 3px rgba(6,6,8,.9)}
+.ui *{pointer-events:auto}
+.top{top:26px;left:30px;right:30px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.house{font:400 10px/1 "Silkscreen",monospace;letter-spacing:.2em;color:var(--ink-4);display:flex;gap:14px;align-items:center}
+.house a{font:450 12px/1 var(--sans);letter-spacing:0;color:var(--ink-3);text-decoration:none;padding:4px 6px;margin:-4px -6px;border-radius:6px;border:1px solid transparent}
+.house a:hover{color:var(--ink-1)} .house a:focus-visible{border-color:var(--focus);outline:none}
+.who{margin-top:16px;font:300 22px/1.15 var(--display);letter-spacing:-.01em}
+.who small{display:block;margin-top:7px;font:400 12.5px/1.4 var(--sans);color:var(--ink-3);letter-spacing:0}
+.who small.live{display:flex;align-items:center;gap:8px;margin-top:8px;color:var(--ink-4);font-size:11.5px}
+/* the one accent, as a signal only: this memory is being watched live */
+.who small.live i{width:6px;height:6px;border-radius:50%;background:#6d93c9;animation:breathe 4.2s ease-in-out infinite}
+@keyframes breathe{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.who small.live i{animation:none}}
+.modes{display:flex;gap:4px;padding:3px;border:1px solid var(--hair);border-radius:999px;background:rgba(10,10,13,.55);backdrop-filter:none}
+.modes button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;border:1px solid transparent;font:450 12.5px/1 var(--sans);color:var(--ink-3);transition:color .25s,border-color .25s,background .25s}
+.modes button:hover{color:var(--ink-2)}
+.modes button:focus-visible{border-color:var(--focus)}
+.modes button[aria-pressed="true"]{color:var(--ink-1);border-color:var(--hair-2);background:rgba(255,255,255,.045);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.foot{left:30px;bottom:28px;max-width:440px}
+.when{font:200 40px/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.when-sub{margin-top:9px;color:var(--ink-3);font-size:12.5px;font-variant-numeric:tabular-nums}
+.track{position:relative;margin-top:16px;width:340px;max-width:70vw;height:14px;cursor:pointer}
+.track i{position:absolute;left:0;right:0;top:7px;height:1px;background:var(--hair-2)}
+.track b{position:absolute;left:0;top:7px;height:1px;background:var(--ink-2)}
+.track s{position:absolute;top:3px;width:9px;height:9px;margin-left:-4.5px;border-radius:50%;background:var(--ink-1);text-decoration:none}
+.legend{margin-top:14px;color:var(--ink-4);font-size:12px;line-height:1.55;max-width:380px}
+.panel{right:30px;top:96px;width:380px;max-width:calc(100vw - 60px);max-height:calc(100vh - 140px);overflow:auto;padding:20px 22px 18px;
+  background:rgba(8,8,11,.82);border:1px solid var(--hair);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 24px 60px rgba(0,0,0,.5);
+  opacity:0;transform:translateY(6px);transition:opacity .35s ease,transform .35s ease}
+.panel.on{opacity:1;transform:none}
+.panel .meta{font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;gap:12px}
+.panel .meta button{all:unset;cursor:pointer;color:var(--ink-3);padding:0 4px;border:1px solid transparent;border-radius:6px}
+.panel .meta button:hover{color:var(--ink-1)}
+.panel .meta button:focus-visible{border-color:var(--focus)}
+.panel .words{margin-top:12px;font:400 19px/1.45 var(--lit);color:var(--ink-1)}
+.panel .changed{margin-top:14px;padding-top:12px;border-top:1px solid var(--hair);font:italic 400 17px/1.4 var(--lit);color:var(--ink-2)}
+.panel .sign{margin-top:14px;font-size:11.5px;color:var(--ink-4);line-height:1.6}
+.recalls{margin-top:20px}
+.r-label{font-size:11.5px;color:var(--ink-4)}
+.r-track{position:relative;margin-top:8px;height:24px;width:340px;max-width:70vw;border-bottom:1px solid var(--hair-2)}
+.r-track .tick{all:unset;position:absolute;bottom:0;width:9px;margin-left:-4.5px;cursor:pointer;display:flex;justify-content:center}
+.r-track .tick::after{content:"";width:1px;height:100%;background:var(--ink-3);transition:background .2s}
+.r-track .tick:hover::after,.r-track .tick:focus-visible::after{background:var(--ink-1);width:2px}
+.r-cap{margin-top:8px;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;max-width:380px}
+.again{all:unset;margin-top:16px;display:inline-block;cursor:pointer;padding:7px 14px;border-radius:999px;border:1px solid var(--hair-2);font:450 12.5px/1 var(--sans);color:var(--ink-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.again:hover{color:var(--ink-1)} .again:focus-visible{border-color:var(--focus)}
+.again[hidden],.modes button[hidden]{display:none}
+.beliefs{right:30px;bottom:26px;width:320px;text-align:right;transition:opacity .35s}
+body.reading .beliefs,body[data-mode="exposure"] .beliefs{opacity:0;pointer-events:none}
+.b-label{font-size:11.5px;color:var(--ink-4)}
+.b-dials{margin-top:6px;display:flex;gap:4px;justify-content:flex-end}
+.dial{all:unset;cursor:pointer;width:50px;height:50px;display:grid;place-items:center;border:1px solid transparent;border-radius:50%;transition:border-color .2s}
+.dial:hover{border-color:var(--hair)} .dial:focus-visible{border-color:var(--focus)}
+.dial circle{fill:none}
+.dial .past{stroke:rgba(236,239,244,.22);stroke-width:.8;stroke-dasharray:1.2 2.2}
+.dial .ring{stroke:rgba(236,239,244,.86);stroke-width:1;transition:r .45s cubic-bezier(.3,.7,.2,1)}
+.dial .dot{fill:rgba(236,239,244,.92)} .dial .dot.colleague{fill:#b296e8}
+.b-text{margin-bottom:12px}
+.b-text .words{display:block;font:italic 400 18px/1.38 var(--lit);color:var(--ink-1)}
+.b-text .sign{display:block;margin-top:7px;font-size:11.5px;line-height:1.5;color:var(--ink-3)}
+@media (max-width:760px){.beliefs,.recalls{display:none}}
+@media (prefers-reduced-motion:reduce){.dial .ring{transition:none}}
+#loading{position:fixed;inset:0;display:grid;place-items:center;color:var(--ink-4);font-size:12px;letter-spacing:.06em}
+@media (max-width:760px){
+  .top{left:16px;right:16px;top:18px;flex-direction:column;gap:14px}
+  .foot{left:16px;right:16px;bottom:18px}
+  .when{font-size:30px}
+  .panel{left:16px;right:16px;top:auto;bottom:16px;width:auto;max-height:46vh}
+  .legend{display:none}
+}
+@media (prefers-reduced-motion:reduce){.panel{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="mind" aria-label="The memory, every cell a memory and every fibre a real link between two"></canvas>
+<div id="loading">gathering its memories…</div>
+<div class="ui top">
+  <div>
+    <div class="house"><span>Mnemos</span><a href="../log/">← The log</a></div>
+    <div class="who" id="who"><span id="who-name"></span><small id="who-sub"></small><small class="live"><i aria-hidden="true"></i><span id="live">live</span></small></div>
+  </div>
+  <div class="modes" role="group" aria-label="How to see it">
+    <button data-mode="now" aria-pressed="true">Now</button>
+    <button data-mode="grow" aria-pressed="false">Growing</button>
+    <button data-mode="exposure" aria-pressed="false">Exposure</button>
+    <button data-mode="quiet" aria-pressed="false">Quiet</button>
+  </div>
+</div>
+<div class="ui foot">
+  <div class="when" id="when"></div>
+  <div class="when-sub" id="when-sub"></div>
+  <div class="track" id="track" hidden><i></i><b id="track-fill"></b><s id="track-knob"></s></div>
+  <div class="recalls" id="recalls" hidden>
+    <div class="r-label">When recall gathered several memories at once</div>
+    <div class="r-track" id="r-track"></div>
+    <div class="r-cap" id="r-cap"></div>
+  </div>
+  <button class="again" id="expose-again" hidden>Expose again</button>
+  <p class="legend" id="legend">Every cell is a memory, in its real place among the ones it's tied to; every fibre is a real link. The brighter a cell, the more easily it comes to mind. Touch one to read it, and watch recall travel.</p>
+</div>
+<div class="ui beliefs" id="beliefs" role="group" aria-label="What it believes">
+  <p class="b-text" id="b-text" hidden></p>
+  <div class="b-label">What it believes</div>
+  <div class="b-dials" id="b-dials"></div>
+</div>
+<aside class="ui panel" id="panel" aria-live="polite" hidden>
+  <div class="meta"><span id="p-when"></span><button id="p-close" aria-label="Close">close</button></div>
+  <p class="words" id="p-words"></p>
+  <p class="changed" id="p-changed" hidden></p>
+  <p class="sign" id="p-sign"></p>
+</aside>
+<script type="module" src="mind.js"></script>
+</body>
+</html>

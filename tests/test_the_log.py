@@ -499,11 +499,12 @@ def test_mnemos_log_runs_until_ctrl_c(mind, tmp_path):
 def test_the_page_asks_nothing_of_the_network():
     files = page_files()
     for name in ("log/index.html", "log/log.js", "shared/room.js", "shared/room.css", "shared/words.js",
-                 "shared/fonts.css"):
+                 "shared/fonts.css", "mind/index.html", "mind/mind.js", "mind/build.js", "engine/tissue.js"):
         assert name in files
     for name, content in files.items():
         if name.endswith((".html", ".js", ".css")):
-            text = content.decode("utf-8")
+            # the SVG namespace is a name, never fetched
+            text = content.decode("utf-8").replace("http://www.w3.org/2000/svg", "")
             assert not re.search(r"https?://|//fonts\.|@import", text), name
             assert "../warm/" not in text and "open-mind" not in text, name  # Still warm doesn't ship
 
@@ -512,13 +513,15 @@ def test_every_font_ships_with_its_license():
     files = page_files()
     css = files["shared/fonts.css"].decode("utf-8")
     fonts = re.findall(r"url\(\.\./fonts/([\w.-]+)\)", css)
-    assert len(fonts) == 5
+    assert len(fonts) == 6
     for font in fonts:
         assert f"fonts/{font}" in files, font
-    for family in ("Inter", "InterTight", "Silkscreen"):
+    # the mind's light is set in JetBrains Mono, loaded by its script rather than the stylesheet
+    assert "fonts/jetbrains-mono-nl.woff" in files and "../fonts/jetbrains-mono-nl.woff" in files["mind/mind.js"].decode("utf-8")
+    for family in ("Inter", "InterTight", "Silkscreen", "CormorantGaramond", "JetBrainsMono"):
         license_text = files[f"fonts/OFL-{family}.txt"].decode("utf-8")
         assert "SIL Open Font License" in license_text or "SIL OPEN FONT LICENSE" in license_text, family
-    for family in ("Inter", "Inter Tight", "Silkscreen"):
+    for family in ("Inter", "Inter Tight", "Silkscreen", "Cormorant Garamond"):
         assert f'font-family:"{family}"' in css
 
 

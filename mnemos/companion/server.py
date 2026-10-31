@@ -58,6 +58,7 @@ TYPES = {
     ".js": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
     ".woff2": "font/woff2",
+    ".woff": "font/woff",
     ".txt": "text/plain; charset=utf-8",
 }
 PICTURE_TYPES = {

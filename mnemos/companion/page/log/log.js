@@ -191,6 +191,7 @@ function start() {
     hooks: {
       route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
       transition,
+      mindLink: (id) => `../mind/#memory/${encodeURIComponent(id)}`,
       picture: (src, cap) => { $('full-img').src = src; $('full-img').alt = cap; $('full-cap').textContent = cap; $('full').showModal(); },
       hour: (id) => {
         then = () => document.querySelector(`.ev[data-hour="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' });
