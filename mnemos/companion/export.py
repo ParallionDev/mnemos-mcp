@@ -760,3 +760,71 @@ class Exporter:
             "handoffs": handoffs,
         }
         return life, {"version": version, "made": iso(now), "memories": memories, "recalled": recalled}
+
+
+# ── What came to mind just now ──
+
+# What each kind of call did to the memories it names: a recall brings them back, a wake is the briefing, a reflection
+# answers what the memory asked; a capture or a correction keeps one.
+PULSE_READ = {"recall": "recall", "context": "wake", "reflect": "reflect"}
+PULSE_WRITTEN = {"capture": "kept", "correct": "kept"}
+PULSE_MOST = 120
+
+
+def pulse(exporter: "Exporter", since: str | None = None, now: datetime | None = None) -> dict:
+    """What came to this mind since ``since`` (ISO 8601; with none, the last
+    minute): every memory a call brought back, a briefing showed or a capture
+    kept (``memory_trace``, one row a call), and every memory the cue offered
+    with a message (the session files under ``~/.mnemos/run``), oldest first,
+    at most ``PULSE_MOST``. Each event: ``{"key", "at", "kind", "ids",
+    "session"}``; ``key`` is the same each time an event is read again, so a
+    page that asks with some overlap can tell what it has already shown.
+    Reads only; ``now`` is the time to ask from next."""
+    from ..cue import run_dir, scope_key
+
+    now = now or datetime.now(timezone.utc)
+    floor = when(since) or (now - timedelta(minutes=1))
+    after = iso(floor)
+    events: list[dict] = []
+    if exporter.db.is_file():
+        conn = open_read_only(exporter.db)
+        try:
+            reading = _Reading(conn, exporter.scope)
+            if reading.has("memory_trace"):
+                clause, scope = reading.scoped("memory_trace")
+                for r in conn.execute(
+                        f"SELECT id, at, tool, session, read_ids, written_ids FROM memory_trace "
+                        f"WHERE {clause} AND at > ? ORDER BY at LIMIT ?", (*scope, after, PULSE_MOST)):
+                    tool = r["tool"]
+                    kind = PULSE_READ.get(tool) or PULSE_WRITTEN.get(tool)
+                    if not kind:
+                        continue
+                    try:
+                        ids = json.loads(r["read_ids"] if tool in PULSE_READ else r["written_ids"]) or []
+                    except ValueError:
+                        ids = []
+                    ids = [i for i in ids if isinstance(i, str) and i.startswith("engram_")]
+                    if ids:
+                        events.append({"key": f"t{r['id']}", "at": iso(when(r["at"])), "kind": kind, "ids": ids,
+                                       "session": r["session"] or ""})
+        finally:
+            conn.close()
+    folder = run_dir()
+    key = scope_key(exporter.scope.db_path, exporter.scope.agent_id, exporter.scope.person_id,
+                    exporter.scope.project_scope)
+    cutoff = floor.timestamp() - 5
+    for path in folder.glob(f"shown-*-{key}.json") if folder.is_dir() else []:
+        try:
+            if path.stat().st_mtime < cutoff:
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        session = str(data.get("session") or "")
+        for offer in data.get("offers") or []:
+            at = when(offer.get("at")) if isinstance(offer, dict) else None
+            ids = [i for i in (offer.get("ids") or []) if isinstance(i, str)] if at else []
+            if at and at > floor and ids:
+                events.append({"key": f"c{session[:12]}{iso(at)}", "at": iso(at), "kind": "cue", "ids": ids, "session": session})
+    events.sort(key=lambda e: e["at"])
+    return {"now": iso(now), "events": events[-PULSE_MOST:]}

@@ -46,6 +46,33 @@ canvas#mind.dragging{cursor:grabbing}
 .who small{display:block;margin-top:7px;font:400 var(--t-small)/1.4 var(--sans);color:var(--ink-3);letter-spacing:0}
 .who small.since{color:var(--ink-2)}
 .who small.since[hidden]{display:none}
+/* what's coming to mind right now: one line, the one blue point breathing while it's fresh, then it rests */
+.who small.now{display:flex;align-items:center;gap:8px;color:var(--ink-2)}
+.who small.now[hidden]{display:none}
+.who small.now i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--signal);box-shadow:0 0 10px rgba(109,147,201,.7);transition:opacity 1.2s var(--ease),box-shadow 1.2s var(--ease)}
+.who small.now.fresh i{animation:breathe 1.6s ease-in-out infinite}
+.who small.now:not(.fresh){color:var(--ink-3)}
+.who small.now:not(.fresh) i{box-shadow:none;opacity:.55}
+@keyframes breathe{50%{opacity:.45}}
+/* ask its memory: one field, the results lit where they live in the mind, and a short list to open them */
+.ask{position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;border-radius:999px;background:rgba(20,20,25,.78);
+  border:1px solid transparent;color:var(--ink-3);text-shadow:none;transition:border-color var(--quick),background var(--quick),width var(--calm) var(--ease);width:220px}
+.ask:focus-within{border-color:var(--hair-2);background:rgba(16,16,20,.94);width:320px;color:var(--ink-2)}
+.ask input{all:unset;flex:1;min-width:0;font:400 var(--t-small)/1 var(--sans);color:var(--ink-1)}
+.ask input::placeholder{color:var(--ink-3)}
+.ask input::-webkit-search-cancel-button{display:none}
+.ask kbd{font:500 10.5px/1 var(--sans);color:var(--ink-4);padding:3px 6px;border-radius:5px;background:rgba(255,255,255,.06)}
+.ask:focus-within kbd{display:none}
+.ask-list{position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 32px));max-height:min(60vh,520px);overflow-y:auto;padding:6px;border-radius:14px;
+  background:var(--raised);box-shadow:0 0 0 1px var(--hair),0 24px 60px rgba(0,0,0,.55)}
+.ask-list[hidden]{display:none}
+.ask-list .hit{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:10px 12px;border-radius:9px;border:1px solid transparent}
+.ask-list .hit:hover,.ask-list .hit.on{background:var(--surface-2)}
+.ask-list .hit:focus-visible{border-color:var(--focus)}
+.ask-list .hit .w{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font:400 var(--t-small)/1.45 var(--sans);color:var(--ink-1)}
+.ask-list .hit .m{margin-top:4px;color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums}
+.ask-list .say{padding:10px 12px;color:var(--ink-3);font-size:var(--t-small)}
+@media (max-width:860px){.ask{width:150px}.ask:focus-within{width:min(260px,calc(100vw - 32px))}.ask kbd{display:none}}
 .actions{top:26px;right:var(--edge);display:flex;gap:var(--s2);align-items:center}
 .pill{all:unset;cursor:pointer;padding:8px 15px;border-radius:999px;border:1px solid transparent;background:rgba(20,20,25,.78);
   font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;transition:color var(--quick),border-color var(--quick),background var(--quick)}
@@ -170,9 +197,16 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
     <div class="who"><span id="who-name">&nbsp;</span>
       <small id="who-sub"></small>
       <small class="since" id="since" hidden></small>
+      <small class="now" id="now" aria-live="polite" hidden><i aria-hidden="true"></i><span id="now-text"></span></small>
     </div>
   </div>
   <div class="ui actions">
+    <div class="ask" id="ask">
+      <svg class="ask-i" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <input id="ask-q" type="search" autocomplete="off" spellcheck="false" placeholder="Ask its memory" aria-label="Ask its memory: find memories by what they mean" aria-controls="ask-list">
+      <kbd aria-hidden="true">/</kbd>
+      <div class="ask-list" id="ask-list" role="listbox" aria-label="What it found" hidden></div>
+    </div>
     <a class="textlink" id="to-log" href="../log/">The log</a>
     <button class="pill" id="open-room" aria-expanded="false" aria-controls="room">Read everything</button>
   </div>

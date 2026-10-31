@@ -796,3 +796,56 @@ def test_a_note_left_for_another_mind_goes_to_that_mind(mind):
         own = json.loads(server.documents()[0])
         assert [n for n in own["notes"] if n["author"] == "person"] == []
     assert db.is_file()
+
+
+# ---------- 10. What comes to mind, as it comes, and what a question finds ----------
+# The mind page asks every second or so what came to the mind since it last looked: what a recall brought back or a
+# capture kept (memory_trace, one row a call) and what the cue offered with a message (its session files under
+# ~/.mnemos/run). And it asks the memory by meaning and by words, as `mnemos search` does. Both only read.
+
+def test_the_pulse_says_what_a_recall_brought_back_and_what_the_cue_offered(mind):
+    from mnemos.cue import run_dir, scope_key
+
+    before = datetime.now(timezone.utc).isoformat()
+    rt = runtime()
+    try:
+        rt.recall("the ferry timetable")
+    finally:
+        rt.close()
+    exporter = Exporter.for_scope(agent_id=AGENT, person="Riley")
+    memories = json.loads(LogServer(exporter).documents()[1])["memories"]
+    ferry = next(m["id"] for m in memories if "ferry" in m["content"])
+    scope = exporter.scope
+    folder = run_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    offered_at = datetime.now(timezone.utc).isoformat()
+    (folder / f"shown-sess1-{scope_key(scope.db_path, scope.agent_id, scope.person_id, scope.project_scope)}.json").write_text(
+        json.dumps({"session": "sess1", "offers": [{"at": offered_at, "ids": [ferry], "via": "words"}]}))
+    sealed = digest(store_path())
+    with serving(exporter) as server:
+        status, pulse = get(server, f"data/pulse.json?since={before}")
+        assert status == 200
+        kinds = {(e["kind"], tuple(e["ids"])) for e in pulse["events"]}
+        assert any(kind == "recall" and ferry in ids for kind, ids in kinds), pulse
+        assert ("cue", (ferry,)) in kinds
+        assert pulse["now"] >= offered_at
+        keys = [e["key"] for e in pulse["events"]]
+        assert len(keys) == len(set(keys))
+        # asked again from later on, nothing that came before is said again
+        status, later = get(server, f"data/pulse.json?since={pulse['now']}")
+        assert status == 200 and later["events"] == []
+        assert get(server, "data/pulse.json?agent=nobody")[0] == 404
+    assert digest(store_path()) == sealed                         # it only read
+
+
+def test_a_question_finds_memories_and_changes_nothing(mind):
+    sealed = digest(store_path())
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, found = get(server, "data/search.json?q=ferry%20timetable")
+        assert status == 200
+        assert found["results"] and "ferry" in found["results"][0]["words"]
+        assert {"id", "words", "kept", "closeness", "found"} <= set(found["results"][0])
+        status, empty = get(server, "data/search.json?q=")
+        assert status == 200 and empty["results"] == []
+        assert get(server, "data/search.json?q=x&agent=nobody")[0] == 404
+    assert digest(store_path()) == sealed

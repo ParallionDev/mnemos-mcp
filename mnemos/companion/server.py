@@ -164,6 +164,8 @@ class _Mind:
         self.lock = threading.Lock()
         self.documents: tuple[float, bytes] | None = None
         self.memories: tuple[str | None, bytes] | None = None
+        self.searching = threading.Lock()
+        self.interface = None                # the person's reading of it, for search, made on the first one
 
     def forget(self) -> None:
         with self.lock:
@@ -331,6 +333,36 @@ class LogServer(ThreadingHTTPServer):
                         "home": mind is self._home, "missing": bool(life.get("missing"))})
         return _dumps({"minds": out})
 
+    def pulse(self, agent: str | None, since: str | None) -> bytes:
+        """``pulse.json``: what came to a mind since ``since`` (``export.pulse``)."""
+        from .export import pulse
+
+        mind = self.mind(agent)
+        if mind is None:
+            raise LookupError(agent)
+        return _dumps(pulse(mind.exporter, since))
+
+    def search(self, agent: str | None, query: str) -> bytes:
+        """``search.json``: the memories a query finds, by meaning and by words, as
+        ``mnemos search --json`` answers; it writes nothing and wakes nothing (a
+        person looking is not the mind remembering). An empty query loads the
+        meaning model and finds nothing, so the page can ask early."""
+        from ..interface.person import Interface
+
+        mind = self.mind(agent)
+        if mind is None:
+            raise LookupError(agent)
+        with mind.searching:
+            if mind.interface is None:
+                scope = mind.exporter.scope
+                mind.interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id, person_id=scope.person_id,
+                                           project_scope=scope.project_scope)
+                mind.interface.warm()
+            if not query.strip():
+                return _dumps({"query": "", "results": []})
+            answer = mind.interface.answer(json.dumps({"command": "search", "query": query[:400], "max_results": 24}))
+        return _dumps(answer.get("result") or {"query": query, "results": [], "error": answer.get("error")})
+
     def documents(self, agent: str | None = None) -> tuple[bytes, bytes]:
         """``(life.json, memories.json)`` for a mind, exported at most every few
         seconds. memories.json is made again only when its version changes."""
@@ -420,6 +452,8 @@ class _Handler(BaseHTTPRequestHandler):
         rel = unquote(path[len(base) + 1:])
         if rel == "data/minds.json":
             return self._send(HTTPStatus.OK, server.minds(), "application/json; charset=utf-8", body)
+        if rel in ("data/pulse.json", "data/search.json"):
+            return self._looked(rel, body)
         if rel in ("data/life.json", "data/memories.json"):
             return self._data(rel, body)
         if rel.startswith("data/studio/"):
@@ -444,6 +478,27 @@ class _Handler(BaseHTTPRequestHandler):
             return self._send(HTTPStatus.SERVICE_UNAVAILABLE, b'{"error":"the memory could not be read"}',
                               "application/json; charset=utf-8", body)
         content = life if rel == "data/life.json" else memories
+        return self._send(HTTPStatus.OK, content, "application/json; charset=utf-8", body)
+
+    def _looked(self, rel: str, body: bool) -> None:
+        """What came to mind just now, or what a search finds: read on every request, never kept."""
+        from urllib.parse import parse_qs
+
+        asked = parse_qs(urlsplit(self.path).query)
+        try:
+            if rel == "data/pulse.json":
+                since = (asked.get("since") or [None])[0]
+                # a time's "+00:00" reads as " 00:00" in an address that didn't encode it: read it as it was meant
+                content = self.server.pulse(_agent(self.path), since.replace(" ", "+") if since else None)
+            else:
+                content = self.server.search(_agent(self.path), (asked.get("q") or [""])[0])
+        except LookupError:
+            return self._send(HTTPStatus.NOT_FOUND, b'{"error":"there is no such mind on this machine"}',
+                              "application/json; charset=utf-8", body)
+        except Exception:
+            logger.warning("mnemos log: %s couldn't be read just now", rel, exc_info=True)
+            return self._send(HTTPStatus.SERVICE_UNAVAILABLE, b'{"error":"the memory could not be read"}',
+                              "application/json; charset=utf-8", body)
         return self._send(HTTPStatus.OK, content, "application/json; charset=utf-8", body)
 
     def _picture(self, rel: str, body: bool) -> None:

@@ -615,9 +615,7 @@ function bindPage() {
   $('to-log').href = withAgent('../log/');
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); return; }
-    if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) {
-      e.preventDefault(); openRoom({ tab: 'memories' }); requestAnimationFrame(() => $('room-search')?.focus());
-    }
+    if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) { e.preventDefault(); $('ask-q').focus(); }
   });
   addEventListener('hashchange', fromHash);
 }
@@ -651,6 +649,117 @@ async function look(now = false) {
   updateFrame();
 }
 
+/* ---------- live: what comes to mind, as it comes ----------
+ * Every second or so the page asks what came to this mind since it last looked: what a recall brought back, what a
+ * briefing woke with, what the cue offered with a message, what was kept (../data/pulse.json, read from the trace
+ * the memory already keeps, and the cue's own record). Each memory lights where it lives and the light runs out along
+ * its links, as recall does in the engine; if no one is touching the mind it turns a little toward them. A line under
+ * the name says what happened, while it's fresh, then rests. Nothing is simulated: no event, no light. */
+
+const PULSE_EVERY = 1200, FRESH_FOR = 9000;
+const SAY = { recall: (n) => `recalled ${plural(n, 'memory', 'memories')}`, wake: (n) => `woke with ${plural(n, 'memory', 'memories')}`,
+  reflect: (n) => `thought again about ${plural(n, 'memory', 'memories')}`, cue: (n) => `${plural(n, 'memory', 'memories')} came to mind with a message`,
+  kept: (n) => (n === 1 ? 'kept a new memory' : `kept ${words(n)} new memories`) };
+const GAIN = { recall: 1, reflect: 0.9, kept: 1, cue: 0.75, wake: 0.55 };
+let pulseSince = null, pulsing = false, lastSaid = null;
+const seenEvents = new Set();
+async function listen() {
+  if (pulsing || document.hidden || !tissue) return;
+  pulsing = true;
+  try {
+    const r = await fetch(withAgent(`../data/pulse.json${pulseSince ? `?since=${encodeURIComponent(pulseSince)}` : ''}`), { cache: 'no-store' });
+    if (!r.ok) return;
+    const p = await r.json();
+    const first = pulseSince === null;
+    // ask again a few seconds back, and know each event by its key: a call written a moment late is still seen once
+    pulseSince = new Date(Date.parse(p.now) - 4000).toISOString();
+    const fresh = p.events.filter((e) => !seenEvents.has(e.key));
+    for (const e of fresh) seenEvents.add(e.key);
+    if (seenEvents.size > 4000) seenEvents.clear();
+    if (!first) for (const e of fresh) light(e);
+  } catch { /* the next look tries again */ } finally { pulsing = false; }
+}
+function light(e) {
+  if (e.kind === 'kept') look(true);                       // a new memory: read it in, and it arrives white-hot
+  const now = performance.now(), cells = e.ids.map((id) => cellOf.get(id)).filter((i) => i !== undefined);
+  cells.forEach((i, k) => spread(i, now + k * 140, GAIN[e.kind] || 0.7));
+  if (cells.length && selected < 0 && !sheetOpen && now - lastInput > 8000) {
+    const c = scale(cells.map((i) => P[i]).reduce(add, [0, 0, 0]), 1 / cells.length);
+    meet = { target: mixv(centre, c, 0.35), dist: HOME * 0.86, until: now + 7000 };
+  }
+  stir();
+  lastSaid = { text: (SAY[e.kind] || SAY.recall)(e.kind === 'kept' ? cells.length || e.ids.length : e.ids.length), at: Date.now() };
+  sayNow();
+}
+function sayNow() {
+  const el = $('now');
+  if (!lastSaid) { el.hidden = true; return; }
+  const age = Date.now() - lastSaid.at;
+  el.hidden = false;
+  el.classList.toggle('fresh', age < FRESH_FOR);
+  $('now-text').textContent = age < FRESH_FOR ? `Now · ${lastSaid.text}` : `${lastSaid.text[0].toUpperCase()}${lastSaid.text.slice(1)} · ${ago(age)}`;
+}
+
+/* ---------- ask its memory ----------
+ * A question found by what it means (and by its words), as `mnemos search` finds it: it reads, and wakes nothing, since
+ * a person looking is not the mind remembering. What it finds lights where it lives, brightest the closest; the list
+ * opens any of them in the reading room. */
+
+let asking = 0, found = [], foundLit = new Set();
+async function ask(q) {
+  const n = ++asking;
+  if (!q.trim()) { showFound(null); return; }
+  let res;
+  try { res = await (await fetch(withAgent(`../data/search.json?q=${encodeURIComponent(q)}`), { cache: 'no-store' })).json(); } catch { res = null; }
+  if (n !== asking) return;                                   // a newer question was asked meanwhile
+  showFound(res?.results || [], res?.error);
+}
+function showFound(results, error) {
+  const list = $('ask-list');
+  found = results || [];
+  if (results === null) { list.hidden = true; list.innerHTML = ''; foundLit.clear(); return; }
+  const now = performance.now();
+  foundLit = new Set();
+  found.forEach((m, k) => { const i = cellOf.get(m.id); if (i !== undefined) { foundLit.add(i); spread(i, now + k * 90, 0.45 + 0.55 * (m.closeness ?? 0.5)); } });
+  if (foundLit.size && selected < 0 && !sheetOpen) {
+    const pts = [...foundLit].slice(0, 8).map((i) => P[i]);
+    meet = { target: mixv(centre, scale(pts.reduce(add, [0, 0, 0]), 1 / pts.length), 0.45), dist: HOME * 0.8, until: now + 9000 };
+    holdUntil = now + 6000;
+  }
+  stir();
+  list.innerHTML = error ? `<div class="say">${esc(error)}</div>`
+    : !found.length ? '<div class="say">Nothing close. Try other words, or fewer.</div>'
+    : found.map((m, k) => `<button class="hit" type="button" role="option" data-hit="${k}"><span class="w">${esc(m.words)}</span>
+      <span class="m">${shortDay(at(m.kept))} · ${m.found === 'meaning' ? 'by meaning' : 'by its words'}</span></button>`).join('');
+  list.hidden = false;
+}
+function bindAsk() {
+  const q = $('ask-q'), list = $('ask-list');
+  let wait = 0;
+  q.addEventListener('focus', () => { fetch(withAgent('../data/search.json?q='), { cache: 'no-store' }).catch(() => {}); if (found.length) list.hidden = false; });
+  q.addEventListener('input', () => { clearTimeout(wait); wait = setTimeout(() => ask(q.value), 320); });
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { clearTimeout(wait); ask(q.value); }
+    if (e.key === 'Escape') { q.value = ''; showFound(null); q.blur(); e.stopPropagation(); }
+    if (e.key === 'ArrowDown' && !list.hidden) { e.preventDefault(); list.querySelector('.hit')?.focus(); }
+  });
+  list.addEventListener('keydown', (e) => {
+    const hits = [...list.querySelectorAll('.hit')], k = hits.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); hits[Math.min(hits.length - 1, k + 1)]?.focus(); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); (k <= 0 ? q : hits[k - 1]).focus(); }
+    if (e.key === 'Escape') { q.focus(); }
+  });
+  const touch = (e) => { const h = e.target.closest('[data-hit]'); const i = h ? cellOf.get(found[+h.dataset.hit]?.id) : undefined; if (i !== undefined && i !== hoverCell) { hoverCell = i; spread(i, performance.now(), 0.8); } };
+  list.addEventListener('pointerover', touch); list.addEventListener('focusin', touch);
+  list.addEventListener('click', (e) => {
+    const h = e.target.closest('[data-hit]'); if (!h) return;
+    const m = found[+h.dataset.hit]; if (!m) return;
+    list.hidden = true;
+    openRoom({ tab: 'memories', memory: memAt.has(m.id) ? m.id : null });
+  });
+  document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#ask')) list.hidden = true; });
+}
+
 /* ---------- begin ---------- */
 
 let firstLife;
@@ -675,14 +784,16 @@ if (lastVisit) {
 }
 setTimeout(markVisit, 15_000);
 resize(); addEventListener('resize', resize);
-bindPointer(); bindPage();
+bindPointer(); bindPage(); bindAsk();
 renderPaper(); updateFrame();
 $('loading').remove();
 walk(lastHour);
 fromHash();
 setInterval(look, LIVE_EVERY);
 setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you watch
+listen(); setInterval(listen, PULSE_EVERY);
+setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
-  get looping() { return looping; }, get built() { return built; }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get looping() { return looping; }, get built() { return built; }, light, ask, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
   openRoom, closeRoom, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null), byId: (id) => cellOf.get(id) };
 stir();
