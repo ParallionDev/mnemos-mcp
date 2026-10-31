@@ -24,16 +24,25 @@
 
 import { random, add, sub, scale, dot, cross, length, normalize, mixv } from './gl.js';
 import { basis, path } from './motion.js';
-import { DOT, STROKE } from './glyphs.js';
+import { DOT, STROKE, LINE } from './glyphs.js';
 
 export const PART = { SKIN: 0, NUCLEUS: 1, DENDRITE: 2, FIBRE: 3, BOUTON: 4 };
 
 const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-const BAR = 0.14;                                   // a stroke's thickness, in its own length (engine/glyphs.js)
+const BAR = 0.07;                                   // a line's thickness, in its own length (LINE in engine/glyphs.js)
 
-export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024 } = {}) {
-  const rnd = random(seed);
+/* Detail can be spent part by part (each defaults to `detail`): `strand` for the lines (boughs and fibres, laid as
+ * overlapping strokes, so below about 0.8 a line breaks into beads), `spine` for the spines along the boughs, `skin`
+ * for a body's membrane and granules, `core` for its nucleus. A body's points grow as they thin, so a sparser
+ * membrane keeps its glow; a line keeps its strokes, so it stays a line. */
+export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024, strand: strandK = detail, spine = detail, skin = detail, core = detail } = {}) {
+  /* every body and every fibre draws from its own stream of chance, keyed by the memory or the link (`key`, else
+   * its place) and by the pass: so a memory has the same shape whatever detail it's drawn at, and whatever else is
+   * drawn beside it. That is what lets a page redraw a few memories finely, in place, over a coarser whole. */
+  const own = (key, pass) => random((Math.imul(seed + 1, 2654435761) ^ Math.imul(key + 1, 2246822519) ^ Math.imul(pass + 1, 3266489917)) >>> 0);
+  let rnd = random(seed), srnd = rnd;
   const cells = data.cells.map((c, i) => ({ ...c, i, P: c.p }));
+  const keyOf = (c) => c.key ?? c.i, linkKey = (l, li) => l.key ?? li;
   const points = [];
   const emit = (l) => points.push(l);
   /* a strand along a path, thickness t0 at its start tapering to t1 at its end: strokes laid end to end,
@@ -41,9 +50,9 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
   const strand = (P, t0, t1, part, owner, along0 = 0, along1 = 1) => {
     for (let s = 0; s < P.length;) {
       const f = s / P.length, t = t0 + (t1 - t0) * f, size = t / BAR;
-      emit({ p: P.at(Math.min(P.length, s + size * 0.5)), size, ch: STROKE, part, ...owner, u: P.along(Math.min(P.length, s + size * 0.5)),
+      emit({ p: P.at(Math.min(P.length, s + size * 0.5)), size, ch: LINE, part, ...owner, u: P.along(Math.min(P.length, s + size * 0.5)),
         along: along0 + (along1 - along0) * f });
-      s += size * 0.62 / detail;
+      s += size * 0.62 / strandK;
     }
   };
 
@@ -54,6 +63,8 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
   cells.forEach((c) => {
     const lesson = c.kind === 'procedural';
     c.R = (lesson ? 0.1 : 0.13) * (0.7 + 0.5 * c.strength);
+    if (c.apex0) { c.apex = c.apex0; c.hillock = c.hillock0; return; }   // its shape given whole, from a drawing of all of it
+    rnd = own(keyOf(c), 0);
     // the apex: pyramidal cells point their apical dendrite toward the mean of what feeds them
     let pull = [0, 0, 0];
     for (const li of incoming[c.i]) pull = add(pull, normalize(sub(cells[data.links[li].s].P, c.P)));
@@ -67,21 +78,24 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
     // fine points, a little apart: soft as a glow from afar, a crisp grain up close (fewer, bigger points blurred
     // into each other and read as out of focus however sharp the lens)
     const spacing = c.R * 0.07, size = spacing * 1.25;
-    const n = Math.min(2600, Math.floor((4 * Math.PI * c.R * c.R) / (spacing * spacing) * detail));
+    const n = Math.min(2600, Math.floor((4 * Math.PI * c.R * c.R) / (spacing * spacing) * skin));
+    const grow = Math.min(2.4, 1 / Math.sqrt(Math.min(1, skin * Math.max(1, (4 * Math.PI * c.R * c.R) / (spacing * spacing) / 2600))));
     const [e1, e2] = basis(c.apex);
+    rnd = own(keyOf(c), 1);
     for (let j = 0; j < n; j++) {
       // evenly over the sphere (a Fibonacci lattice), then shaped: round, or a gentle teardrop
       // (each point nudged off the lattice a little: a perfect lattice reads as a mesh up close, not as a membrane)
       const y = 1 - (2 * (j + 0.5)) / n, s = Math.sqrt(1 - y * y), a = j * GOLDEN;
       const lattice = normalize(add(add(scale(e1, s * Math.cos(a)), scale(e2, s * Math.sin(a))), scale(c.apex, y)));
       const d = normalize(add(lattice, scale(rnd.dir(), 0.45 * spacing / c.R)));
-      emit({ p: add(c.P, scale(d, shape(c, d))), size: size * (0.8 + 0.4 * rnd()), ch: DOT, part: PART.SKIN, cell: c.i, face: d, along: j / n });
+      emit({ p: add(c.P, scale(d, shape(c, d))), size: size * grow * (0.8 + 0.4 * rnd()), ch: DOT, part: PART.SKIN, cell: c.i, face: d, along: j / n });
     }
   }
 
   /* ---------- the nucleus: a dense bright core ---------- */
   for (const c of cells) {
-    const rn = c.R * 0.38, size = c.R * 0.08, n = Math.floor(300 * detail);
+    rnd = own(keyOf(c), 2);
+    const rn = c.R * 0.38, size = c.R * 0.08 / Math.cbrt(Math.min(1, core)), n = Math.floor(300 * core);
     for (let j = 0; j < n; j++) {
       const y = 1 - (2 * (j + 0.5)) / n, s = Math.sqrt(1 - y * y), a = j * GOLDEN;
       const d = [s * Math.cos(a), y, s * Math.sin(a)], r = rn * Math.cbrt(rnd());
@@ -91,7 +105,8 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
 
   /* ---------- the nucleolus: brighter still, as large as the memory is settled ---------- */
   for (const c of cells) {
-    const rn = c.R * (0.07 + 0.09 * (c.stability ?? 0.4)), off = scale(rnd.dir(), c.R * 0.07), n = Math.floor(46 * detail);
+    rnd = own(keyOf(c), 3);
+    const rn = c.R * (0.07 + 0.09 * (c.stability ?? 0.4)), off = scale(rnd.dir(), c.R * 0.07), n = Math.max(6, Math.floor(46 * core));
     for (let j = 0; j < n; j++) {
       const d = rnd.dir(), r = rn * Math.cbrt(rnd());
       emit({ p: add(add(c.P, off), scale(d, r)), size: c.R * 0.042 * (0.7 + 0.6 * rnd()), ch: DOT, part: PART.NUCLEUS, cell: c.i, along: 1 });
@@ -100,10 +115,11 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
 
   /* ---------- the cytoplasm: fine granules between the nucleus and the membrane, as many as it's strong ---------- */
   for (const c of cells) {
-    const n = Math.floor(170 * (c.strength ?? 0.6) * detail);
+    rnd = own(keyOf(c), 4);
+    const n = Math.floor(170 * (c.strength ?? 0.6) * skin), g = 1 / Math.cbrt(Math.min(1, skin));
     for (let j = 0; j < n; j++) {
       const d = rnd.dir(), r = shape(c, d) * (0.45 + 0.45 * Math.cbrt(rnd()));
-      emit({ p: add(c.P, scale(d, r)), size: c.R * 0.036 * (0.6 + 0.8 * rnd()), ch: DOT, part: PART.SKIN, cell: c.i, along: 0.5 });
+      emit({ p: add(c.P, scale(d, r)), size: c.R * 0.036 * g * (0.6 + 0.8 * rnd()), ch: DOT, part: PART.SKIN, cell: c.i, along: 0.5 });
     }
   }
 
@@ -111,17 +127,18 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
    * `along` runs 0 at the body to 1 at the finest tips, so a renderer can let them fade into the tissue. */
   // spines: the gap between them shrinks as the memory's links grow (a memory with no links has a few)
   const spines = (Pth, c, along0, along1, thick) => {
-    const gap = 0.07 / (1 + degree[c.i] / 5) / detail, len0 = c.R * 0.1;
-    for (let s = gap * rnd(); s < Pth.length; s += gap * (0.6 + 0.8 * rnd())) {
-      const at = Pth.at(s), t = Pth.along(s), r = rnd.dir(), n = normalize(sub(r, scale(t, dot(r, t))));
-      const len = len0 * (0.6 + 0.8 * rnd()), along = along0 + (along1 - along0) * (s / Pth.length);
+    const gap = 0.07 / (1 + (c.degree ?? degree[c.i]) / 5) / spine, len0 = c.R * 0.1;
+    for (let s = gap * srnd(); s < Pth.length; s += gap * (0.6 + 0.8 * srnd())) {
+      const at = Pth.at(s), t = Pth.along(s), r = srnd.dir(), n = normalize(sub(r, scale(t, dot(r, t))));
+      const len = len0 * (0.6 + 0.8 * srnd()), along = along0 + (along1 - along0) * (s / Pth.length);
       emit({ p: add(at, scale(n, len * 0.5 + thick * 0.5)), size: len, ch: STROKE, part: PART.DENDRITE, cell: c.i, u: n, along });
       emit({ p: add(at, scale(n, len + thick * 0.5)), size: len * 0.55, ch: DOT, part: PART.DENDRITE, cell: c.i, along });
     }
   };
   for (const c of cells) {
+    rnd = own(keyOf(c), 5); srnd = own(keyOf(c), 6);    // the spines draw their own chance, so their number never bends a bough
     const lesson = c.kind === 'procedural';
-    const boughs = lesson ? 4 : 5 + Math.min(2, Math.floor(incoming[c.i].length / 14));
+    const boughs = lesson ? 4 : 5 + Math.min(2, Math.floor((c.incoming ?? incoming[c.i].length) / 14));
     const grow = (start, dir, len, depth, apical, thick) => {
       const pts = [start];
       let p = start, d = dir;
@@ -148,6 +165,7 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
 
   /* ---------- the fibres: one per link, the sender's axon to a bouton on the receiver ---------- */
   const fibres = data.links.map((l, li) => {
+    rnd = own(linkKey(l, li), 7);
     const a = cells[l.s], b = cells[l.t];
     // the axon leaves the sender's body at its hillock; the bouton lands on the receiver's body, on the side
     // facing the sender: every link visibly runs from one memory to the other
@@ -164,7 +182,8 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
   for (const f of fibres) {
     strand(f.P, fibre * 1.25, fibre, PART.FIBRE, { link: f.li, cell: data.links[f.li].s });
     // varicosities: beads along the axon, closer together the stronger the link
-    const w = data.links[f.li].w ?? 0.5, gap = 0.1 / (0.35 + w) / detail;
+    rnd = own(linkKey(data.links[f.li], f.li), 8);
+    const w = data.links[f.li].w ?? 0.5, gap = 0.1 / (0.35 + w) / strandK;
     for (let s = gap * (0.5 + rnd()); s < f.len - 0.03; s += gap * (0.8 + 0.4 * rnd())) {
       emit({ p: f.P.at(s), size: fibre * (2.6 + 1.4 * rnd()), ch: DOT, part: PART.FIBRE, link: f.li, cell: data.links[f.li].s, along: s / f.len });
     }

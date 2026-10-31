@@ -17,6 +17,9 @@ export const CURSOR = '\u2588';
  * into one smooth strand */
 export const DOT = '\u25CF';
 export const STROKE = '\u2501';
+/* a line: the stroke at half its thickness for its length, so a strand of a given thickness takes half as many of
+ * them, laid with the same overlap, and stays as smooth (added for the Mnemos companion, which draws whole minds) */
+export const LINE = '\u2500';
 
 import { lens } from './lens.js';
 
@@ -44,7 +47,7 @@ export async function glyphAtlas(gl, type, { cell = 256, levels = LEVELS, keepDa
       ctx.font = font(pxPerEm);
       ctx.fillStyle = '#fff';
       let m;
-      if (ch === DOT || ch === STROKE) {
+      if (ch === DOT || ch === STROKE || ch === LINE) {
         drawLight(ctx, ch, cell, pxPerEm);
         // set on its centre: no pen-to-ink offset along a path, no baseline shift
         m = { width: pxPerEm, actualBoundingBoxLeft: 0, actualBoundingBoxRight: pxPerEm,
@@ -98,8 +101,9 @@ function drawLight(ctx, ch, cell, pxPerEm) {
         const r = Math.hypot(u, v);
         a = r >= 0.5 ? 0 : Math.exp(-((r / 0.26) ** 2)) * (1 - (r / 0.5) ** 8);
       } else {
-        const along = Math.abs(u), ends = along >= 0.5 ? 0 : Math.min(1, (0.5 - along) / 0.16);
-        a = ends * ends * (3 - 2 * ends) * Math.exp(-((v / 0.07) ** 2));
+        const thin = ch === LINE ? 0.5 : 1;   // a line's ends soften over the same length of strand, so half as far
+        const along = Math.abs(u), ends = along >= 0.5 ? 0 : Math.min(1, (0.5 - along) / (0.16 * thin));
+        a = ends * ends * (3 - 2 * ends) * Math.exp(-((v / (0.07 * thin)) ** 2));
       }
       px[(y * cell + x) * 4 + 3] = Math.round(255 * a);
     }

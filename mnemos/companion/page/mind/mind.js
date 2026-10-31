@@ -1,302 +1,282 @@
-/* The mind: an agent's whole memory, drawn by What Lights Up's anatomy (../engine/anatomy.js) and renderer
- * (../engine/tissue.js, ../engine/post.js), live. First made as "a mind, growing", the log's first study.
+/* The mind: an agent's live memory, drawn by What Lights Up's anatomy (../engine/anatomy.js) and renderer
+ * (../engine/tissue.js, ../engine/post.js), at rest: dark, and lit only where its quiet hours went. First made as
+ * "Still warm", the log's second view; any Mnemos agent's, for whichever mind `mnemos log` shows (?agent=).
  *
- * Every cell is a memory from ../data/memories.json, read on request from the real store by `mnemos log`; every
- * fibre is a real link. Nothing is simulated. How brightly a cell rests is how easily it comes to mind; when it
- * appears is when it formed; recall travels only along links the store keeps.
+ * An hour's path is read from its own record: the memories its waking named, the questions waiting for it, and the
+ * memories it reached for with its own tools. Each burns white and cools like phosphor, at the real rate since that
+ * hour ended (a half-life of six hours), so the mind you come back to says, without words, how long ago it was last
+ * thinking on its own. Nothing is simulated: every cell is a memory, every fibre a real link, every light a real touch.
  *
- *   Now       the mind as it is, and live: a memory made in any session arrives white-hot; one that came back in
- *             recall flashes, and the light spreads along its links.
- *   Growing   from the first memory to now, paced by memories arriving; the date shown is each one's own.
- *   Exposure  the whole life in one long exposure: every memory a light since it formed, every recall a flare.
- *   Quiet     the same mind at rest: softer light, no drift, a fraction of the pixels and frames.
+ * When you arrive, the last hour's path is walked again, in the order it was walked, and settles to its temperature.
+ * Memories formed since you were last here (this browser's own note of your last visit) arrive white-hot.
+ *
+ * The reading room (../shared/room.js, the one the log uses) holds everything in the memory, readable and searchable;
+ * touching an entry lights it where it lives. Below the mind, on paper, is what each hour left.
  *
  * Kept light enough for any machine: the drawing is made in a worker (./build.js) to a budget of points this screen
- * can draw smoothly, and if frames still come slowly the budget halves and it's drawn again. Where each memory sits
- * is remembered in this browser, so the mind keeps its shape from one visit to the next. */
+ * draws smoothly, spent on the lines first so every fibre stays whole; if frames still come slowly the budget halves.
+ * It draws only while something moves: the slow turn stops a while after you last touched it, and a still mind costs
+ * nothing until a touch, a new memory or an hour wakes it. Where each memory sits is remembered in this browser. */
 
 import { context, lookAt, perspective, add, sub, scale, dot, length, normalize, cross, mix, mixv, clamp } from '../engine/gl.js';
-import { glyphAtlas, DOT, STROKE } from '../engine/glyphs.js';
+import { glyphAtlas, DOT, STROKE, LINE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
-import { AGENT, withAgent } from '../shared/words.js';
+import { Room, parseRoute } from '../shared/room.js';
+import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
+  forPerson, sameModel, modelName, AGENT, withAgent } from '../shared/words.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
-const FOV = (26 * Math.PI) / 180;
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const FOV = (26 * Math.PI) / 180;
+const LIVE_EVERY = 20_000;                     // life.json is small; memories.json is read again only when it changes
+const DIM = 0.3;                               // the mind at rest: present, not lit (the damask's sheen)
 const LOOK = { rest: [0.4, 0.55, 0.22, 0.8], light: [0.85, 1.3, 0.55, 0.8], back: 0.45 };
-const MONTH = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const fmt = (n) => Number(n).toLocaleString('en-US');
-const dayOf = (t) => { const d = new Date(t); return `${MONTH[d.getMonth()]} ${d.getDate()}`; };
-const easeInOut = (x) => (x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2);
-const LIVE_EVERY = (Number(params.get('every')) || 20) * 1000;
-
-/* how many points this screen draws smoothly: a phone or a small machine far fewer than a desk; once a screen has
- * shown what it can do, the page remembers (a convenience, never needed: without it the guess is used again) */
-const small = innerWidth < 760 || (navigator.deviceMemory || 8) <= 4;
+const SHEET = 560;
+const TURN_FOR = 120_000;                      // how long it keeps turning after the last thing that happened
+const TABS = ['memories', 'beliefs', 'questions', 'journal', 'notes', 'hours'];
+const json = async (path) => { const r = await fetch(withAgent(path), { cache: 'no-store' }); if (!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* full, or private: the page works without it */ } },
 };
-const BUDGET_KEY = 'mnemos.mind.budget';
-let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 600_000 : 1_600_000);
 
-const json = async (path) => { const r = await fetch(path, { cache: 'no-store' }); if (!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
+/* how many points this screen draws smoothly: a phone or a small machine far fewer than a desk; once a screen has
+ * shown what it can do, the page remembers (a convenience: without it the guess is used again) */
+const small = innerWidth < 760 || (navigator.deviceMemory || 8) <= 4;
+const BUDGET_KEY = 'mnemos.mind.budget.v2';
+let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1_200_000 : 3_200_000);
+
+/* ---------- the renderer ---------- */
 
 document.fonts.add(await new FontFace('Mono', 'url(../fonts/jetbrains-mono-nl.woff)', { weight: '400' }).load());
 const canvas = $('mind');
 const gl = context(canvas);
 const PRINTABLE = Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i)).join('');
-const atlas = await glyphAtlas(gl, { sets: [{ name: 'mono', glyphs: PRINTABLE + DOT + STROKE, font: (px) => `400 ${px}px Mono` }] }, { cell: 112 });
-const GLYPHS = Object.fromEntries([DOT, STROKE].map((ch) => [ch, atlas.index[`mono:${ch}`]]));
+const atlas = await glyphAtlas(gl, { sets: [{ name: 'mono', glyphs: PRINTABLE + DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] }, { cell: 112 });
+const GLYPHS = Object.fromEntries([DOT, STROKE, LINE].map((ch) => [ch, atlas.index[`mono:${ch}`]]));
 
 /* ---------- the memory, read, and drawn (again when it grows) ---------- */
 
-let life = null, who = null, version = null;
-let D, N, NL, K = 0, tissue = null, R, P, centre, extent, HOME, MID = null;
-let T0, TNOW, born, touched, linkBorn, acc, phase, nbrs, recalls, events = [], moments = [];
-let glow, flash, aim, read, LF, LA, LT, LR, fireAt, fireLevel, linkAt, linkLevel;
-const LAYOUT_KEY = () => `mnemos.mind.layout.${who.agentId || AGENT || 'agent'}`;
+let L = { identity: { name: '', person: null }, hours: [], journal: [], notes: [], studio: [], questions: { open: 0, byKind: {}, asked: [], answered: [] },
+  beliefs: [], handoffs: [], memory: { states: {}, count: 0 } };
+let mems = [], memAt = new Map(), memVersion = null;
+let D, N = 0, NL = 0, tissue = null, R, P, centre, extent, HOME, MID = null, cellOf = new Map();
+let born, acc, nbrs, glow, flash, aim, read, LF, LA, LT, LR, fireAt, fireLevel, linkAt, linkLevel, heat, linkHeat;
+const LAYOUT_KEY = () => `mnemos.mind.layout.v2.${L.identity.agentId || AGENT || 'agent'}`;
 
-/* the export's memories, as the anatomy reads them: a cell per memory, a link per tie (counted once, from its
- * sender), recall moments from the log of what came back when, and beliefs pointing at the memories they rest on */
-function shape(mems, recalled) {
-  const index = new Map(mems.map((m, i) => [m.id, i]));
-  const cells = mems.map((m) => ({ id: m.id, fullId: m.id, content: m.content, impact: m.impact, born: m.born, touched: m.touched,
-    accessibility: m.acc, state: m.state, lesson: m.lesson, model: m.model, author: m.author, recalls: m.recalls,
-    strength: m.strength ?? 0.5, stability: m.stability ?? 0.5 }));
+/* the export's memories as the anatomy reads them: a cell per memory, a link per tie (counted once, from its sender) */
+function shape(list) {
+  const index = new Map(list.map((m, i) => [m.id, i]));
+  const cells = list.map((m) => ({ id: m.id, fullId: m.id, born: m.born, accessibility: m.acc, state: m.state, lesson: m.lesson,
+    recalls: m.recalls, strength: m.strength ?? 0.5, stability: m.stability ?? 0.5 }));
   const links = [];
-  mems.forEach((m, s) => {
-    for (const [target, rel, w, at, by, out] of m.ties) {
+  list.forEach((m, s) => {
+    for (const [target, rel, w, , , out] of m.ties) {
       const t = index.get(target);
       if (t === undefined || (out === undefined ? s > t : !out)) continue;
-      links.push({ s, t, w, rel, born: at || null, by: by === 'retrieval' || rel === 'co_activated' ? 'retrieval' : by });
+      links.push({ s, t, w, rel });
     }
   });
-  const reinforced = (recalled || []).map(([id, at]) => ({ cell: index.get(id), at })).filter((r) => r.cell !== undefined && r.at);
-  const beliefs = (life.beliefs || []).map((b) => ({ text: b.text, confidence: b.confidence,
-    history: (b.history || []).map((h) => ({ timestamp: h.at, old_confidence: h.from ?? b.confidence, new_confidence: h.to ?? b.confidence })),
-    supports: (b.supports || []).map((id) => index.get(id)).filter((i) => i !== undefined) }));
-  return { cells, links, reinforced, beliefs, meta: { made: life.made } };
+  return { cells, links };
 }
 
-/* one build in a worker of its own, let go when it answers */
-function drawIn(data, budgetNow) {
+/* one job in a worker of its own, let go when it answers */
+function inWorker(job) {
   return new Promise((resolve, reject) => {
     const w = new Worker(new URL('./build.js', import.meta.url), { type: 'module' });
     w.onmessage = ({ data: out }) => { w.terminate(); if (out.error) reject(new Error(out.error)); else resolve(out); };
     w.onerror = (e) => { e.preventDefault(); w.terminate(); reject(new Error(`${e.message || 'the drawing could not be made'} (${e.filename}:${e.lineno})`)); };
     w.onmessageerror = () => { w.terminate(); reject(new Error('the drawing could not be handed back')); };
-    const tune = Object.fromEntries(['core', 'lobes', 'together'].filter((k) => params.has(k)).map((k) => [k, Number(params.get(k))]));
-    w.postMessage({ tune, cells: data.cells.map((c) => ({ id: c.id, lesson: c.lesson, strength: c.strength, stability: c.stability, recalls: c.recalls, acc: c.accessibility })),
-      links: data.links.map((l) => ({ s: l.s, t: l.t, w: l.w, rel: l.rel })), known: params.has('relayout') ? {} : store.get(LAYOUT_KEY()) || {}, budget: budgetNow,
-      glyphs: GLYPHS, metrics: atlas.metrics, mid: MID });
+    w.postMessage(job);
   });
+}
+function drawIn(data) {
+  {
+    const tune = Object.fromEntries(['core', 'lobes', 'together'].filter((k) => params.has(k)).map((k) => [k, Number(params.get(k))]));
+    return inWorker({ tune, cells: data.cells.map((c) => ({ id: c.id, lesson: c.lesson, strength: c.strength, stability: c.stability, recalls: c.recalls, acc: c.accessibility })),
+      links: data.links, known: params.has('relayout') ? {} : store.get(LAYOUT_KEY()) || {}, budget,
+      glyphs: GLYPHS, metrics: atlas.metrics, mid: MID });
+  }
+}
+
+/* ---------- up close: a few memories drawn finely, over the whole ----------
+ * The whole mind is drawn lightly, which is right from across the room and wrong up close, where a membrane should be
+ * a fine grain and not a few dots. So a memory opened, with those it's most tied to, is drawn again at full detail
+ * where it sits, the same shape it has in the whole (its streams of chance are its own), and its light version is
+ * dimmed to nothing, which costs nothing to draw. A few dozen memories finely, not thousands. */
+const NEAR_MOST = 48;
+let SH = null, near = null, nearAsked = -1;
+function dropNear() { if (near) { near.tissue.dispose(); near = null; } }
+async function focusNear(i) {
+  nearAsked = i;
+  if (i < 0 || !SH) { dropNear(); wake(); return; }
+  const ties = nbrs[i].slice().sort((a, b) => b[1] - a[1]).map(([j]) => j);
+  const list = [...new Set([i, ...ties])].slice(0, NEAR_MOST);
+  const at = new Map(list.map((g, k) => [g, k]));
+  const links = [], linkIds = [];
+  D.links.forEach((l, li) => {
+    const a = at.get(l.s), b = at.get(l.t);
+    if (a !== undefined && b !== undefined) { links.push({ s: a, t: b, w: l.w, rel: l.rel, key: li }); linkIds.push(li); }
+  });
+  const v3 = (A, g) => [A[g * 3], A[g * 3 + 1], A[g * 3 + 2]];
+  const cells = list.map((g) => ({ key: g, p: P[g], kind: D.cells[g].lesson ? 'procedural' : 'episodic', strength: D.cells[g].strength,
+    stability: D.cells[g].stability, apex0: v3(SH.apex, g), hillock0: v3(SH.hillock, g), incoming: SH.incoming[g], degree: SH.degree[g] }));
+  let out;
+  try { out = await inWorker({ kind: 'local', cells, links, glyphs: GLYPHS, metrics: atlas.metrics }); } catch { return; }
+  if (nearAsked !== i || !tissue) return;
+  dropNear();
+  near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds };
+  wake();
 }
 
 let building = null, built = null;
 async function build(data) {
   const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
-  const out = await drawIn(data, budget);
+  const out = await drawIn(data);
   const oldFlash = flash;
   D = data; N = D.cells.length; NL = D.links.length;
   MID = out.mid;
-  // where each memory sits, remembered for next time: the layout is the slow part, and a mind keeps its shape
   store.set(LAYOUT_KEY(), Object.fromEntries(D.cells.map((c, i) => [c.id, out.places[i].map((x) => Math.round(x * 1000) / 1000)])));
-  K = new Set(out.places.map((p) => p[3])).size;
   const next = new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
   if (tissue) tissue.dispose();
   tissue = next;
   R = out.R; P = Array.from({ length: N }, (_, i) => [out.P[i * 3], out.P[i * 3 + 1], out.P[i * 3 + 2]]);
+  SH = { apex: out.apex, hillock: out.hillock, incoming: out.incoming, degree: out.degree };
+  dropNear(); nearAsked = -1;
   centre = scale(P.reduce(add, [0, 0, 0]), 1 / (N || 1));
   extent = Math.max(0.5, ...P.map((p) => length(sub(p, centre))));
-  // far enough that the whole mind sits in the frame, with dark round it; a tall phone screen needs more room across
   HOME = extent * 3.35 * Math.min(1.8, Math.max(1, 0.85 / (innerWidth / innerHeight)));
-
-  T0 = N ? Date.parse(D.cells[0].born) : Date.now(); TNOW = Date.parse(D.meta.made);
+  cellOf = new Map(D.cells.map((c, i) => [c.fullId, i]));
   born = D.cells.map((c) => Date.parse(c.born));
-  touched = D.cells.map((c) => (c.touched ? Date.parse(c.touched) : 0));
-  linkBorn = D.links.map((l) => Math.max(l.born ? Date.parse(l.born) : 0, born[l.s], born[l.t]));
   acc = D.cells.map((c) => c.accessibility);
-  phase = D.cells.map((_, i) => (i * 2.39996) % (Math.PI * 2));
   nbrs = Array.from({ length: N }, () => []);
   D.links.forEach((l, li) => { nbrs[l.s].push([l.t, l.w, li]); nbrs[l.t].push([l.s, l.w, li]); });
-  recalls = new Uint16Array(N); for (const r of D.reinforced) recalls[r.cell]++;
-  // recall moments: recalls in time, split where the gap passes five seconds; a moment keeps its memories in recorded
-  // order, and the links recall itself made among them while it happened
-  events = D.reinforced.map((r) => ({ t: Date.parse(r.at), cell: r.cell })).sort((a, b) => a.t - b.t);
-  moments = [];
-  for (const e of events) {
-    const m = moments[moments.length - 1];
-    if (m && e.t - m.last <= 5000) { if (!m.cells.includes(e.cell)) m.cells.push(e.cell); m.last = e.t; }
-    else moments.push({ t: e.t, last: e.t, cells: [e.cell] });
-  }
-  moments = moments.filter((m) => m.cells.length >= 2);
-  for (const m of moments) {
-    m.links = [];
-    for (let i = 0; i < m.cells.length; i++) for (const [j, , li] of nbrs[m.cells[i]]) {
-      const l = D.links[li];
-      if (j > m.cells[i] || !m.cells.includes(j) || l.by !== 'retrieval' || !l.born) continue;
-      const b = Date.parse(l.born);
-      if (b >= m.t - 6000 && b <= m.last + 6000) m.links.push(li);
-    }
-  }
-
   glow = new Float32Array(N); flash = new Float32Array(N); aim = new Float32Array(N); read = new Float32Array(N);
   LF = new Float32Array(NL); LA = new Float32Array(NL); LT = new Float32Array(NL); LR = new Float32Array(NL);
   fireAt = new Float64Array(N).fill(-1); fireLevel = new Float32Array(N);
   linkAt = new Float64Array(NL).fill(-1); linkLevel = new Float32Array(NL);
+  heat = new Float32Array(N); linkHeat = new Float32Array(NL);
   if (keep && oldFlash) D.cells.forEach((c, i) => { const j = keep.get(c.fullId); if (j !== undefined && j < oldFlash.length) flash[i] = oldFlash[j]; });
-  built = { points: out.count, detail: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now() };
+  built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now() };
   window.__built = built;
 }
 
-life = await json(withAgent('../data/life.json'));
-who = life.identity;
-document.title = `${who.name} · the mind`;
-document.querySelector('.house a').href = withAgent('../log/');
-$('who-name').textContent = who.name;
-$('mind').setAttribute('aria-label', `${who.name}'s memory, every cell a memory and every fibre a real link between two`);
-let first = await json(withAgent('../data/memories.json'));
-version = first.version;
-$('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${fmt(first.memories.length)} memories…`
-  : `finding the shape of ${fmt(first.memories.length)} memories, the first time · a few seconds`;
-await build(shape(first.memories, first.recalled));
-first = null;
+async function readMemories() {
+  if (L.memory?.version === memVersion && mems.length) return false;
+  try { const m = await json('../data/memories.json'); mems = m.memories; memVersion = m.version; memAt = new Map(mems.map((x, i) => [x.id, i])); return true; }
+  catch { return false; }                      // the next look will try again
+}
 
-// how brightly a memory rests is how easy it is to reach (a curve keeps the order and lets the easiest stand out);
-// a link rests by its strength
-const cellRest = (i) => (D.cells[i].state === 'dormant' ? 0.035 : 0.06 + 0.5 * acc[i] ** 1.8);
-const linkRest = (li) => 0.026 + 0.05 * D.links[li].w;
+/* ---------- warmth: each hour's path, cooling since that hour ended ---------- */
 
-let mode = 'now', T = TNOW, growing = false, growStart = 0;
-const GROW_SECONDS = Number(params.get('grow')) || 42;
-// the long exposure: the shutter stays open while the mind grows, paced by the calendar so every arc is as long as its
-// memory is old; the camera rolls about its line of sight, so trails ring the pole the way stars do
-const EXPO_SECONDS = Number(params.get('expose')) || 30, EXPO_ROLL = Math.PI * 2 * 0.92, EXPO_GAIN = Number(params.get('gain')) || 0.022;
-const EXPO_LOOK = { rest: [0.07, 0.8, 0.0, 0.0], light: [0.25, 1.35, 0.0, 0.0], back: 0.3 };
-let roll = 0, evPtr = 0, exposed = false, meetUntil = 0, replayUntil = 0;
-const visible = (i) => born[i] <= T;
+let warmth = 0, lastHour = null;
+const pathOf = (h) => {
+  const t = h.trail || { woke: [], waiting: [], reached: [] };
+  const idx = (ids) => (ids || []).map((id) => cellOf.get(id)).filter((i) => i !== undefined);
+  return { woke: idx(t.woke), waiting: idx(t.waiting), reached: idx(t.reached) };
+};
+function warm() {
+  if (!heat) return;
+  heat.fill(0); linkHeat.fill(0);
+  // light adds the way light does: two hours on the same memory make it warmer, never more than white
+  for (const h of L.hours) {
+    const k = temperature(h);
+    if (k < 0.01) continue;
+    const p = pathOf(h);
+    const touch = (i, level) => { heat[i] = 1 - (1 - heat[i]) * (1 - level * k); };
+    for (const i of p.woke) touch(i, 0.42);
+    for (const i of p.waiting) touch(i, 0.55);
+    for (const i of p.reached) touch(i, 1);
+  }
+  for (let li = 0; li < NL; li++) {
+    const l = D.links[li];
+    if (heat[l.s] > 0.02 && heat[l.t] > 0.02) linkHeat[li] = Math.min(heat[l.s], heat[l.t]);
+  }
+  lastHour = L.hours[0] || null;
+  warmth = temperature(lastHour);
+  wake();
+}
 
 /* ---------- light ---------- */
 
-let selected = -1, hoverCell = -1;
-const introAt = performance.now();
-const arrivedLive = new Map();                 // memories that arrived while the page was open: fullId → when
+let selected = -1, hoverCell = -1, holdUntil = 0;
+const arrived = new Map();                     // memories new since the last visit, or made while the page is open
+const cellRest = (i) => DIM * (D.cells[i].state === 'dormant' ? 0.035 : 0.06 + 0.5 * acc[i] ** 1.8);
+const linkRest = (li) => DIM * 0.6 * (0.026 + 0.05 * D.links[li].w);
 
-// recall, seen: the touched memory first, then what it's tied to (sooner and brighter the stronger the tie), then fainter
 function spread(i, now, gain = 1) {
   fireAt[i] = now; fireLevel[i] = Math.max(fireLevel[i], gain);
   for (const [j, w, li] of nbrs[i]) {
-    if (!visible(j)) continue;
-    const at = now + 200 + 320 * (1 - w);
-    if (fireAt[j] < 0 || at < fireAt[j]) { fireAt[j] = at; fireLevel[j] = (0.5 + 0.4 * w) * gain; }
+    const t = now + 200 + 320 * (1 - w);
+    if (fireAt[j] < 0 || t < fireAt[j]) { fireAt[j] = t; fireLevel[j] = (0.5 + 0.4 * w) * gain; }
     linkAt[li] = now + 30; linkLevel[li] = gain;
-    for (const [k, w2, lk] of nbrs[j]) {
-      if (k === i || !visible(k)) continue;
-      const at2 = at + 320 + 320 * (1 - w2);
-      if (fireAt[k] < 0) { fireAt[k] = at2; fireLevel[k] = (0.16 + 0.2 * w2) * gain; }
-      if (linkAt[lk] < 0) { linkAt[lk] = at + 40; linkLevel[lk] = 0.45 * gain; }
-    }
   }
+  wake();
 }
-
 let animating = true;                          // whether anything is moving fast enough to need every frame
-let breathing = false;                         // whether anything moves slowly: drawn, but thirty frames are plenty
 function paint(now) {
-  const intro = reduce ? 0 : Math.max(0, 1 - (now - introAt) / 4800);
-  let moving = intro > 0, slow = false;
+  let moving = false;
   for (let i = 0; i < N; i++) {
-    const vis = visible(i);
-    glow[i] = vis ? cellRest(i) * (mode === 'quiet' ? 0.8 : 1) : 0;
-    let a = 0;
-    if (vis) {
-      const ageH = (T - born[i]) / 36e5;
-      if (mode === 'grow' || mode === 'exposure') { if (ageH < 72) a = 0.95 * Math.exp(-ageH / 20); }   // arriving: white-hot, cooling
-      else {
-        const live = arrivedLive.get(D.cells[i].fullId);
-        if (live !== undefined) { a = Math.max(a, reduce ? 0.6 : 0.95 * Math.exp(-(now - live) / 9000) + 0.3); moving = moving || now - live < 30000; }
-        else if (ageH < 24) a = (0.22 + 0.6 * intro) * Math.exp(-ageH / 12);                                     // made today
-      }
-      if (mode === 'now' && !reduce && TNOW - touched[i] < 864e5) { a = Math.max(a, 0.1 + 0.08 * Math.sin(now / 1500 + phase[i])); slow = true; }
-    }
+    glow[i] = cellRest(i);
+    let a = heat[i] * 0.92;
+    const t = arrived.get(D.cells[i].fullId);
+    if (t !== undefined) { a = Math.max(a, reduce ? 0.55 : 0.95 * Math.exp(-(now - t) / 12000) + 0.2); if (now - t < 40000) moving = true; }
     if (fireAt[i] >= 0) {
       moving = true;
       if (now >= fireAt[i]) {
-        const hold = now < replayUntil ? 1e9 : 1700, age = now - fireAt[i], k = i === selected ? 1 : age < hold ? 1 : Math.max(0, 1 - (Math.max(age - hold, now - replayUntil) / 1600));
+        const hold = now < holdUntil ? 1e9 : 1700, age = now - fireAt[i];
+        const k = i === selected ? 1 : age < hold ? 1 : Math.max(0, 1 - Math.max(age - hold, now - holdUntil) / 1800);
         a = Math.max(a, fireLevel[i] * k);
         if (k <= 0) { fireAt[i] = -1; fireLevel[i] = 0; }
       }
     }
-    if (Math.abs(flash[i] - a) > 2e-3) slow = true;      // still easing toward its light
+    if (Math.abs(flash[i] - a) > 2e-3) moving = true;      // still easing toward its light
     aim[i] = a;
   }
   for (let li = 0; li < NL; li++) {
-    LR[li] = mode !== 'exposure' && linkBorn[li] <= T ? linkRest(li) : 0;
+    LR[li] = linkRest(li);
+    let front = 0, amount = 0, trail = 0;
+    if (linkHeat[li] > 0) { front = 1; amount = 0.7 * linkHeat[li]; trail = 0.4; }
     if (linkAt[li] >= 0) {
       moving = true;
       if (now >= linkAt[li]) {
-        const age = now - linkAt[li], k = age < 1900 ? 1 : Math.max(0, 1 - (age - 1900) / 1500);
-        LF[li] = clamp(age / 820, 0, 1); LA[li] = linkLevel[li] * k; LT[li] = 0.4;
-        if (k <= 0) { linkAt[li] = -1; LA[li] = 0; }
-      } else { LF[li] = 0; LA[li] = 0; LT[li] = 0; }
-    } else { LF[li] = 0; LA[li] = 0; LT[li] = 0; }
+        const age = now - linkAt[li], k = age < 1900 || now < holdUntil ? 1 : Math.max(0, 1 - (age - 1900) / 1500);
+        front = Math.max(front, clamp(age / 820, 0, 1)); amount = Math.max(amount, linkLevel[li] * k); trail = 0.4;
+        if (k <= 0) { linkAt[li] = -1; linkLevel[li] = 0; }
+      }
+    }
+    LF[li] = front; LA[li] = amount; LT[li] = trail;
   }
-  animating = moving; breathing = slow;
+  for (let i = 0; i < N; i++) if ((i === selected || i === hoverCell ? 1 : 0) - read[i] > 2e-3 || read[i] - (i === selected || i === hoverCell ? 1 : 0) > 2e-3) { moving = true; break; }
+  animating = moving;
 }
 
-/* ---------- live: the store, looked at again ---------- */
-
-let lastChange = TNOW;
-async function look() {
-  if (document.hidden || building) return;
-  let next;
-  try { life = await json(withAgent('../data/life.json')); } catch { return; }
-  if (life.memory?.version === version) { TNOW = Date.parse(life.made); if (mode === 'now') T = TNOW; return updateLive(); }
-  try { next = await json(withAgent('../data/memories.json')); } catch { return; }
-  version = next.version;
-  const shaped = shape(next.memories, next.recalled);
-  const before = new Map(D.cells.map((c) => [c.fullId, c]));
-  const wasTouched = new Map(D.cells.map((c) => [c.fullId, c.touched]));
-  const grew = shaped.cells.length !== D.cells.length || shaped.links.length !== D.links.length || shaped.cells.some((c) => !before.has(c.fullId));
-  if (grew) {
-    building = build(shaped); await building; building = null;
-  } else {                                      // same cells: only how they rest, and when each last came to mind
-    D = shaped;
-    TNOW = Date.parse(D.meta.made);
-    acc = D.cells.map((c) => c.accessibility);
-    touched = D.cells.map((c) => (c.touched ? Date.parse(c.touched) : 0));
-  }
-  if (mode !== 'grow') T = Date.parse(D.meta.made);
-  const now = performance.now();
-  let newest = -1;
-  D.cells.forEach((c, i) => {
-    if (!before.has(c.fullId)) { arrivedLive.set(c.fullId, now); lastChange = Date.parse(D.meta.made); newest = i; }
-    else if (c.touched && c.touched !== wasTouched.get(c.fullId)) { spread(i, now + 400 * Math.random(), 0.85); lastChange = Date.parse(D.meta.made); }
+/* the arrival: the last hour's path walked again, in the order it was walked, then left at its temperature */
+function walk(h, delay = 900) {
+  if (!h || reduce) return;
+  const p = pathOf(h), now = performance.now();
+  const steps = [...p.woke.map((i) => [i, 0.6]), ...p.waiting.map((i) => [i, 0.75]), ...p.reached.map((i) => [i, 1])];
+  if (!steps.length) return;
+  steps.forEach(([i, level], k) => {
+    const t = now + delay + k * 260;
+    fireAt[i] = t; fireLevel[i] = Math.max(level, heat[i]);
+    for (const [, , li] of nbrs[i]) if (heat[D.links[li].s] > 0 && heat[D.links[li].t] > 0) { linkAt[li] = t + 120; linkLevel[li] = 0.9; }
   });
-  // the mind turns to meet a memory as it arrives, unless someone is reading or moving
-  if (newest >= 0 && mode === 'now' && selected < 0 && now - lastInput > 8000) {
-    cam.goal.target = P[newest].slice(); cam.goal.dist = clamp(extent * 1.15, 1.2, HOME); meetUntil = now + 8000;
-  }
-  renderRecalls(); renderBeliefs();
-  updateWhen(); updateLive(); wake();
+  holdUntil = now + delay + steps.length * 260 + 1400;
+  // the mind turns a little toward where it went, then lets go
+  const c = scale(steps.map(([i]) => P[i]).reduce(add, [0, 0, 0]), 1 / steps.length);
+  meet = { target: mixv(centre, c, 0.35), dist: HOME * 0.86, until: holdUntil + 2600 };
+  stir();
 }
-function updateLive() {
-  const mins = Math.round((Date.now() - lastChange) / 6e4);
-  $('live').textContent = mins < 1 ? 'live · changed just now' : mins < 60 ? `live · last change ${mins} min ago` : `live · last change ${Math.round(mins / 60)} h ago`;
-}
-setInterval(look, LIVE_EVERY);
-setInterval(updateLive, 30000);
 
 /* ---------- the camera: it orbits what it looks at ---------- */
 
-const cam = { yaw: 0.35, pitch: 0.18, dist: HOME, target: centre.slice() };
-cam.goal = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: centre.slice() };
-let dragging = null, lastInput = -1e9, view = null;
+let cam, dragging = null, lastInput = -1e9, lastStir = performance.now(), view = null, meet = null;
+const stir = () => { lastStir = performance.now(); wake(); };    // something happened: turn again for a while
 const backOf = (yaw, pitch) => [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
 const eyeOf = (c) => add(c.target, scale(backOf(c.yaw, c.pitch), c.dist));
-
 function project(p) {
   const W = innerWidth, H = innerHeight, t = Math.tan(FOV / 2), v = sub(p, view.eye), z = dot(v, view.fwd);
   if (z <= 0.02) return null;
@@ -306,7 +286,6 @@ function pick(x, y) {
   if (!view) return -1;
   let best = -1, bd = Infinity;
   for (let i = 0; i < N; i++) {
-    if (!visible(i)) continue;
     const s = project(P[i]); if (!s) continue;
     const r = Math.max(9, ((R[i] * 1.2) / (s.z * Math.tan(FOV / 2))) * (innerHeight / 2));
     const d = Math.hypot(s.x - x, s.y - y) / r;
@@ -314,332 +293,396 @@ function pick(x, y) {
   }
   return best;
 }
-
-canvas.addEventListener('pointerdown', (e) => {
-  if (mode === 'exposure') return;
-  dragging = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now() };
-  canvas.classList.add('dragging'); canvas.setPointerCapture(e.pointerId); lastInput = performance.now(); wake();
-});
-canvas.addEventListener('pointermove', (e) => {
-  if (!dragging) {
-    if (mode === 'exposure') return;
-    if (e.pointerType === 'mouse') { hoverCell = pick(e.clientX, e.clientY); canvas.style.cursor = hoverCell >= 0 ? 'pointer' : ''; }
-    return;
-  }
-  cam.goal.yaw -= (e.clientX - dragging.x) * 0.005;
-  cam.goal.pitch = clamp(cam.goal.pitch + (e.clientY - dragging.y) * 0.004, -1.2, 1.2);
-  dragging.x = e.clientX; dragging.y = e.clientY; lastInput = performance.now(); wake();
-});
-const drop = (e) => {
-  if (dragging && e?.type === 'pointerup' && Math.hypot(e.clientX - dragging.x0, e.clientY - dragging.y0) < 6 && performance.now() - dragging.t0 < 450) {
-    const c = pick(e.clientX, e.clientY);
-    select(c >= 0 ? c : -1);
-  }
-  dragging = null; canvas.classList.remove('dragging');
-};
-canvas.addEventListener('pointerup', drop); canvas.addEventListener('pointercancel', drop);
-canvas.addEventListener('pointerleave', () => { hoverCell = -1; });
-canvas.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  if (mode === 'exposure') return;
-  cam.goal.dist = clamp(cam.goal.dist * Math.exp(e.deltaY * 0.0012), 0.45, HOME * 1.3); lastInput = performance.now(); wake();
-}, { passive: false });
-addEventListener('keydown', (e) => { if (e.key === 'Escape') select(-1); });
-
-/* ---------- what the frame says (third person; only the memory's own words say "I") ---------- */
-
-// whose words: the mind's own (signed by its model), a colleague's (another model's), the person's, or unknown
-const modelName = (m) => m.replace(/^claude-/, '').split('-').map((w, k) => (k === 0 ? w[0].toUpperCase() + w.slice(1) : w)).join(' ').replace(/ (\d+) (\d+)$/, ' $1.$2');
-const own = (c) => c.model && who.model && c.model === who.model;
-function signedLine(c) {
-  if (c.author === 'person') return 'in your words';
-  if (own(c)) return `signed ${who.name}`;
-  if (c.model) return `written by ${modelName(c.model)}, a colleague`;
-  if (c.author === 'agent') return `written by ${who.name} before memories were signed`;
-  return 'no one can say who wrote it';
-}
-function select(i) {
-  selected = i; wake();
-  document.body.classList.toggle('reading', i >= 0);
-  const panel = $('panel');
-  if (i < 0) {
-    panel.classList.remove('on');
-    setTimeout(() => { if (selected < 0) panel.hidden = true; }, 380);
-    cam.goal.target = centre.slice(); cam.goal.dist = Math.max(cam.goal.dist, HOME);
-    return;
-  }
-  const c = D.cells[i], ties = nbrs[i].length;
-  const ago = Math.round((TNOW - born[i]) / 864e5);
-  $('p-when').textContent = `${dayOf(born[i])}${ago < 1 ? ', today' : ago === 1 ? ', yesterday' : `, ${ago} days ago`}`;
-  $('p-words').textContent = c.content;
-  const ch = $('p-changed');
-  if (c.impact) { ch.hidden = false; ch.textContent = c.impact; } else ch.hidden = true;
-  $('p-sign').textContent = [signedLine(c), c.lesson ? 'a lesson' : null, recalls[i] ? `came back in logged recall ${recalls[i]} ${recalls[i] === 1 ? 'time' : 'times'}` : null,
-    `tied to ${ties} other ${ties === 1 ? 'memory' : 'memories'}`, c.state === 'dormant' ? 'gone quiet' : null].filter(Boolean).join(' · ');
-  panel.hidden = false; requestAnimationFrame(() => panel.classList.add('on'));
-  spread(i, performance.now());
-  cam.goal.target = P[i].slice(); cam.goal.dist = clamp(cam.goal.dist, 0.9, extent * 1.2);
-  lastInput = performance.now();
-}
-$('p-close').addEventListener('click', () => select(-1));
-
-function updateWhen() {
-  const shown = born.reduce((n, b) => n + (b <= T ? 1 : 0), 0);
-  $('who-sub').textContent = `${fmt(N)} memories, ${fmt(NL)} links between them · since ${dayOf(T0)}`;
-  if (mode === 'exposure') {
-    const days = Math.round((T - T0) / 864e5);
-    $('when').textContent = exposed ? 'Left open' : dayOf(T);
-    $('when-sub').textContent = exposed
-      ? `${days} days in one frame · ${fmt(shown)} memories, each a light since it formed · ${fmt(events.length)} recalls flared`
-      : `${fmt(shown)} ${shown === 1 ? 'memory' : 'memories'} · the shutter open ${days} ${days === 1 ? 'day' : 'days'}`;
-    return;
-  }
-  if (mode === 'grow') {
-    $('when').textContent = dayOf(T);
-    const days = Math.floor((T - T0) / 864e5);
-    $('when-sub').textContent = `${fmt(shown)} ${shown === 1 ? 'memory' : 'memories'} · day ${days + 1} of ${Math.floor((TNOW - T0) / 864e5) + 1}`;
-    const k = (T - T0) / (TNOW - T0);
-    $('track-fill').style.width = `${k * 100}%`; $('track-knob').style.left = `${k * 100}%`;
-  } else {
-    $('when').textContent = mode === 'quiet' ? 'At rest' : 'Now';
-    $('when-sub').textContent = `${fmt(N)} memories · ${fmt(NL)} links · ${fmt(K)} concerns`;
-  }
-}
-function setMode(m) {
-  mode = m;
-  for (const b of document.querySelectorAll('.modes button')) b.setAttribute('aria-pressed', String(b.dataset.mode === m));
-  $('track').hidden = m !== 'grow';
-  $('legend').hidden = m === 'quiet' || m === 'exposure';
-  $('recalls').hidden = m !== 'now' || !moments.length;
-  $('expose-again').hidden = true;
-  document.body.dataset.mode = m;
-  if (m !== 'exposure') roll = 0;
-  if (m === 'grow') { T = reduce ? TNOW : T0; growing = !reduce; growStart = performance.now(); }
-  else if (m === 'exposure') { resize(); startExposure(); return; }
-  else { T = TNOW; growing = false; }
-  resize(); updateWhen(); wake();
-}
-for (const b of document.querySelectorAll('.modes button')) b.addEventListener('click', () => setMode(b.dataset.mode));
-{
-  const track = $('track');
-  const scrub = (e) => { const r = track.getBoundingClientRect(); T = T0 + clamp((e.clientX - r.left) / r.width) * (TNOW - T0); growing = false; updateWhen(); };
-  track.addEventListener('pointerdown', (e) => { track.setPointerCapture(e.pointerId); scrub(e); track.onpointermove = scrub; });
-  track.addEventListener('pointerup', () => { track.onpointermove = null; });
+// a memory opened is come up close to (never farther than a few memories' widths); with the reading room open, what
+// you're reading sits in the middle of what's left of the screen
+function aimAt(i) {
+  const sheet = sheetOpen && innerWidth > 860 ? Math.min(SHEET, innerWidth) : 0;
+  const dist = clamp(cam.goal.dist, 0.9, Math.min(extent * 1.2, 5.2));
+  const right = view ? view.right : [1, 0, 0];
+  const perPx = (2 * dist * Math.tan(FOV / 2)) / innerHeight;
+  cam.goal.target = add(P[i], scale(right, (sheet / 2) * perPx));
+  cam.goal.dist = dist;
+  stir();
 }
 
-/* ---------- resolution ---------- */
+function bindPointer() {
+  canvas.addEventListener('pointerdown', (e) => {
+    dragging = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now() };
+    canvas.classList.add('dragging'); lastInput = performance.now(); stir();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) {
+      if (e.pointerType === 'mouse') {
+        const h = pick(e.clientX, e.clientY);
+        if (h !== hoverCell) { hoverCell = h; wake(); }
+        canvas.style.cursor = hoverCell >= 0 ? 'pointer' : '';
+      }
+      return;
+    }
+    cam.goal.yaw -= (e.clientX - dragging.x) * 0.005;
+    if (e.pointerType === 'mouse') cam.goal.pitch = clamp(cam.goal.pitch + (e.clientY - dragging.y) * 0.004, -1.2, 1.2);
+    dragging.x = e.clientX; dragging.y = e.clientY; lastInput = performance.now(); stir();
+  });
+  const drop = (e) => {
+    if (dragging && e?.type === 'pointerup' && Math.hypot(e.clientX - dragging.x0, e.clientY - dragging.y0) < 6 && performance.now() - dragging.t0 < 450) {
+      const c = pick(e.clientX, e.clientY);
+      if (c >= 0 && memAt.has(D.cells[c].fullId)) openRoom({ tab: 'memories', memory: D.cells[c].fullId });
+    }
+    dragging = null; canvas.classList.remove('dragging');
+  };
+  canvas.addEventListener('pointerup', drop); canvas.addEventListener('pointercancel', drop);
+  canvas.addEventListener('pointerleave', () => { if (hoverCell >= 0) { hoverCell = -1; wake(); } });
+  // a pinch (or ⌘/ctrl and the wheel) moves closer; a plain wheel scrolls on to what the hour left
+  canvas.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    cam.goal.dist = clamp(cam.goal.dist * Math.exp(e.deltaY * 0.004), 0.45, HOME * 1.3); lastInput = performance.now(); stir();
+  }, { passive: false });
+}
 
-const startScale = clamp(Math.sqrt(2.4e6 / (innerWidth * innerHeight * Math.min(devicePixelRatio || 1, 2) ** 2)), 0.4, 1);
-let post = null;
-const renderScale = Number(params.get('scale')) || startScale;
+/* ---------- resolution and the loop ---------- */
+
+let post = null, heroSeen = true;
+const renderScale = clamp(Math.sqrt(2.4e6 / (innerWidth * innerHeight * Math.min(devicePixelRatio || 1, 2) ** 2)), 0.4, 1);
 function resize() {
-  const dpr = Math.min(devicePixelRatio || 1, 2), s = mode === 'quiet' ? renderScale * 0.55 : renderScale;
-  const w = Math.round(innerWidth * dpr * s), h = Math.round(innerHeight * dpr * s);
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const w = Math.round(innerWidth * dpr * renderScale), h = Math.round(innerHeight * dpr * renderScale);
   if (canvas.width === w && canvas.height === h && post) return;
   canvas.width = w; canvas.height = h;
   if (post) post.dispose();
   post = new Post(gl, w, h);
-  if (mode === 'exposure' && typeof startExposure === 'function') startExposure();
+  wake();
 }
-addEventListener('resize', () => { resize(); wake(); });
-resize();
+new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) wake(); }, { threshold: 0.02 }).observe($('hero'));
 
-/* ---------- the loop ---------- */
-
-/* The loop runs only while something moves. At rest in Quiet (or with reduced motion) it stops altogether until a
- * touch, a change in the memory or a resize wakes it; in Now, with only the slow drift moving, it draws about thirty
- * frames a second; Quiet draws about twenty. While it runs it watches its own frames: if they come slowly, the drawing
- * is remade at half the points (twice at most), and the budget that worked is remembered for this screen. */
-let frames = 0, last = performance.now(), fpsT = performance.now(), fpsN = 0, looping = false;
-let slow = [], halvings = 0;
-function wake() { if (!looping) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
+/* The loop runs only while something moves: light travelling, a memory arriving, a hand on it, the camera settling.
+ * The slow turn goes on for two minutes after the last of those, at thirty frames a second, then eases to a stop, and
+ * the loop sleeps until something wakes it. Under the paper the mind isn't seen, so it doesn't draw. While it runs
+ * it watches its own frames: if they come slowly the drawing is remade at half the points (twice at most), and the
+ * budget that worked is remembered for this screen. */
+let last = performance.now(), frames = 0, looping = false, slow = [], halvings = 0, spin = 1;
+function wake() { if (!looping && tissue && cam) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
 async function lighten() {
-  if (building || halvings >= 2 || budget <= 150_000) return;
-  halvings++; budget = Math.max(150_000, Math.round(budget / 2)); store.set(BUDGET_KEY, budget);
-  building = build(D); await building; building = null; wake();
+  if (building || halvings >= 2 || budget <= 400_000) return;
+  halvings++; budget = Math.max(400_000, Math.round(budget / 2)); store.set(BUDGET_KEY, budget);
+  building = build(D); await building; building = null; warm(); wake();
 }
 function frame(now) {
-  const quiet = mode === 'quiet';
+  if (!heroSeen) { looping = false; return; }
+  const turning = !reduce && selected < 0 && !dragging && now - lastStir < TURN_FOR;
+  spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
-  const drifting = !quiet && !reduce && mode !== 'exposure' && selected < 0 && !meetUntil;
-  if (!animating && !breathing && settled && !drifting && !(mode === 'exposure' && growing) && !(mode === 'grow' && growing) && frames > 2) { looping = false; return; }
-  // with only the slow drift moving (nothing lit, no one touching it for a moment), thirty frames are as smooth as sixty
-  const gap = quiet ? 50 : !animating && !dragging && !growing && now - lastInput > 1500 ? 33 : 0;
+  if (!animating && settled && spin < 0.01 && !meet && frames > 2) { looping = false; return; }
+  const gap = !animating && !dragging && now - lastInput > 1500 ? 33 : 0;
   if (gap && now - last < gap) { requestAnimationFrame(frame); return; }
-  // how long a frame took, measured where the page can't be blamed for waiting (a busy tab, a hidden one)
+  const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
   if (!gap && now - last < 250 && now - built.at > 1500) {
     slow.push(now - last);
     if (slow.length >= 90) { slow.sort((a, b) => a - b); if (slow[45] > 24) lighten(); slow = []; }
   }
-  const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000)); last = now;
-  if (mode === 'exposure' && growing) {
-    const k = clamp((now - growStart) / (EXPO_SECONDS * 1000));
-    T = T0 + (TNOW - T0) * k;
-    roll = EXPO_ROLL * k;
-    while (evPtr < events.length && events[evPtr].t <= T) { const e = events[evPtr++]; fireAt[e.cell] = now; fireLevel[e.cell] = 1; }
-    if (k >= 1) { growing = false; exposed = true; $('expose-again').hidden = false; }
-    updateWhen();
+  last = now;
+  if (meet) {
+    if (now < meet.until) { if (selected < 0 && now - lastInput > 1500) { cam.goal.target = meet.target; cam.goal.dist = meet.dist; } }
+    else { if (selected < 0) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } meet = null; }
   }
-  if (meetUntil && now > meetUntil) { meetUntil = 0; if (selected < 0) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } }
-  if (mode === 'grow' && growing) {
-    // paced by memories arriving, not by the calendar: most came in late September, so a calendar-paced run sits
-    // nearly empty for half its length; the date shown is still each memory's real one, racing through quiet weeks
-    const k = clamp((now - growStart) / (GROW_SECONDS * 1000)), n = Math.min(N - 1, Math.floor(easeInOut(k) * (N - 1)));
-    T = k >= 1 ? TNOW : born[n];
-    if (k >= 1) growing = false;
-    updateWhen();
-  }
-  if (!dragging && !quiet && !reduce && mode !== 'exposure' && selected < 0 && now - lastInput > 4000 && !meetUntil) cam.goal.yaw += 0.018 * dt;
-  const ke = 1 - Math.exp(-(dragging ? 21 : 2.6) * dt);
+  if (spin > 0.001) cam.goal.yaw += 0.012 * dt * spin;
+  const ke = 1 - Math.exp(-(dragging ? 21 : 2.2) * dt);
   cam.yaw += (cam.goal.yaw - cam.yaw) * ke; cam.pitch += (cam.goal.pitch - cam.pitch) * ke;
   cam.dist = Math.exp(Math.log(cam.dist) + (Math.log(cam.goal.dist) - Math.log(cam.dist)) * ke);
   cam.target = mixv(cam.target, cam.goal.target, ke);
   const eye = eyeOf(cam), fwd = normalize(sub(cam.target, eye)), right = normalize(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
   view = { eye, fwd, right, up };
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
-
   paint(now);
-  const kUp = 1 - Math.exp(-9 * dt), kDown = 1 - Math.exp(-2.6 * dt), kRead = 1 - Math.exp(-3.7 * dt);
+  const kUp = 1 - Math.exp(-9 * dt), kDown = 1 - Math.exp(-2.2 * dt), kRead = 1 - Math.exp(-3.7 * dt);
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
     read[i] += ((i === selected || i === hoverCell ? 1 : 0) - read[i]) * kRead;
     tissue.cell(i, glow[i], flash[i], 0, read[i]);
   }
   for (let li = 0; li < NL; li++) tissue.link(li, LF[li], LA[li], LT[li], LR[li]);
-
-  // the exposure's roll: the up direction turned about the line of sight, so the frame turns about its centre
-  const upRoll = roll ? add(add(scale([0, 1, 0], Math.cos(roll)), scale(cross(fwd, [0, 1, 0]), Math.sin(roll))), scale(fwd, dot(fwd, [0, 1, 0]) * (1 - Math.cos(roll)))) : [0, 1, 0];
-  const viewM = lookAt(eye, cam.target, upRoll), proj = perspective(FOV, canvas.width / canvas.height, 0.01, 400);
-  const blurK = (mode === 'exposure' ? 3 : mix(14, 52, close * close) * (quiet ? 0.6 : 1)) * (canvas.height / 804);   // the exposure's lens is stopped down: sharp throughout
-  const optics = { view: viewM, proj, focalPx: canvas.height / 2 / Math.tan(FOV / 2), focus: length(sub(cam.target, eye)), blurK, near: 0.02,
-    fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close) };
-  if (mode === 'exposure') {
-    // nothing is cleared while the shutter is open: every frame adds its light, so what stays still burns in and what
-    // turns draws its arc; once the run is done the plate holds as it is
-    if (growing) tissue.draw(post.accum, { ...optics, ...EXPO_LOOK, gain: EXPO_GAIN * dt * 60 });
-    post.finish({ exposure: 1.0, bloom: 0.1, grain: 0.02, vignette: 0.32, ca: 0.0012 }, (frames++ & 0xffff) + 1);
-  } else {
-    post.clear();
-    tissue.draw(post.accum, { ...optics, ...LOOK });
-    post.finish({ exposure: (quiet ? 0.78 : 1) * mix(1.0, 0.66, close), bloom: quiet ? 0.05 : mix(0.14, 0.08, close), grain: quiet ? 0.012 : 0.025,
-      vignette: 0.3, ca: 0.0015 }, (frames++ & 0xffff) + 1);
+  if (near) {
+    near.cells.forEach((g, k) => { near.tissue.cell(k, glow[g], flash[g], 0, read[g]); tissue.cell(g, 0, 0, 0, 0); });
+    near.links.forEach((li, k) => { near.tissue.link(k, LF[li], LA[li], LT[li], LR[li]); tissue.link(li, 0, 0, 0, 0); });
   }
-
-  fpsN++;
-  if (now - fpsT > 1000) { window.__fps = (fpsN * 1000) / (now - fpsT); fpsN = 0; fpsT = now; }
+  const viewM = lookAt(eye, cam.target, [0, 1, 0]), proj = perspective(FOV, canvas.width / canvas.height, 0.01, 400);
+  const blurK = mix(14, 52, close * close) * (canvas.height / 804);
+  post.clear();
+  const optics = { view: viewM, proj, focalPx: canvas.height / 2 / Math.tan(FOV / 2), focus: length(sub(cam.target, eye)), blurK, near: 0.02,
+    fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close), ...LOOK };
+  tissue.draw(post.accum, optics);
+  if (near) near.tissue.draw(post.accum, optics);
+  post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close), grain: 0.025, vignette: 0.34, ca: 0.0015 }, (frames++ & 0xffff) + 1);
   requestAnimationFrame(frame);
 }
 
-function startExposure() {
-  select(-1); wake(); meetUntil = 0; replayUntil = 0;
-  fireAt.fill(-1); linkAt.fill(-1); flash.fill(0);
-  cam.goal = { yaw: cam.yaw, pitch: 0.22, dist: HOME, target: centre.slice() };
-  Object.assign(cam, { pitch: 0.22, dist: HOME, target: centre.slice() });
-  T = T0; roll = 0; evPtr = 0; exposed = false; growing = true; growStart = performance.now();
-  post.clear();
-  updateWhen();
-}
-$('expose-again').addEventListener('click', () => { $('expose-again').hidden = true; startExposure(); });
+/* ---------- what the frame says (third person; only its own words say "I") ---------- */
 
-/* ---------- recall moments, replayed (the sky study's idea) ---------- */
-
-function renderRecalls() {
-  const track = $('r-track'); track.replaceChildren();
-  if (!moments.length) { $('recalls').hidden = true; return; }
-  const t0 = moments[0].t, t1 = Math.max(TNOW, moments[moments.length - 1].t);
-  for (const m of moments) {
-    const b = document.createElement('button'); b.className = 'tick';
-    b.style.left = `${((m.t - t0) / (t1 - t0 || 1)) * 100}%`;
-    b.style.height = `${7 + Math.min(15, m.cells.length * 1.1)}px`;
-    const label = `${dayOf(m.t)}, ${new Date(m.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}: ${m.cells.length} memories came back together`;
-    b.setAttribute('aria-label', label); b.title = label;
-    b.addEventListener('click', () => replayMoment(m));
-    track.append(b);
+function verifyHTML(h) {
+  if (!h) return '';
+  const who = L.identity, out = [];
+  out.push(h.model && who.model && !sameModel(h.model, who.model)
+    ? `<span class="flag">ran as ${esc(modelName(h.model))}; nothing it wrote was kept</span>` : `<span class="ok">ran as ${esc(h.modelName || who.name)}</span>`);
+  if (h.practice) {
+    if (h.check === 'rows') out.push(h.untouched === false ? '<span class="flag">left something in the real memory</span>' : '<span>real memory untouched</span>');
+    else out.push('<span>checked the older way</span>');
+  } else {
+    const kept = h.journal.length + h.notes.length;
+    out.push(`<span>kept ${kept ? plural(kept, 'thing it wrote', 'things it wrote') : 'nothing it wrote'}</span>`);
   }
-  $('r-cap').textContent = `${moments.length} times · ${dayOf(t0)} to now · choose one to see it again`;
+  const refused = [...new Set(h.refused || [])];
+  out.push(refused.length ? `<span class="flag">${plural(refused.length, 'tool')} refused</span>` : '<span>nothing refused</span>');
+  if (h.status !== 'done' || h.reason) out.push(`<span class="flag">${esc(h.reason || h.status)}</span>`);
+  return out.join('');
 }
-function replayMoment(m) {
-  select(-1); wake();
-  const now = performance.now();
-  fireAt.fill(-1); linkAt.fill(-1);
-  m.cells.forEach((c, k) => { fireAt[c] = now + 700 + k * 170; fireLevel[c] = 1; });
-  for (const li of m.links) {
-    const l = D.links[li];
-    linkAt[li] = now + 700 + Math.max(m.cells.indexOf(l.s), m.cells.indexOf(l.t)) * 170 - 140; linkLevel[li] = 1;
+function updateFrame() {
+  const who = L.identity, h = lastHour, temp = $('temp');
+  document.title = `${who.name} · the mind`;
+  $('who-name').textContent = who.name;
+  canvas.setAttribute('aria-label', `${who.name}'s memory: every cell a memory, every fibre a real link; lit only where its last quiet hour went`);
+  if (!h) {
+    temp.textContent = 'Cold'; temp.className = 'temp cold';
+    $('hour-line').textContent = 'No quiet hour has run yet.';
+    $('trail-line').textContent = 'When one does, the mind lights where it went and cools from there.';
+    $('verify').innerHTML = `<a class="textlink" href="${esc(withAgent('../log/'))}">the log →</a>`;
+  } else {
+    const end = at(h.end), word = tempWord(warmth, h);
+    temp.textContent = word; temp.className = word === 'Cold' ? 'temp cold' : 'temp';
+    const stale = Date.now() - end.getTime() > 26 * 36e5;
+    $('hour-line').textContent = [`${KIND[h.kind] || h.kind} ended ${ago(Date.now() - end.getTime())}`,
+      h.practice ? 'practice, on a copy of its memory' : null,
+      h.minutes != null ? (h.minutes < 1 ? 'under a minute' : `${Math.round(h.minutes * 10) / 10} minutes`) : null].filter(Boolean).join(' · ');
+    $('trail-line').textContent = stale ? `No hour has run since ${longDay(end)}, ${clock(end)}. If one was meant to, the hours may have stopped.` : trailSentence(h);
+    $('verify').innerHTML = verifyHTML(h) + `<a class="textlink" href="${esc(withAgent('../log/'))}">the log →</a>`;
   }
-  const c = scale(m.cells.map((i) => P[i]).reduce(add, [0, 0, 0]), 1 / m.cells.length);
-  const r = Math.max(0.3, ...m.cells.map((i) => length(sub(P[i], c))));
-  cam.goal.target = c; cam.goal.dist = clamp(r * 3.6, 1.2, HOME * 0.9); lastInput = now;
-  replayUntil = now + 700 + m.cells.length * 170 + 4500;
-  $('r-cap').textContent = `${dayOf(m.t)}, ${new Date(m.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · ${m.cells.length} memories came back together · ${m.links.length} ${m.links.length === 1 ? 'link' : 'links'} made between them`;
+  $('who-sub').textContent = `${plural(L.memory?.states?.active ?? N, 'memory', 'memories')} awake · its hours between conversations`;
+  const left = [];
+  if (h) {
+    if (h.journal.length) left.push(h.journal.length === 1 ? 'a journal entry' : `${words(h.journal.length)} journal entries`);
+    const pics = h.made.filter((p) => pictures.has(p)).length;
+    if (pics) left.push(pics === 1 ? 'a picture' : `${words(pics)} pictures`);
+    if (h.notes.length) left.push(h.notes.length === 1 ? `a note ${forPerson(who)}` : `${words(h.notes.length)} notes ${forPerson(who)}`);
+  }
+  $('left-cue').hidden = !h;
+  $('left-sum').textContent = left.length ? left.join(' · ') : 'it left nothing this time';
 }
 
-/* ---------- beliefs as dials (the herbarium study's idea) ---------- */
+/* ---------- since you were last here ---------- */
 
-const SVGNS = 'http://www.w3.org/2000/svg';
-const rOf = (c) => 5 + 16 * c;                        // the ring's radius grows with how firmly it's held
-function beliefLine(b, cell) {
-  const c = D.cells[cell];
-  const whose = !c ? 'resting on no recorded memory'
-    : own(c) ? `rests on a memory ${who.name} signed`
-    : c.model ? `rests on a memory ${modelName(c.model)} wrote, a colleague`
-    : c.author === 'agent' ? `rests on a memory ${who.name} wrote before signing` : 'rests on a memory no one can place';
-  const h = b.history || [], down = h.filter((x) => x.new_confidence < x.old_confidence).length, up = h.filter((x) => x.new_confidence > x.old_confidence).length;
-  return `held at ${Math.round(b.confidence * 100)}% · ${whose}${down ? ` · lowered ${down} ${down === 1 ? 'time' : 'times'}${up ? ', then restored' : ''}` : ''}`;
+const VISIT = () => `mnemos.mind.lastVisit.${L.identity.agentId || AGENT || 'agent'}`;
+let lastVisit = 0;
+const markVisit = () => store.set(VISIT(), Date.now());
+addEventListener('pagehide', markVisit);
+document.addEventListener('visibilitychange', () => { if (document.hidden) markVisit(); else { look(); wake(); } });
+
+/* ---------- paper: what each hour left ---------- */
+
+let pictures = new Map();
+function plateHTML(f, h) {
+  const name = f.path.replace(/\.[a-z]+$/i, '').split('/').join(' / ');
+  return `<figure class="plate"><button type="button" data-pic="${esc(f.picture)}" data-cap="${esc(f.path)}" aria-label="Open ${esc(f.path)} full size">
+    <img src="${esc(f.picture)}" alt="${esc(name)}, made in ${esc((KIND[h.kind] || 'an hour').toLowerCase())}" loading="lazy"></button>
+    <figcaption>${esc(name)} · ${clock(at(f.at))}</figcaption></figure>`;
 }
-function playDial(ring, b) {
-  const h = b.history || [];
-  if (!h.length || reduce) return;
-  ring.setAttribute('r', rOf(h[0].old_confidence));
-  h.forEach((x, k) => setTimeout(() => ring.setAttribute('r', rOf(x.new_confidence)), 480 * (k + 1)));
+function spreadHTML(h) {
+  const who = L.identity, made = h.made.map((p) => pictures.get(p)).filter(Boolean), entries = [...h.journal].reverse();
+  const page = entries.length
+    ? entries.map((e) => { const { title, body } = titleOf(e.text);
+        return `<article class="entry"><h3 class="title">${esc(title)}</h3>${body ? `<div class="text">${esc(body)}</div>` : ''}
+        <div class="by">its journal · ${clock(at(e.at))}${e.mood ? ` · mood, in its words: ${esc(e.mood)}` : ''}</div></article>`; }).join('')
+    : `<p class="none">It wrote nothing in its journal this hour${h.refused?.some((r) => /journal/.test(r)) ? ': the journal was refused to it' : ''}. An hour that ends in silence is still its own.</p>`;
+  const letters = h.notes.map((n) => `<div class="letter"><span class="label">A note ${esc(forPerson(who))}${n.kind ? ` · ${esc(n.kind)}` : ''}</span>
+    <div class="text">${esc(n.text)}</div><div class="by">${esc(who.name)} · ${clock(at(n.at))}${h.practice ? ' · written in practice, so it stays in the copy' : ''}</div></div>`).join('');
+  return `<div class="spread"><div class="page">${page}</div><div class="plates">${made.map((f) => plateHTML(f, h)).join('')}${letters}</div></div>`;
 }
-function showBelief(b, cell) {
-  const t = $('b-text'); t.replaceChildren();
-  const w = document.createElement('span'); w.className = 'words'; w.textContent = b.text;
-  const s = document.createElement('span'); s.className = 'sign'; s.textContent = beliefLine(b, cell);
-  t.append(w, s); t.hidden = false;
+function headHTML(h, first) {
+  const s = at(h.start), e = at(h.end);
+  return `${first ? '<div class="label">What it left</div>' : ''}
+    <h2>${KIND_LONG[h.kind] || esc(h.kind)}, ${longDay(s)}</h2>
+    <p class="when">${clock(s)} to ${clock(e)}${h.practice ? ' · practice, on a copy of its memory, so what it wrote stays in the copy' : ''} · it ${trailSentence(h).replace(/^It /, '').replace(/\.$/, '')}.</p>`;
 }
-function selectBelief(b, cell) {
-  if (cell === undefined || cell >= N) return;
-  select(cell);
-  $('p-when').textContent = `A belief · held at ${Math.round(b.confidence * 100)}%`;
-  $('p-words').textContent = b.text;
-  const ch = $('p-changed'); ch.hidden = false; ch.textContent = D.cells[cell].content;
-  const story = (b.history || []).map((h) => `${dayOf(Date.parse(h.timestamp))}: ${Math.round(h.old_confidence * 100)}% → ${Math.round(h.new_confidence * 100)}%`).join(' · ');
-  $('p-sign').textContent = `${beliefLine(b, cell)}${story ? ` · ${story}` : ''} · the memory it rests on is lit, and shown above in its own words`;
+function renderPaper() {
+  pictures = new Map((L.studio || []).filter((f) => f.picture).map((f) => [f.path, f]));
+  const wrap = $('paper-wrap');
+  const open = new Set([...wrap.querySelectorAll('details[open]')].map((d) => d.dataset.id));
+  if (!L.hours.length) {
+    wrap.innerHTML = `<div class="label">What it left</div><h2>Nothing yet</h2><p class="when">When its first quiet hour ends, what it leaves (its journal, what it made, any note ${esc(forPerson(L.identity))}) will be printed here.</p>`;
+  } else {
+    const [h, ...rest] = L.hours;
+    wrap.innerHTML = headHTML(h, true) + spreadHTML(h) + (rest.length ? `<section class="earlier" aria-label="Earlier hours"><div class="label">Earlier hours</div>${rest.map((x) => {
+      const s = at(x.start), first = x.journal.length ? titleOf(x.journal[x.journal.length - 1].text).title : '';
+      const thumbs = x.made.map((p) => pictures.get(p)).filter(Boolean).slice(0, 4);
+      return `<div class="row" id="hour-${esc(x.id)}"><div class="t">${shortDay(s)}, ${clock(s)}<small>${KIND[x.kind] || esc(x.kind)}${x.practice ? ' · practice' : ''}${x.minutes != null ? ` · ${Math.round(x.minutes * 10) / 10} min` : ''}</small></div>
+        <div class="first">${first ? esc(firstLine(first, 220)) : '<span class="none">No journal entry.</span>'}</div>
+        <div class="thumbs">${thumbs.map((f) => `<img src="${esc(f.picture)}" alt="" loading="lazy">`).join('')}</div>
+        <details data-id="${esc(x.id)}"><summary>Open this hour</summary>${headHTML(x, false)}${spreadHTML(x)}</details></div>`;
+    }).join('')}</section>` : '');
+  }
+  wrap.insertAdjacentHTML('beforeend', `<div class="closing"><button type="button" data-open="memories">Read everything it holds</button>
+    <a href="${esc(withAgent('../log/'))}">The log</a></div>
+    <p class="promise">Straight from its memory, on this machine only. A practice hour runs on a copy of the memory, so what it writes stays in the copy; it is printed here and marked. The frame speaks of the mind in the third person; only its own words say "I".</p>`);
+  for (const d of wrap.querySelectorAll('details[data-id]')) if (open.has(d.dataset.id)) d.open = true;
 }
-function renderBeliefs() {
-  const wrap = $('b-dials'); wrap.replaceChildren();
-  (D.beliefs || []).forEach((b) => {
-    const cell = (b.supports || [])[0];
-    const btn = document.createElement('button'); btn.className = 'dial';
-    btn.setAttribute('aria-label', `A belief, held at ${Math.round(b.confidence * 100)}%. ${b.text}`);
-    const svg = document.createElementNS(SVGNS, 'svg'); svg.setAttribute('viewBox', '-24 -24 48 48'); svg.setAttribute('width', '46'); svg.setAttribute('height', '46');
-    const past = [...new Set((b.history || []).flatMap((h) => [h.old_confidence, h.new_confidence]).map((x) => Math.round(x * 100) / 100))];
-    for (const c of past) { const p = document.createElementNS(SVGNS, 'circle'); p.setAttribute('r', rOf(c)); p.setAttribute('class', 'past'); svg.append(p); }
-    const ring = document.createElementNS(SVGNS, 'circle'); ring.setAttribute('r', rOf(b.confidence)); ring.setAttribute('class', 'ring'); svg.append(ring);
-    const dot = document.createElementNS(SVGNS, 'circle'); dot.setAttribute('r', '2.2');
-    dot.setAttribute('class', D.cells[cell]?.model && !own(D.cells[cell]) ? 'dot colleague' : 'dot'); svg.append(dot);
-    btn.append(svg);
-    const on = () => { showBelief(b, cell); playDial(ring, b); };
-    btn.addEventListener('mouseenter', on); btn.addEventListener('focus', on);
-    btn.addEventListener('mouseleave', () => { $('b-text').hidden = true; }); btn.addEventListener('blur', () => { $('b-text').hidden = true; });
-    btn.addEventListener('click', () => selectBelief(b, cell));
-    wrap.append(btn);
+
+/* ---------- the reading room, as a drawer beside the mind ---------- */
+
+let sheetOpen = false;
+const room = new Room({
+  tabsEl: $('tabs'), bodyEl: $('room-body'), tabs: TABS, sticky: true,
+  ctx: () => ({ who: L.identity, life: L, mems, byId: memAt, heat: (id) => { const i = cellOf.get(id); return i === undefined || !heat ? 0 : heat[i]; } }),
+  hooks: {
+    // touching an entry lights it where it lives: the memory itself, and a soft pulse along what it's tied to
+    hover: (id) => {
+      const i = id ? cellOf.get(id) ?? -1 : -1;
+      if (i === hoverCell) return;
+      hoverCell = i;
+      if (i >= 0 && i !== selected) spread(i, performance.now(), 0.6);
+      wake();
+    },
+    open: (id) => {
+      const i = id ? cellOf.get(id) : undefined;
+      if (i !== undefined) { selected = i; spread(i, performance.now()); aimAt(i); lastInput = performance.now(); focusNear(i); }
+      else if (selected >= 0) { selected = -1; cam.goal.target = centre.slice(); cam.goal.dist = HOME; stir(); focusNear(-1); }
+    },
+    route: (hash) => { if (sheetOpen) history.replaceState(null, '', hash); },
+    picture: showPicture,
+    hour: (id) => {
+      closeRoom();
+      const el = document.getElementById(`hour-${id}`) || $('paper');
+      const d = el.querySelector?.('details'); if (d) d.open = true;
+      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    },
+    // what you write here is yours, as on the log: a reply, an answer or a note, and which notes you've read
+    send: async (request) => {
+      const r = await fetch(withAgent('../act'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+      const answer = await r.json().catch(() => ({ error: 'It couldn’t be sent just now.' }));
+      if (answer.result) await look(true);
+      return answer;
+    },
+    read: async (ids) => {
+      const r = await fetch(withAgent('../act'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'read', note_ids: ids }) });
+      if (!r.ok) throw new Error('not marked');
+      await look(true);
+    },
+  },
+});
+function openRoom({ tab, memory = null } = {}) {
+  const sheet = $('room'), wasOpen = sheetOpen;
+  sheetOpen = true;
+  // shown, then measured, then slid in: no waiting on a frame, which a background tab never gets
+  sheet.hidden = false; void sheet.offsetWidth; sheet.classList.add('open');
+  $('open-room').setAttribute('aria-expanded', 'true');
+  room.go({ tab: tab || room.s.tab, memory });
+  if (!wasOpen) $('room-title').focus({ preventScroll: true });
+}
+function closeRoom() {
+  sheetOpen = false;
+  const sheet = $('room'); sheet.classList.remove('open');
+  setTimeout(() => { if (!sheetOpen) sheet.hidden = true; }, 460);
+  $('open-room').setAttribute('aria-expanded', 'false');
+  selected = -1; hoverCell = -1; focusNear(-1);
+  cam.goal.target = centre.slice(); cam.goal.dist = Math.max(cam.goal.dist, HOME); stir();
+  history.replaceState(null, '', location.pathname + location.search);
+  $('open-room').focus({ preventScroll: true });
+}
+function fromHash() {
+  // the log's "See it in the mind" opens on the memory (#memory/<id>); the room's own routes are #read/…
+  const legacy = location.hash.match(/^#memory\/(.+)$/);
+  if (legacy) return openRoom({ tab: 'memories', memory: memAt.has(decodeURIComponent(legacy[1])) ? decodeURIComponent(legacy[1]) : null });
+  const r = parseRoute(location.hash, TABS);
+  if (!r) { if (sheetOpen) closeRoom(); return; }
+  if (r.memory && !memAt.has(r.memory)) return openRoom({ tab: 'memories' });
+  openRoom({ tab: r.tab || 'memories', memory: r.memory || null });
+}
+
+/* ---------- pictures, full size ---------- */
+
+function showPicture(src, cap) {
+  $('full-img').src = src; $('full-img').alt = cap; $('full-cap').textContent = cap;
+  $('full').showModal();
+}
+function bindPage() {
+  $('open-room').addEventListener('click', () => (sheetOpen ? closeRoom() : openRoom({ tab: 'memories' })));
+  $('close-room').addEventListener('click', closeRoom);
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.plate [data-pic]'); if (b) return showPicture(b.dataset.pic, b.dataset.cap);
+    const o = e.target.closest('[data-open]'); if (o) openRoom({ tab: o.dataset.open });
   });
+  $('full-close').addEventListener('click', () => $('full').close());
+  $('full').addEventListener('click', (e) => { if (e.target === $('full')) $('full').close(); });
+  $('to-paper').addEventListener('click', () => $('paper').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' }));
+  $('to-log').href = withAgent('../log/');
+  addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); return; }
+    if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) {
+      e.preventDefault(); openRoom({ tab: 'memories' }); requestAnimationFrame(() => $('room-search')?.focus());
+    }
+  });
+  addEventListener('hashchange', fromHash);
 }
 
-renderRecalls(); renderBeliefs();
-$('recalls').hidden = !moments.length;
-document.body.dataset.mode = mode;
+/* ---------- live: the store, looked at again ---------- */
+
+let lastMade = null;
+async function look(now = false) {
+  if ((document.hidden && !now) || building) return;
+  let life;
+  try { life = await json('../data/life.json'); } catch { return; }
+  if (!life || life.missing) return;
+  const newHour = life.hours[0] && (!L.hours[0] || life.hours[0].id !== L.hours[0].id);
+  L = life; lastMade = life.made;
+  if (await readMemories()) {
+    const shaped = shape(mems);
+    const before = new Set(D.cells.map((c) => c.fullId));
+    if (shaped.cells.length !== D.cells.length || shaped.links.length !== D.links.length || shaped.cells.some((c) => !before.has(c.fullId))) {
+      building = build(shaped); await building; building = null;
+      for (const c of D.cells) if (!before.has(c.fullId)) arrived.set(c.fullId, performance.now());
+      stir();
+    } else {
+      D = { ...shaped, cells: shaped.cells };
+      acc = D.cells.map((c) => c.accessibility);
+    }
+  }
+  warm();
+  if (newHour && lastHour) walk(lastHour, 300);
+  renderPaper();
+  if (sheetOpen) room.refresh();
+  updateFrame();
+}
+
+/* ---------- begin ---------- */
+
+let firstLife;
+try { firstLife = await json('../data/life.json'); } catch { firstLife = null; }
+if (!firstLife || firstLife.missing) {
+  $('loading').textContent = firstLife?.missing ? `No memory found at ${firstLife.identity.store} for ${firstLife.identity.agentId}.` : 'Couldn’t read its memory yet.';
+  throw new Error('no memory to draw');
+}
+L = firstLife; lastMade = L.made;
+lastVisit = Number(store.get(VISIT())) || 0;
+await readMemories();
+$('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${plural(mems.length, 'memory', 'memories')}…`
+  : `finding the shape of ${plural(mems.length, 'memory', 'memories')}, the first time · a few seconds`;
+await build(shape(mems));
+warm();
+cam = { yaw: 0.35, pitch: 0.18, dist: HOME, target: centre.slice() };
+cam.goal = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: centre.slice() };
+if (lastVisit) {
+  const t = performance.now();
+  D.cells.forEach((c, i) => { if (born[i] > lastVisit) arrived.set(c.fullId, t + 1800 + Math.random() * 1200); });
+  if (arrived.size) { $('since').hidden = false; $('since').textContent = `${plural(arrived.size, 'memory', 'memories')} formed since you were last here, ${ago(Date.now() - lastVisit)}`; }
+}
+setTimeout(markVisit, 15_000);
+resize(); addEventListener('resize', resize);
+bindPointer(); bindPage();
+renderPaper(); updateFrame();
 $('loading').remove();
-updateWhen(); updateLive();
-window.__mind = { get N() { return N; }, get NL() { return NL; }, select, setMode, look,
-  setT: (iso) => { T = Date.parse(iso); growing = false; updateWhen(); wake(); }, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null),
-  get built() { return built; }, get looping() { return looping; } };
-wake();
-// a memory named in the address (the log's "See it in the mind"): open on it
-const named = decodeURIComponent(location.hash.replace(/^#memory\//, ''));
-if (named && named !== location.hash) { const i = D.cells.findIndex((c) => c.id === named); if (i >= 0) select(i); }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { look(); wake(); } });
+walk(lastHour);
+fromHash();
+setInterval(look, LIVE_EVERY);
+setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you watch
+window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
+  get looping() { return looping; }, get built() { return built; }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  openRoom, closeRoom, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null), byId: (id) => cellOf.get(id) };
+stir();

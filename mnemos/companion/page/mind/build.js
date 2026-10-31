@@ -12,7 +12,7 @@
  *
  * How much light draws it is a budget, not a constant: a body's membrane, its nucleus, its arbour and each fibre are
  * made of points, and at full detail a mind of two thousand memories is eleven million of them, far more than any
- * screen shows. The page asks for a number of points it can draw smoothly; the detail is set to land near it. */
+ * screen shows. The page asks for a number of points it can draw smoothly, and `spend` decides where they go. */
 
 import { anatomy } from '../engine/anatomy.js';
 import { pack } from '../engine/tissue.js';
@@ -21,9 +21,26 @@ import { random } from '../engine/gl.js';
 const INK = { skin: [0.42, 0.5, 1.0], nucleus: [0.7, 0.78, 1.0], dendrite: [0.36, 0.44, 1.0], fibre: [0.34, 0.4, 0.95], bouton: [0.5, 0.56, 1.0] };
 const inkOf = (l) => [INK.skin, INK.nucleus, INK.dendrite, INK.fibre, INK.bouton][l.part];
 const PACK = 0.34;                                   // drawn closer than laid out, so arbours and fibres meet as in tissue
-// points at detail 1, measured on two real minds (2,097 memories and 10,825 links; 3,124 and 22,556): a memory's
-// body and arbour, and a fibre per link
-const POINTS_PER_MEMORY = 1583, POINTS_PER_LINK = 733;
+// what each part costs, in points at full detail, measured on a real mind (2,097 memories, 10,825 links): a body's
+// membrane and granules, its nucleus, the spines on its boughs, the boughs themselves; and a link's fibre, and its bouton
+const COST = { skin: 2680, core: 347, spine: 517, bough: 343, fibre: 113, bouton: 7 };
+
+/* how to spend a budget of points on this mind. The lines come first: a bough or a fibre laid with fewer strokes
+ * breaks into beads, so they keep full detail down to a floor. What gives is what the eye can't count at this size:
+ * a membrane's points (each grows as they thin, so it keeps its glow), then its spines and nucleus, and the lines
+ * last, never below the floor. A small mind gets everything back, in the opposite order. */
+function spend(budget, n, nl) {
+  const cost = (o) => n * (COST.skin * o.skin + COST.core * o.core + COST.spine * o.spine + COST.bough * o.strand)
+    + nl * (COST.fibre * o.strand + COST.bouton);
+  const o = { strand: 1, spine: 0.4, core: 0.4, skin: 0.12 };
+  const fit = (key, lo, hi) => {                     // move one part to land on the budget, within its bounds
+    const without = cost({ ...o, [key]: 0 }), per = cost({ ...o, [key]: 1 }) - without;
+    o[key] = Math.max(lo, Math.min(hi, (budget - without) / (per || 1)));
+  };
+  if (cost(o) > budget) { fit('skin', 0.04, o.skin); if (cost(o) > budget) { fit('spine', 0.15, o.spine); } if (cost(o) > budget) { fit('core', 0.15, o.core); } if (cost(o) > budget) fit('strand', 0.8, 1); }
+  else { fit('skin', o.skin, 0.3); if (cost(o) < budget) fit('core', o.core, 1); if (cost(o) < budget) fit('spine', o.spine, 1); if (cost(o) < budget) fit('skin', o.skin, 1); }
+  return { ...o, points: Math.round(cost(o)) };
+}
 
 /* ---------- its concerns: Louvain communities, a fading memory's tie to its lesson counting triple ---------- */
 
@@ -81,13 +98,55 @@ function communities(n, links, seed = 3) {
   return member.map((c) => rank.get(c));
 }
 
-/* ---------- forces: everything pushes apart within its group, links pull, the cooling step shrinks ---------- */
+/* ---------- forces: everything pushes everything apart, links pull, the cooling step shrinks ----------
+ * Every memory pushes every other (k²/d², as the first layout did with numpy): that is what opens the space a memory
+ * stands in, so one opened in the mind is seen alone, its arbour reaching out, not inside a crowd. Done pair by pair it
+ * is millions of pairs a pass, so a distant cluster pushes as one mass at its centre (Barnes and Hut's octree): exact
+ * nearby, close enough far off, and a few thousand memories settle in a second or two. */
 
-function forces(P, groups, links, iters, { k = 1, home = null, pullHome = null, gravity = 0.02, rnd }) {
+function repel(P, n, k, F, theta = 0.8) {
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) { const v = P[i * 3 + d]; if (v < lo[d]) lo[d] = v; if (v > hi[d]) hi[d] = v; }
+  const half = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 + 1e-6;
+  const nodes = [];                                  // { m, x, y, z, s, kids|null, i (a leaf's one memory) }
+  const make = (idx, cx, cy, cz, h) => {
+    const node = { m: idx.length, x: 0, y: 0, z: 0, s: 2 * h, kids: null, i: -1 };
+    for (const i of idx) { node.x += P[i * 3]; node.y += P[i * 3 + 1]; node.z += P[i * 3 + 2]; }
+    node.x /= idx.length; node.y /= idx.length; node.z /= idx.length;
+    if (idx.length === 1 || h < 1e-5) { node.i = idx[0]; return node; }
+    const parts = [[], [], [], [], [], [], [], []];
+    for (const i of idx) parts[(P[i * 3] > cx ? 1 : 0) | (P[i * 3 + 1] > cy ? 2 : 0) | (P[i * 3 + 2] > cz ? 4 : 0)].push(i);
+    node.kids = [];
+    const q = h / 2;
+    parts.forEach((part, o) => { if (part.length) node.kids.push(make(part, cx + (o & 1 ? q : -q), cy + (o & 2 ? q : -q), cz + (o & 4 ? q : -q), q)); });
+    return node;
+  };
+  const all = Array.from({ length: n }, (_, i) => i);
+  const root = make(all, (lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2, half);
+  const kk = k * k, t2 = theta * theta, stack = [];
+  for (let i = 0; i < n; i++) {
+    const px = P[i * 3], py = P[i * 3 + 1], pz = P[i * 3 + 2];
+    let fx = 0, fy = 0, fz = 0;
+    stack.length = 0; stack.push(root);
+    while (stack.length) {
+      const node = stack.pop();
+      if (node.i === i && !node.kids) continue;
+      const dx = px - node.x, dy = py - node.y, dz = pz - node.z, d2 = dx * dx + dy * dy + dz * dz + 1e-9;
+      if (!node.kids || (node.s * node.s) / d2 < t2) {
+        const d = Math.sqrt(d2), f = (node.m * kk) / d2 / d;
+        fx += dx * f; fy += dy * f; fz += dz * f;
+      } else for (const c of node.kids) stack.push(c);
+    }
+    F[i * 3] += fx; F[i * 3 + 1] += fy; F[i * 3 + 2] += fz;
+  }
+}
+
+function forces(P, groups, links, iters, { k = 1, home = null, pullHome = null, gravity = 0.02, rnd, everyone = false }) {
   const n = P.length / 3, F = new Float64Array(n * 3);
   for (let it = 0; it < iters; it++) {
     F.fill(0);
-    for (const g of groups) {
+    if (everyone) repel(P, n, k, F);
+    else for (const g of groups) {
       for (let a = 0; a < g.length; a++) {
         const i = g[a] * 3;
         for (let b = a + 1; b < g.length; b++) {
@@ -120,7 +179,7 @@ function forces(P, groups, links, iters, { k = 1, home = null, pullHome = null, 
   return P;
 }
 
-function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0.5, lobes = 0.3 } = {}) {
+function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0, lobes = 1 } = {}) {
   const rnd = random(seed), normal = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
   const n = cells.length, K = Math.max(0, ...comm) + 1;
   // the lobes, placed by how much their memories share
@@ -162,7 +221,7 @@ function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0.5, lob
     groups[comm[i]].push(i);
   });
   // a larger mind settles in fewer passes: the shape is there long before the last of them, and the first visit waits
-  forces(P, groups, memLinks, Math.round(Math.max(400, Math.min(900, 900 * 2000 / Math.max(1, n)))), { k: 0.55, home, pullHome, gravity: heart, rnd });
+  forces(P, groups, memLinks, Math.round(Math.max(400, Math.min(900, 900 * 2000 / Math.max(1, n)))), { k: 0.55, home, pullHome, gravity: heart, rnd, everyone: true });
   // centred, and scaled so nearest neighbours sit about 0.9 apart: room for an arbour
   const mid = [0, 1, 2].map((d) => { let s = 0; for (let i = 0; i < n; i++) s += P[i * 3 + d]; return s / n; });
   for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) P[i * 3 + d] -= mid[d];
@@ -208,7 +267,17 @@ onmessage = ({ data: job }) => {
   try { work(job); } catch (e) { postMessage({ error: `${e.message}\n${e.stack || ''}` }); }
 };
 
+/* a few memories redrawn finely, in place: the one being read and those tied to it, at full detail, over the coarser
+ * whole. Each comes with its shape from the drawing of the whole (where it sits, which way it leans, how many feed it),
+ * and draws from the same streams of chance, so its arbour is the same arbour, only finer. */
+function local(job) {
+  const A = anatomy({ cells: job.cells, links: job.links }, { reach: 0.75 });
+  const packed = pack(A.points, (ch) => job.glyphs[ch], job.metrics, inkOf);
+  postMessage({ data: packed.data, count: packed.count }, [packed.data.buffer]);
+}
+
 function work(job) {
+  if (job.kind === 'local') return local(job);
   const t0 = performance.now();
   const { cells, links, known, budget, glyphs, metrics } = job;
   const { places, fresh, laidOut } = place(cells, links, known, job.seed || 7, job.tune || {});
@@ -217,12 +286,14 @@ function work(job) {
   const MID = job.mid || [0, 1, 2].map((d) => places.reduce((a, p) => a + p[d], 0) / (places.length || 1));
   const drawn = cells.map((c, i) => ({ kind: c.lesson ? 'procedural' : 'episodic', strength: c.strength, stability: c.stability,
     p: [0, 1, 2].map((d) => MID[d] + (places[i][d] - MID[d]) * PACK) }));
-  const detail = Math.max(0.02, Math.min(1, budget / (POINTS_PER_MEMORY * Math.max(1, cells.length) + POINTS_PER_LINK * links.length)));
-  const A = anatomy({ cells: drawn, links }, { detail, reach: 0.75 });
+  const parts = spend(budget, Math.max(1, cells.length), links.length);
+  const A = anatomy({ cells: drawn, links }, { strand: parts.strand, spine: parts.spine, skin: parts.skin, core: parts.core, reach: 0.75 });
   const glyph = (ch) => glyphs[ch];
   const packed = pack(A.points, glyph, metrics, inkOf);
-  const R = new Float32Array(A.cells.length), P = new Float32Array(A.cells.length * 3);
-  A.cells.forEach((c, i) => { R[i] = c.R; P.set(c.P, i * 3); });
-  postMessage({ data: packed.data, count: packed.count, R, P, places, mid: MID, fresh, laidOut, detail,
-    ms: { layout: Math.round(tLayout), total: Math.round(performance.now() - t0) } }, [packed.data.buffer, R.buffer, P.buffer]);
+  const n = A.cells.length, R = new Float32Array(n), P = new Float32Array(n * 3), apex = new Float32Array(n * 3), hillock = new Float32Array(n * 3);
+  const incoming = new Uint16Array(n), degree = new Uint16Array(n);
+  for (const l of links) { incoming[l.t]++; degree[l.t]++; degree[l.s]++; }
+  A.cells.forEach((c, i) => { R[i] = c.R; P.set(c.P, i * 3); apex.set(c.apex, i * 3); hillock.set(c.hillock, i * 3); });
+  postMessage({ data: packed.data, count: packed.count, R, P, apex, hillock, incoming, degree, places, mid: MID, fresh, laidOut, detail: parts,
+    ms: { layout: Math.round(tLayout), total: Math.round(performance.now() - t0) } }, [packed.data.buffer, R.buffer, P.buffer, apex.buffer, hillock.buffer]);
 }
