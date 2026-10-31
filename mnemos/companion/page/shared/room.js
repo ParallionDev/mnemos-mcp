@@ -4,23 +4,14 @@
  *
  *   new Room({ tabsEl, bodyEl, tabs, sticky, ctx, hooks })
  *     ctx()   → { who, life, mems, byId, heat?(id) }   who: the export's identity
- *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id),
- *                 send?(request), read?(ids) }
+ *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id) }
  */
 
 import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
   forPerson, temperature, tempWord, KIND, ASK, ASK_ORDER, RELATION, trailSentence, modelName, sameModel } from './words.js';
 
-const LABEL = { you: 'For you', log: 'Its life', memories: 'Its memory', journal: 'Journal', hours: 'Hours', beliefs: 'Beliefs',
-  questions: 'Questions', desk: 'Notes to itself', notes: 'For you' };
-/* Three places, by whom each is for: what it has to say to you (and what you say back), its own life, and its memory
-   with its desk. The first view of each is the place itself; the others sit in a row beneath the places. */
-export const PLACES = { you: ['you'], log: ['log', 'journal', 'hours'], memories: ['memories', 'beliefs', 'questions', 'desk'] };
-const VIEW = { log: 'Its days', journal: 'Journal', hours: 'Hours', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions',
-  desk: 'Notes to itself' };
-export const placeOf = (tab) => (tab === 'notes' ? 'you' : Object.keys(PLACES).find((p) => PLACES[p].includes(tab)) || 'you');
+const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours' };
 const PAGE = 60;
-const SEEN_AFTER = 1200;                  // a note of its own is read once it has stayed on your screen this long
 
 export class Room {
   constructor({ tabsEl, bodyEl, tabs, sticky = false, ctx, hooks = {} }) {
@@ -28,16 +19,6 @@ export class Room {
     this.s = { tab: tabs[0], memory: null, query: '', sort: 'newest', filter: 'all', qkind: 'all', shown: PAGE };
     this.whole = new Set();                 // entries opened in full, kept across live redraws
     this.texts = new Map();
-    this.drafts = new Map();                // what you're writing, by the note it answers ('new' for a note of your own)
-    this.opened = new Set();                // the reply boxes you opened
-    this.notices = new Map();               // why something couldn't be sent, by box
-    this.sending = null;
-    this.seen = new Set();                  // its notes you've read here, said once to the memory
-    this.fresh = new Set();                 // of those, the ones that keep their dot until you leave For you
-    this.readTimers = new Map();
-    this.reading = null;
-    this.toMark = new Set();
-    this.present = false;                   // someone has touched the page: moved, scrolled, typed
     this.bind();
   }
 
@@ -45,9 +26,8 @@ export class Room {
 
   count(tab) {
     const { life, mems } = this.ctx();
-    const unread = life.notes.filter((n) => n.author === 'agent' && !n.read).length;
-    return { you: unread || null, log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
-      journal: life.journal.length, hours: life.hours.length, desk: life.handoffs.length }[tab];
+    return { log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
+      journal: life.journal.length, notes: life.notes.length, hours: life.hours.length }[tab];
   }
   hash() { return this.s.memory ? `#read/memory/${this.s.memory}` : `#read/${this.s.tab}`; }
   go({ tab = this.s.tab, memory = null } = {}, keepPage = false) {
@@ -55,7 +35,6 @@ export class Room {
     const apply = () => {
       this.s.tab = tab; this.s.memory = memory;
       if (!keepPage) this.s.shown = PAGE;
-      if (placeOf(tab) !== 'you') this.fresh.clear();
       this.render(changed);
       this.hooks.open?.(memory);
       this.hooks.route?.(this.hash());
@@ -69,7 +48,7 @@ export class Room {
   render(toTop = false) {
     this.tabsEl.innerHTML = this.tabs.map((k) => {
       const n = this.count(k);
-      return `<button class="tab" role="tab" data-tab="${k}" aria-selected="${placeOf(this.s.tab) === k}">${LABEL[k]}${n == null ? '' : `<small>${n.toLocaleString('en-US')}</small>`}</button>`;
+      return `<button class="tab" role="tab" data-tab="${k}" aria-selected="${this.s.tab === k}">${LABEL[k]}${n == null ? '' : `<small>${n.toLocaleString('en-US')}</small>`}</button>`;
     }).join('');
     const { byId } = this.ctx();
     const open = this.s.memory && byId.has(this.s.memory);
@@ -78,16 +57,14 @@ export class Room {
     // a live redraw never takes the search box away from someone typing in it
     const typing = document.activeElement?.id === 'room-search' ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
     this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory)
-      : this.subnav() + { you: () => this.youHTML(), notes: () => this.youHTML(), log: () => this.logHTML(), memories: () => this.memoriesHTML(),
-        beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(), journal: () => this.journalHTML(), hours: () => this.hoursHTML(),
-        desk: () => this.deskHTML() }[this.s.tab]();
+      : { log: () => this.logHTML(), memories: () => this.memoriesHTML(), beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(),
+        journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML() }[this.s.tab]();
     this.restoreOpen();
     if (toTop) this.toTop(); else scroller.scrollTop = top;
     const search = this.bodyEl.querySelector('#room-search');
     if (typing && search) { search.focus({ preventScroll: true }); search.setSelectionRange(...typing); }
     const more = this.bodyEl.querySelector('.more-rows');
     if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.sticky ? this.bodyEl : null, rootMargin: '400px' }).observe(more);
-    this.watchReading();
   }
   scroller() { return this.sticky ? this.bodyEl : document.scrollingElement; }
   toTop() {
@@ -95,92 +72,7 @@ export class Room {
     const y = this.tabsEl.getBoundingClientRect().top + scrollY - 8;
     if (scrollY > y) scrollTo({ top: y });
   }
-  /* a live redraw waits while you're writing, so nothing you type is lost or jumps */
-  refresh() { if (!this.bodyEl.contains(document.activeElement) || !document.activeElement.matches('[data-draft]')) this.render(); }
-
-  /* the views of the place you're in, when it holds more than one */
-  subnav() {
-    const views = PLACES[placeOf(this.s.tab)];
-    if (!views || views.length < 2) return '';
-    return `<nav class="subnav" aria-label="${esc(LABEL[placeOf(this.s.tab)])}">${views.map((k) => {
-      const n = k === views[0] ? null : this.count(k);
-      return `<button class="chip" type="button" data-view="${k}" aria-pressed="${this.s.tab === k}">${VIEW[k]}${n == null ? '' : ` <span class="n">${n.toLocaleString('en-US')}</span>`}</button>`;
-    }).join('')}</nav>`;
-  }
-
-  /* ---------- for you: what it has to say to you, and what you say back ---------- */
-
-  /* its notes and yours, gathered into conversations: each note with the replies under it, oldest first; the
-     conversation with the newest word comes first */
-  threads() {
-    const { life } = this.ctx();
-    const byId = new Map(life.notes.map((n) => [n.id, n]));
-    const root = (n) => { let x = n; for (let i = 0; i < 50 && x.replyTo && byId.has(x.replyTo); i++) x = byId.get(x.replyTo); return x; };
-    const groups = new Map();
-    for (const n of life.notes) { const r = root(n).id; if (!groups.has(r)) groups.set(r, []); groups.get(r).push(n); }
-    const time = (n) => Date.parse(n.at);
-    return [...groups.values()].map((list) => list.sort((a, b) => time(a) - time(b)))
-      .sort((a, b) => time(b[b.length - 1]) - time(a[a.length - 1]));
-  }
-  youHTML() {
-    const { who } = this.ctx(), threads = this.threads();
-    const composer = this.box('new', `Leave ${who.name} a note`, 'It wakes with it, once, in its next session.');
-    if (!threads.length) return composer + `<p class="empty">No notes yet. It leaves one only when it would say it if ${esc(person(who))} walked in right now.</p>`;
-    return composer + threads.map((list) => this.threadHTML(list)).join('');
-  }
-  threadHTML(list) {
-    const { who } = this.ctx();
-    const by = (n) => (n.author === 'agent' ? esc(who.name) : who.person ? esc(who.person) : 'You');
-    const dot = (n) => n.author === 'agent' && (!n.read || this.fresh.has(n.id));
-    const head = (n) => `<div class="meta">${dot(n) ? '<span class="unread" role="img" aria-label="new"></span>' : ''}<span class="k">${by(n)}</span>`
-      + `<span>${dayName(at(n.at))}, ${clock(at(n.at))}</span>${n.kind === 'pickup' ? '<span>after our hour</span>' : ''}`
-      + `${n.author === 'person' ? `<span>${n.delivered ? 'it has woken with this' : 'it hasn’t woken since'}</span>` : ''}</div>`;
-    const watched = (n) => (n.author === 'agent' && !n.read && !this.seen.has(n.id) ? ` data-unread="${esc(n.id)}"` : '');
-    const turn = (n, i) => `<div class="turn${i ? ' later' : ''}${n.author === 'person' ? ' yours' : ''}"${watched(n)}>${head(n)}${this.own(n.id, n.text, 'text note', 600)}</div>`;
-    const answer = [...list].reverse().find((n) => n.author === 'agent');   // a reply answers its newest word here
-    return `<article class="thread">${list.map(turn).join('')}${answer ? this.box(answer.id, 'Reply', '') : ''}</article>`;
-  }
-
-  /* a place to write: closed, one quiet word; open, a field and Send. What you type stays while the page refreshes
-     itself and while you look elsewhere. */
-  box(key, label, hint) {
-    const open = key === 'new' || this.opened.has(key), draft = this.drafts.get(key) || '', k = esc(key);
-    if (!open) return `<button class="reply-open" type="button" data-reply="${k}">${esc(label)}</button>`;
-    const notice = this.notices.get(key);
-    return `<div class="compose${key === 'new' ? ' new' : ''}">
-      <textarea class="field" rows="${key === 'new' ? 2 : 3}" data-draft="${k}" placeholder="${esc(key === 'new' ? label : 'Your reply, in your own words')}" aria-label="${esc(key === 'new' ? label : 'Your reply')}">${esc(draft)}</textarea>
-      <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || hint)}</span>${key === 'new' ? '' : `<button class="cancel" type="button" data-cancel="${k}">Cancel</button>`}<button class="send" type="button" data-send="${k}"${draft.trim() && this.sending !== key ? '' : ' disabled'}>${this.sending === key ? 'Sending…' : 'Send'}</button></div></div>`;
-  }
-  async send(key) {
-    const text = (this.drafts.get(key) || '').trim();
-    if (!text || this.sending || !this.hooks.send) return;
-    this.sending = key; this.notices.delete(key); this.render();
-    let answer;
-    try { answer = await this.hooks.send(key === 'new' ? { command: 'note', text } : { command: 'reply', note_id: key, text }); }
-    catch { answer = { error: 'It couldn’t be sent just now. Is `mnemos log` still running?' }; }
-    this.sending = null;
-    if (answer?.result) { this.drafts.delete(key); this.opened.delete(key); }
-    else this.notices.set(key, answer?.error || 'It couldn’t be sent.');
-    this.render();
-  }
-
-  /* ---------- its desk: where it left off, for whichever session of it picks up next ---------- */
-
-  deskHTML() {
-    const { life } = this.ctx();
-    if (!life.handoffs.length) return '<p class="empty">No notes to itself yet. It leaves one where it stops, for whichever session of it picks up next.</p>';
-    // its notes often open with a signature line ("Left by …, date, session …"); each line shows what comes after it
-    const lead = (l) => { const lines = l.text.split('\n').filter((x) => x.trim()); return lines.length > 1 && /^left by /i.test(lines[0]) ? lines.slice(1).join('\n') : l.text; };
-    const days = [];
-    for (const l of life.handoffs) {
-      const k = dayKey(at(l.at));
-      if (!days.length || days[days.length - 1].k !== k) days.push({ k, d: at(l.at), list: [] });
-      days[days.length - 1].list.push(l);
-    }
-    return '<p class="note-k">Where it left off, in its own working notes, for whichever session of it picks up next.</p>'
-      + days.map((day) => `<section class="day"><h3 class="dayh"><span>${esc(dayName(day.d))}</span>${dayName(day.d) === longDay(day.d) ? '' : `<span class="date">${esc(longDay(day.d))}</span>`}</h3><ul class="lefts">${day.list.map((l) =>
-        `<li><details data-key="left-${esc(l.at)}"><summary><span class="w">${clock(at(l.at))}</span><span class="f">${esc(firstLine(lead(l), 200))}</span></summary><div class="text plain">${esc(l.text)}</div></details></li>`).join('')}</ul></section>`).join('');
-  }
+  refresh() { this.render(); }
 
   /* the folded text of a long entry, with its button; the whole text is kept for the button */
   own(id, text, cls = 'text', long = 520) {
@@ -203,6 +95,8 @@ export class Room {
     const items = [];
     for (const h of life.hours) items.push({ t: h.end || h.start, type: 'hour', h });
     for (const e of life.journal) if (!e.hour) items.push({ t: e.at, type: 'journal', e });
+    for (const n of life.notes) if (!n.hour) items.push({ t: n.at, type: 'note', n });
+    for (const l of life.handoffs) items.push({ t: l.at, type: 'left', l });
     for (const a of life.questions.answered) items.push({ t: a.at, type: 'answer', a });
     for (const b of life.beliefs) for (const x of b.history || []) if (x.at) items.push({ t: x.at, type: 'belief', b, x });
     const formed = new Map();               // memories formed, gathered by day
@@ -229,12 +123,12 @@ export class Room {
     }).join('') + (items.length > this.s.shown ? '<div class="more-rows"></div>' : '');
   }
 
-  /* One event: in the rail, its time and what kind of thing happened (the page's words); beside it, the thing itself
-     (the mind's). A quiet hour, the mind's own time, is a raised object; everything else is a quiet line on the page.
-     Long writing opens folded. */
+  /* One event: its time in the rail, a small label naming what kind of thing happened, then the thing. A quiet hour,
+     the mind's own time, is a raised object; everything else is a quiet line on the page. Long writing opens folded. */
   eventHTML(it) {
     const { who, life } = this.ctx();
-    const rail = (label, aside = '') => `<div class="t"><span>${clock(at(it.t))}</span><span class="k">${label}</span>${aside ? `<span>${aside}</span>` : ''}</div>`;
+    const t = `<div class="t">${clock(at(it.t))}</div>`;
+    const kind = (label, right = '') => `<div class="kd"><span>${label}</span>${right}</div>`;
     const SHORT = 300;
     if (it.type === 'hour') {
       const h = it.h, k = temperature(h);
@@ -248,31 +142,43 @@ export class Room {
       ].filter(Boolean);
       const temp = `<span class="temp" style="--k:${Math.max(0, Math.min(1, k)).toFixed(3)}"><i></i>${tempWord(k, h).toLowerCase()}</span>`;
       const entries = [...h.journal].reverse();
-      return `<article class="ev hour" data-hour="${esc(h.id)}">${rail(KIND[h.kind] || esc(h.kind))}<div class="b">
-        <div class="hl"><div class="line">${clock(at(h.start))} to ${clock(at(h.end))}${h.minutes != null ? ` · ${h.minutes < 1 ? 'under a minute' : `${Math.round(h.minutes * 10) / 10} minutes`}` : ''}${h.practice ? ' · practice, on a copy of its memory' : ''}</div>${temp}</div>
+      return `<article class="ev hour" data-hour="${esc(h.id)}">${t}<div class="b">
+        ${kind(KIND[h.kind] || esc(h.kind), temp)}
+        <div class="line">${clock(at(h.start))} to ${clock(at(h.end))}${h.minutes != null ? ` · ${h.minutes < 1 ? 'under a minute' : `${Math.round(h.minutes * 10) / 10} minutes`}` : ''}${h.practice ? ' · practice, on a copy of its memory' : ''}</div>
         <div class="sub">${esc(trailSentence(h))}</div>
         ${pics.length ? `<div class="thumbs">${pics.map((f) => `<button class="thumb" type="button" data-pic="${esc(f.picture)}" data-cap="${esc(f.path)}" aria-label="Open ${esc(f.path)}"><img src="${esc(f.picture)}" alt="" loading="lazy"></button>`).join('')}</div>` : ''}
         ${entries.map((e) => `<div class="inner"><div class="kd small">Its journal${e.mood ? ` · ${esc(e.mood)}` : ''}</div>${this.entry(e.id, e.text, SHORT)}</div>`).join('')}
-        ${!h.practice && h.notes.length ? `<button class="textlink hour-note" type="button" data-view="you">It left ${person(who) === 'you' ? 'you' : esc(person(who))} a note →</button>` : ''}
-        ${!h.practice ? '' : h.notes.map((n) => `<div class="inner"><div class="kd small">A note ${esc(forPerson(who))}, written in practice</div>${this.own(n.id, n.text, 'text note', SHORT)}</div>`).join('')}
+        ${h.notes.map((n) => `<div class="inner"><div class="kd small">A note ${esc(forPerson(who))}${h.practice ? ', written in practice' : ''}</div>${this.own(n.id, n.text, 'text note', SHORT)}</div>`).join('')}
         <div class="facts">${facts.map((f) => `<span>${f}</span>`).join('')}</div></div></article>`;
     }
     if (it.type === 'journal') {
       const e = it.e;
-      return `<div class="ev">${rail('Journal', e.mood ? esc(e.mood) : '')}<div class="b">${this.entry(e.id, e.text, SHORT)}</div></div>`;
+      return `<div class="ev">${t}<div class="b">${kind('Journal', e.mood ? `<span class="aside">${esc(e.mood)}</span>` : '')}${this.entry(e.id, e.text, SHORT)}</div></div>`;
+    }
+    if (it.type === 'note') {
+      const n = it.n, mine = n.author === 'agent';
+      return `<div class="ev">${t}<div class="b">${kind(mine ? `A note ${esc(forPerson(who))}` : `From ${esc(person(who))}`, mine ? `<span class="aside">${n.read ? 'read' : 'not yet read'}</span>` : '')}${this.own(n.id, n.text, 'text note', SHORT)}</div></div>`;
+    }
+    if (it.type === 'left') {
+      // its notes often open with a signature line ("Left by …, date, session …"); preview what comes after it
+      const l = it.l, lines = l.text.split('\n').filter((x) => x.trim());
+      const lead = lines.length > 1 && /^left by /i.test(lines[0]) ? lines.slice(1).join('\n') : l.text;
+      return `<div class="ev slim">${t}<div class="b">${kind('Note to itself', l.model && !sameModel(l.model, who.model) ? `<span class="aside">signed ${esc(modelName(l.model))}</span>` : '')}
+        <div class="sub one">${esc(firstLine(lead, 200))}</div>
+        <details data-key="left-${esc(l.at)}"><summary>Read it</summary><div class="text plain">${esc(l.text)}</div></details></div></div>`;
     }
     if (it.type === 'answer') {
       const a = it.a;
-      return `<div class="ev">${rail('Answered its memory')}<div class="b"><div class="qline">${esc(question(a.prompt))}</div><div class="text note">${esc(a.answer)}</div></div></div>`;
+      return `<div class="ev">${t}<div class="b">${kind('Answered its memory')}<div class="qline">${esc(question(a.prompt))}</div><div class="text note">${esc(a.answer)}</div></div></div>`;
     }
     if (it.type === 'belief') {
       const { b, x } = it, up = (x.to ?? 0) > (x.from ?? 0);
-      return `<div class="ev">${rail('Belief', `${up ? 'more firmly' : 'less firmly'}, ${Math.round((x.from ?? 0) * 100)}% → ${Math.round((x.to ?? 0) * 100)}%`)}<div class="b"><div class="text clamp2">${esc(b.text)}</div></div></div>`;
+      return `<div class="ev">${t}<div class="b">${kind('Belief', `<span class="aside">${up ? 'held more firmly' : 'held less firmly'} · ${Math.round((x.from ?? 0) * 100)}% → ${Math.round((x.to ?? 0) * 100)}%</span>`)}<div class="text clamp2">${esc(b.text)}</div></div></div>`;
     }
     if (it.type === 'formed') {
       const list = it.list;
       const rows = [...list].reverse().slice(0, 12).map((m) => `<li><button class="rowb" data-mem="${esc(m.id)}"><div class="meta"><span>${clock(at(m.born))}</span>${m.lesson ? '<span class="k2">a lesson</span>' : ''}</div><div class="words">${esc(m.content)}</div></button></li>`).join('');
-      return `<div class="ev slim">${rail('Memories')}<div class="b"><div class="sub one">Kept ${plural(list.length, 'memory', 'memories')}</div>
+      return `<div class="ev slim">${t}<div class="b">${kind('Memories')}<div class="sub one">Formed ${plural(list.length, 'memory', 'memories')}</div>
         <details data-key="formed-${esc(list[0].born)}"><summary>${list.length === 1 ? 'Read it' : 'Read them'}</summary><ul class="rows">${rows}</ul>${list.length > 12 ? `<p class="count">and ${list.length - 12} more, in Memories</p>` : ''}</details></div></div>`;
     }
     return '';
@@ -361,7 +267,7 @@ export class Room {
     const answered = Q.answered.map((a) => `<li><button class="rowb" ${byId.has(a.about) ? `data-mem="${esc(a.about)}"` : 'disabled'}>
       <div class="meta"><span class="k">${(ASK[a.kind] || [a.kind])[0]}</span><span>answered ${shortDay(at(a.at))}</span></div>
       <div class="q">${esc(question(a.prompt))}</div><div class="ans">${esc(a.answer)}</div></button></li>`).join('');
-    return `<div class="kinds" role="group" aria-label="Kinds of question">${kinds.map(([k, n]) => `<button class="kindb" data-qkind="${k}" aria-pressed="${this.s.qkind === k}"><span>${(ASK[k] || [k])[0]}</span><b>${n}</b></button>`).join('')}</div>
+    return `<div class="kinds" role="group" aria-label="Kinds of question">${kinds.map(([k, n]) => `<button class="kindb" data-qkind="${k}" aria-pressed="${this.s.qkind === k}"><b>${n}</b><span>${(ASK[k] || [k])[0]}</span></button>`).join('')}</div>
       <p class="note-k">${this.s.qkind !== 'all' && ASK[this.s.qkind] ? esc(ASK[this.s.qkind][1]) + ' ' : ''}Open a question to read the memory it’s about.${this.s.qkind !== 'all' ? ' <button class="chip" data-qkind="all">Show every kind</button>' : ''}</p>
       <ul class="rows" style="margin-top:var(--s3)">${rows}</ul>${list.length > this.s.shown ? '<div class="more-rows"></div>' : ''}
       ${answered ? `<span class="label sub-h">Answered, in its words</span><ul class="rows" style="margin-top:var(--s2)">${answered}</ul>` : ''}`;
@@ -372,49 +278,18 @@ export class Room {
     return life.journal.map((e) => `<div class="jentry"><div class="meta"><span>${longDay(at(e.at))}, ${clock(at(e.at))}</span><span>${e.written === 'between_sessions' ? 'written between conversations' : 'written in conversation'}</span>${e.mood ? `<span>mood, in its words: ${esc(e.mood)}</span>` : ''}</div>
       ${this.entry(e.id, e.text)}</div>`).join('');
   }
+  notesHTML() {
+    const { who, life } = this.ctx();
+    if (!life.notes.length) return `<p class="empty">No notes yet. It leaves one only when it passes the room test: something it would say if ${esc(person(who) === 'you' ? 'you' : person(who))} walked in right now. Notes written in practice hours stay in their copies; you’ll find them with their hour in the log.</p>`;
+    return life.notes.map((n) => `<div class="jentry"><div class="meta"><span>${n.author === 'agent' ? `To ${esc(person(who))}` : `From ${esc(person(who))}`}</span><span>${longDay(at(n.at))}, ${clock(at(n.at))}</span>${n.kind ? `<span>${esc(n.kind)}</span>` : ''}${n.author === 'agent' ? `<span>${n.read ? 'read' : 'not yet read'}</span>` : ''}</div>
+      ${this.own(n.id, n.text, 'text note')}</div>`).join('');
+  }
   hoursHTML() {
     const { life } = this.ctx();
     if (!life.hours.length) return '<p class="empty">No quiet hour has run yet. When hours are turned on, each one appears here as soon as it ends.</p>';
     return `<ul class="rows">${life.hours.map((h) => { const s = at(h.start), k = temperature(h);
       return `<li><button class="rowb" data-hour="${esc(h.id)}"><div class="meta"><span>${shortDay(s)}, ${clock(s)}</span><span class="k">${KIND[h.kind] || esc(h.kind)}</span><span>${h.practice ? 'practice' : 'real'}</span><span class="${k > 0.06 ? 'warm' : ''}">${tempWord(k, h).toLowerCase()}</span></div>
         <div class="q">${esc(trailSentence(h))}</div>${h.journal.length ? `<div class="ex">${esc(firstLine(h.journal[h.journal.length - 1].text, 200))}</div>` : ''}</button></li>`; }).join('')}</ul>`;
-  }
-
-  /* ---------- reading ---------- */
-
-  /* A note of its own counts as read once most of it (or most of your screen) has shown it for a moment, on a page in
-     front of someone who has touched it. Nothing short of that counts: a page open in a tab no one looks at, or one an
-     agent reads for itself, marks nothing, since a note marked read unseen is a note lost. Each is said once; its dot
-     stays until you leave For you, so you can see what was new. */
-  watchReading() {
-    this.reading?.disconnect();
-    for (const t of this.readTimers.values()) clearTimeout(t);
-    this.readTimers.clear();
-    if (!this.hooks.read || !this.present || document.visibilityState !== 'visible') return;
-    const notes = this.bodyEl.querySelectorAll('[data-unread]');
-    if (!notes.length) return;
-    const root = this.sticky ? this.bodyEl : null;
-    this.reading = new IntersectionObserver((entries) => {
-      const view = root ? root.clientHeight : innerHeight;
-      for (const e of entries) {
-        const id = e.target.dataset.unread;
-        const showing = e.isIntersecting && e.intersectionRect.height >= Math.min(e.boundingClientRect.height, view) * 0.6;
-        if (showing && !this.readTimers.has(id)) this.readTimers.set(id, setTimeout(() => this.markSeen(id), SEEN_AFTER));
-        if (!showing && this.readTimers.has(id)) { clearTimeout(this.readTimers.get(id)); this.readTimers.delete(id); }
-      }
-    }, { root, threshold: [0, 0.2, 0.4, 0.6, 0.8, 1] });
-    notes.forEach((n) => this.reading.observe(n));
-  }
-  markSeen(id) {
-    this.readTimers.delete(id);
-    if (!this.present || document.visibilityState !== 'visible' || this.seen.has(id)) return;
-    this.seen.add(id); this.fresh.add(id); this.toMark.add(id);
-    clearTimeout(this.marking);
-    this.marking = setTimeout(() => {
-      const ids = [...this.toMark]; this.toMark.clear();
-      // not said? then it's still unread, and the next look tries again
-      this.hooks.read(ids).catch(() => ids.forEach((i) => this.seen.delete(i)));
-    }, 300);
   }
 
   /* ---------- events ---------- */
@@ -432,15 +307,6 @@ export class Room {
         fold.setAttribute('aria-expanded', open); fold.textContent = open ? 'Show less' : 'Read the whole entry';
         return;
       }
-      const view = e.target.closest('[data-view]'); if (view) { this.s.qkind = 'all'; return this.go({ tab: view.dataset.view }); }
-      const open = e.target.closest('[data-reply]');
-      if (open) {
-        this.opened.add(open.dataset.reply); this.render();
-        return this.bodyEl.querySelector(`[data-draft="${CSS.escape(open.dataset.reply)}"]`)?.focus();
-      }
-      const cancel = e.target.closest('[data-cancel]');
-      if (cancel) { const k = cancel.dataset.cancel; this.opened.delete(k); this.drafts.delete(k); this.notices.delete(k); return this.render(); }
-      const send = e.target.closest('[data-send]'); if (send) return this.send(send.dataset.send);
       const pic = e.target.closest('[data-pic]'); if (pic) return this.hooks.picture?.(pic.dataset.pic, pic.dataset.cap);
       const m = e.target.closest('[data-mem]'); if (m && !m.disabled) return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem });
       if (e.target.closest('[data-back]')) return this.go({ tab: this.s.tab, memory: null });
@@ -449,18 +315,7 @@ export class Room {
       const k = e.target.closest('[data-qkind]'); if (k) { this.s.qkind = this.s.qkind === k.dataset.qkind ? 'all' : k.dataset.qkind; this.s.shown = PAGE; return this.render(); }
       const h = e.target.closest('[data-hour]'); if (h && this.hooks.hour) return this.hooks.hour(h.dataset.hour);
     });
-    body.addEventListener('keydown', (e) => {
-      // ⌘↩ or Ctrl↩ sends what you wrote
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) { e.preventDefault(); this.send(e.target.dataset.draft); }
-    });
     body.addEventListener('input', (e) => {
-      const key = e.target.dataset?.draft;
-      if (key) {
-        this.drafts.set(key, e.target.value);
-        const send = this.bodyEl.querySelector(`[data-send="${CSS.escape(key)}"]`);
-        if (send) send.disabled = !e.target.value.trim() || this.sending === key;
-        return;
-      }
       if (e.target.id !== 'room-search') return;
       this.s.query = e.target.value; this.s.shown = PAGE;
       this.render();
@@ -471,10 +326,6 @@ export class Room {
     body.addEventListener('pointerover', touch);
     body.addEventListener('focusin', touch);
     body.addEventListener('pointerleave', () => this.hooks.hover?.(null));
-    // what showed while the page was behind another wasn't read; it's watched again when you come back
-    document.addEventListener('visibilitychange', () => this.watchReading());
-    const here = () => { if (!this.present) { this.present = true; this.watchReading(); } };
-    for (const type of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(type, here, { passive: true, once: true });
   }
   restoreOpen() { for (const d of this.bodyEl.querySelectorAll('details[data-key]')) if (this.whole.has(d.dataset.key)) d.open = true; }
 }
