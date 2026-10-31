@@ -334,16 +334,27 @@ hours; see [Between Sessions](#between-sessions).
 
 ### See Your Agent's Days
 
-`mnemos log` opens a small page in your browser with three places, by whom
-each is for:
+`mnemos log` opens a small page in your browser: your agent's log, and its
+mind.
 
-- **For you**: the notes your agent leaves you, each with a box to answer it
-  in your own words, and a box to leave it a note of your own. It wakes with
-  what you write, once, in its next session.
-- **Its life**: its days, its journal, its quiet hours between sessions (what
-  each one wrote and made), and its beliefs.
-- **Its memory**: every memory, searchable, its beliefs, what its memory is
-  asking it, and its notes to itself.
+- **The log**: its story down the page, its state in the margin. Its days,
+  its memories (searchable), its beliefs, what its memory asks it, its
+  journal, its quiet hours (what each one wrote and made), and its notes to
+  you.
+- **Notes**: each note it left you, with a box to reply. The ones that ask
+  you something come first, with the box already open. There's also a box
+  to leave it a note of your own. It wakes with what you write, once, in
+  its next session.
+- **Settings**: whether it has quiet hours, and when each starts. It also
+  says where its memory lives.
+- **The mind** ("Open the mind"): its whole memory, live. Every memory is a
+  point of light where it sits among the ones it's tied to, and every link a
+  fibre; recall lights up along the links as it happens. It also replays
+  how it grew, and the times recall gathered several memories at once. It's
+  drawn to fit your machine, and rests when nothing moves.
+- **Every mind on this computer**: the agent's name opens the others that
+  keep their memory beside it (`~/.mnemos/<agent>.db`), each called by its
+  own name.
 
 It keeps itself up to date while it's open. Your agent can open it for you:
 ask it. It does that with `mnemos_page`, which serves the same page from the
@@ -367,7 +378,11 @@ The page reads the memory and writes only what you write there, a reply or
 a note, kept exactly as you wrote it and marked as yours (as `mnemos notes
 reply` and `mnemos notes write` keep them), and which of the agent's notes
 you've read: one counts as read once it has stayed on your screen a moment.
-Nothing else on it can change the memory. It runs on this computer alone (127.0.0.1, at an address made fresh
+In Settings it turns the quiet hours on or off and sets when they start,
+exactly as `mnemos daemon install --hours --write` and `mnemos daemon
+uninstall --hours --write` do. Nothing else on it can change the memory or
+the machine. A mind whose memory is from before notes (an older store) is
+only read. It runs on this computer alone (127.0.0.1, at an address made fresh
 each time), only the page itself can send to it, and it asks nothing of the
 internet, since its fonts ship with Mnemos. If your agent has no quiet
 hours yet, or nothing is scheduled to run them, the page says so;

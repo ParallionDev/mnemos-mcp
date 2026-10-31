@@ -202,10 +202,11 @@ function spread(i, now, gain = 1) {
   }
 }
 
-let animating = true;                          // whether anything is still moving that a frame must show
+let animating = true;                          // whether anything is moving fast enough to need every frame
+let breathing = false;                         // whether anything moves slowly: drawn, but thirty frames are plenty
 function paint(now) {
   const intro = reduce ? 0 : Math.max(0, 1 - (now - introAt) / 4800);
-  let moving = intro > 0;
+  let moving = intro > 0, slow = false;
   for (let i = 0; i < N; i++) {
     const vis = visible(i);
     glow[i] = vis ? cellRest(i) * (mode === 'quiet' ? 0.8 : 1) : 0;
@@ -218,7 +219,7 @@ function paint(now) {
         if (live !== undefined) { a = Math.max(a, reduce ? 0.6 : 0.95 * Math.exp(-(now - live) / 9000) + 0.3); moving = moving || now - live < 30000; }
         else if (ageH < 24) a = (0.22 + 0.6 * intro) * Math.exp(-ageH / 12);                                     // made today
       }
-      if (mode === 'now' && !reduce && TNOW - touched[i] < 864e5) { a = Math.max(a, 0.1 + 0.08 * Math.sin(now / 1500 + phase[i])); moving = true; }
+      if (mode === 'now' && !reduce && TNOW - touched[i] < 864e5) { a = Math.max(a, 0.1 + 0.08 * Math.sin(now / 1500 + phase[i])); slow = true; }
     }
     if (fireAt[i] >= 0) {
       moving = true;
@@ -228,7 +229,7 @@ function paint(now) {
         if (k <= 0) { fireAt[i] = -1; fireLevel[i] = 0; }
       }
     }
-    if (Math.abs(aim[i] - a) > 1e-4 || Math.abs(flash[i] - a) > 2e-3) moving = true;
+    if (Math.abs(flash[i] - a) > 2e-3) slow = true;      // still easing toward its light
     aim[i] = a;
   }
   for (let li = 0; li < NL; li++) {
@@ -242,7 +243,7 @@ function paint(now) {
       } else { LF[li] = 0; LA[li] = 0; LT[li] = 0; }
     } else { LF[li] = 0; LA[li] = 0; LT[li] = 0; }
   }
-  animating = moving;
+  animating = moving; breathing = slow;
 }
 
 /* ---------- live: the store, looked at again ---------- */
@@ -462,8 +463,9 @@ function frame(now) {
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
   const drifting = !quiet && !reduce && mode !== 'exposure' && selected < 0 && !meetUntil;
-  if (!animating && settled && !drifting && !(mode === 'exposure' && growing) && !(mode === 'grow' && growing) && frames > 2) { looping = false; return; }
-  const gap = quiet ? 50 : !animating && settled && !growing ? 33 : 0;
+  if (!animating && !breathing && settled && !drifting && !(mode === 'exposure' && growing) && !(mode === 'grow' && growing) && frames > 2) { looping = false; return; }
+  // with only the slow drift moving (nothing lit, no one touching it for a moment), thirty frames are as smooth as sixty
+  const gap = quiet ? 50 : !animating && !dragging && !growing && now - lastInput > 1500 ? 33 : 0;
   if (gap && now - last < gap) { requestAnimationFrame(frame); return; }
   // how long a frame took, measured where the page can't be blamed for waiting (a busy tab, a hidden one)
   if (!gap && now - last < 250 && now - built.at > 1500) {
