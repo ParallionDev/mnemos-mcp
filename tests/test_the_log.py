@@ -453,7 +453,8 @@ def test_the_documents_are_kept_a_few_seconds(mind, monkeypatch):
     try:
         first = server.documents()
         assert server.documents() == first and len(calls) == 1
-        server._documents = (server._documents[0] - log_server.CACHE_SECONDS, server._documents[1])
+        home = server.mind()
+        home.documents = (home.documents[0] - log_server.CACHE_SECONDS, home.documents[1])
         server.documents()
         assert len(calls) == 2
     finally:
@@ -729,3 +730,69 @@ def test_a_schedule_that_cant_be_made_says_why(mind, monkeypatch):
         status, answer = post(server, {"command": "hours", "on": True})
     assert status == 400
     assert answer["error"] == "No supported scheduler found on this system."
+
+
+# ---------- 9. Every mind on this machine ----------
+# Beside the mind it was started for, the page shows the others that keep their memory in the same folder, one store
+# each named for its agent (<agent>.db, as Mnemos makes them), each read from the person and project that hold most of
+# its memories, and named by its own name. A store that pools several agents names no one, and is left out.
+
+def other_mind(agent: str, person_id: str, texts: list[str]) -> Path:
+    db = Path.home() / ".mnemos" / f"{agent}.db"
+    rt = MnemosRuntime(db_path=str(db), agent_id=agent, person_id=person_id, use_dedicated_model=False)
+    try:
+        for text in texts:
+            rt.capture(text, signed_as=OPUS)
+    finally:
+        rt.close()
+    return db
+
+
+def get(server, path):
+    connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
+    try:
+        connection.request("GET", f"/{server.token}/{path}", headers={"Host": f"127.0.0.1:{server.port}"})
+        response = connection.getresponse()
+        return response.status, json.loads(response.read() or b"null")
+    finally:
+        connection.close()
+
+
+def test_the_page_finds_every_mind_beside_its_own_and_reads_each(mind):
+    other_mind("anima", "riley", ["The garden needs the north light.", "Sonnet's last question is still open."])
+    pooled = Path.home() / ".mnemos" / "shared.db"
+    rt = MnemosRuntime(db_path=str(pooled), agent_id="someone-else", use_dedicated_model=False)
+    try:
+        rt.capture("A pool of many agents, under no one's name.", signed_as=OPUS)
+    finally:
+        rt.close()
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, listed = get(server, "data/minds.json")
+        assert status == 200
+        minds = {m["agentId"]: m for m in listed["minds"]}
+        assert list(minds) == [AGENT, "anima"]                       # its own first; the pool names no one
+        assert minds[AGENT]["home"] and not minds["anima"]["home"]
+        assert minds[AGENT]["name"] == "Opus 5.5"                     # its own: named by the model that signs it
+        assert minds["anima"]["name"] == "Anima"                      # another: by its own name
+        assert minds["anima"]["memories"] == 2                        # read from the person who holds its memories
+
+        status, memories = get(server, "data/memories.json?agent=anima")
+        assert status == 200
+        assert {m["content"] for m in memories["memories"]} == {"The garden needs the north light.",
+                                                                 "Sonnet's last question is still open."}
+        assert get(server, "data/life.json?agent=no-such-mind")[0] == 404
+        assert get(server, "data/life.json?agent=shared")[0] == 404
+
+
+def test_a_note_left_for_another_mind_goes_to_that_mind(mind):
+    db = other_mind("anima", "riley", ["The garden needs the north light."])
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, answer = post(server, {"command": "note", "text": "For Anima."}, path=f"/{server.token}/act?agent=anima")
+        assert status == 200, answer
+        status, answer = post(server, {"command": "note", "text": "For no one."}, path=f"/{server.token}/act?agent=nobody")
+        assert status == 400 and "no such mind" in answer["error"]
+        anima = json.loads(server.documents("anima")[0])
+        assert [n["text"] for n in anima["notes"] if n["author"] == "person"] == ["For Anima."]
+        own = json.loads(server.documents()[0])
+        assert [n for n in own["notes"] if n["author"] == "person"] == []
+    assert db.is_file()

@@ -19,6 +19,7 @@ import { context, lookAt, perspective, add, sub, scale, dot, length, normalize, 
 import { glyphAtlas, DOT, STROKE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
+import { AGENT, withAgent } from '../shared/words.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -56,7 +57,7 @@ let life = null, who = null, version = null;
 let D, N, NL, K = 0, tissue = null, R, P, centre, extent, HOME, MID = null;
 let T0, TNOW, born, touched, linkBorn, acc, phase, nbrs, recalls, events = [], moments = [];
 let glow, flash, aim, read, LF, LA, LT, LR, fireAt, fireLevel, linkAt, linkLevel;
-const LAYOUT_KEY = () => `mnemos.mind.layout.${who.agentId || 'agent'}`;
+const LAYOUT_KEY = () => `mnemos.mind.layout.${who.agentId || AGENT || 'agent'}`;
 
 /* the export's memories, as the anatomy reads them: a cell per memory, a link per tie (counted once, from its
  * sender), recall moments from the log of what came back when, and beliefs pointing at the memories they rest on */
@@ -151,14 +152,16 @@ async function build(data) {
   window.__built = built;
 }
 
-life = await json('../data/life.json');
+life = await json(withAgent('../data/life.json'));
 who = life.identity;
 document.title = `${who.name} · the mind`;
+document.querySelector('.house a').href = withAgent('../log/');
 $('who-name').textContent = who.name;
 $('mind').setAttribute('aria-label', `${who.name}'s memory, every cell a memory and every fibre a real link between two`);
-let first = await json('../data/memories.json');
+let first = await json(withAgent('../data/memories.json'));
 version = first.version;
-$('loading').textContent = `gathering ${fmt(first.memories.length)} memories…`;
+$('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${fmt(first.memories.length)} memories…`
+  : `finding the shape of ${fmt(first.memories.length)} memories, the first time · a few seconds`;
 await build(shape(first.memories, first.recalled));
 first = null;
 
@@ -248,9 +251,9 @@ let lastChange = TNOW;
 async function look() {
   if (document.hidden || building) return;
   let next;
-  try { life = await json('../data/life.json'); } catch { return; }
+  try { life = await json(withAgent('../data/life.json')); } catch { return; }
   if (life.memory?.version === version) { TNOW = Date.parse(life.made); if (mode === 'now') T = TNOW; return updateLive(); }
-  try { next = await json('../data/memories.json'); } catch { return; }
+  try { next = await json(withAgent('../data/memories.json')); } catch { return; }
   version = next.version;
   const shaped = shape(next.memories, next.recalled);
   const before = new Map(D.cells.map((c) => [c.fullId, c]));

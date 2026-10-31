@@ -27,6 +27,7 @@ same, from its MCP server, until that server stops.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import os
@@ -45,7 +46,7 @@ from pathlib import Path
 from typing import TextIO
 from urllib.parse import unquote, urlsplit
 
-from .export import MOST_BYTES, Exporter
+from .export import MOST_BYTES, UNFILED, Exporter
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +101,77 @@ def _dumps(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
+# The mind the log was started for is named as Mnemos names it, by the model that signs its memories ("Opus 5.5").
+# A mind found beside it is named by its own agent id ("anima" is Anima, whatever model it runs on), unless that id
+# only says what runs it (one of these), when its model names it too.
+GENERIC_AGENTS = {"claude-code", "codex", "mnemos-agent", "default", "agent", "assistant"}
+MINDS_SECONDS = 60.0
+
+
+def mind_name(agent_id: str, signed: str) -> str:
+    """What the page calls a mind: its own name, or for a generic agent id the model that signs it."""
+    if agent_id in GENERIC_AGENTS or not agent_id:
+        return signed or agent_id
+    return " ".join(word[:1].upper() + word[1:] for word in re.split(r"[-_\s]+", agent_id) if word)
+
+
+def minds_beside(home: Exporter) -> list[Exporter]:
+    """The other minds that keep their memory in the same folder as this one, one store each, named for the agent
+    (``<agent>.db``, as Mnemos makes them): each read from the person and project that hold most of its memories.
+    A store that pools several agents (a shared pool, an old default store) is left out: its file names no one."""
+    from ..simple_scope import resolve_scope
+    from .export import open_read_only
+
+    found: list[Exporter] = []
+    folder = home.db.parent
+    if not folder.is_dir():
+        return found
+    for path in sorted(folder.glob("*.db")):
+        agent = path.stem
+        if agent == home.scope.agent_id or path.resolve() == home.db.resolve():
+            continue
+        try:
+            conn = open_read_only(path)
+        except Exception:
+            continue
+        try:
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(engrams)")}
+            if "owner_agent_id" not in columns:
+                continue
+            person = "person_id" if "person_id" in columns else "NULL"
+            project = "project_scope" if "project_scope" in columns else "NULL"
+            row = conn.execute(
+                f"SELECT {person}, {project}, count(*) FROM engrams WHERE owner_agent_id=? "
+                "AND state IN ('active','dormant') GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 1", (agent,)).fetchone()
+        except sqlite3.Error:
+            continue
+        finally:
+            conn.close()
+        if not row or not row[2]:
+            continue
+        scope = resolve_scope(db_path=str(path), agent_id=agent)
+        # read from where its memories are: a store from before they were filed by person and project reads as unfiled
+        scope = dataclasses.replace(scope, person_id=row[0] or UNFILED, project_scope=row[1] or UNFILED)
+        found.append(Exporter(scope, home.person))
+    return found
+
+
+class _Mind:
+    """One mind the page can show: its exporter, and its documents as last made."""
+
+    def __init__(self, exporter: Exporter) -> None:
+        self.exporter = exporter
+        self.lock = threading.Lock()
+        self.documents: tuple[float, bytes] | None = None
+        self.memories: tuple[str | None, bytes] | None = None
+
+    def forget(self) -> None:
+        with self.lock:
+            self.documents = None
+
+
 class LogServer(ThreadingHTTPServer):
-    """The log's server for one scope, bound to 127.0.0.1."""
+    """The log's server for one scope, bound to 127.0.0.1: that mind first, and the others kept beside it."""
 
     daemon_threads = True
 
@@ -111,8 +181,8 @@ class LogServer(ThreadingHTTPServer):
         self.files = page_files()
         self._lock = threading.Lock()
         self._settings = threading.Lock()  # one change to the schedule at a time
-        self._documents: tuple[float, bytes] | None = None
-        self._memories: tuple[str | None, bytes] | None = None
+        self._home = _Mind(exporter)
+        self._others: tuple[float, dict[str, _Mind]] | None = None
         super().__init__(("127.0.0.1", port), _Handler)
 
     def server_bind(self) -> None:
@@ -133,7 +203,7 @@ class LogServer(ThreadingHTTPServer):
         """The page's own address, as a browser names it on a request it sends."""
         return {f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}"}
 
-    def act(self, request: dict) -> dict:
+    def act(self, request: dict, agent: str | None = None) -> dict:
         """Write the person's own words, a reply or a note, as `mnemos notes`
         writes them, or that they read notes of the agent's, answered as
         ``mnemos interface`` answers (``{"result": ...}`` or ``{"error": one
@@ -141,20 +211,24 @@ class LogServer(ThreadingHTTPServer):
         look, so what was written shows at once."""
         from ..interface.person import Interface  # the writing runtime, only when someone writes
 
+        mind = self.mind(agent)
+        if mind is None:
+            return {"error": "There's no such mind on this machine."}
+        if UNFILED in (mind.exporter.scope.person_id, mind.exporter.scope.project_scope):
+            return {"error": "This mind's memory is from before notes and hours; the page only reads it."}
         if request.get("command") == "read":
-            return self._read(request.get("note_ids"))
+            return self._read(request.get("note_ids"), mind)
         if request.get("command") == "hours":
-            return self._hours(request)
-        scope = self.exporter.scope
+            return self._hours(request, mind)
+        scope = mind.exporter.scope
         interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id,
                               person_id=scope.person_id, project_scope=scope.project_scope)
         answer = interface.answer(json.dumps(request))
         answer.pop("id", None)
-        with self._lock:
-            self._documents = None
+        mind.forget()
         return answer
 
-    def _hours(self, request: dict) -> dict:
+    def _hours(self, request: dict, mind: _Mind) -> dict:
         """Turn the agent's quiet hours on, at the times given (each HH:MM, or
         its own default), or off: exactly what `mnemos daemon install --hours
         --write` and `mnemos daemon uninstall --hours --write` do for this
@@ -178,7 +252,7 @@ class LogServer(ThreadingHTTPServer):
             if not match:
                 return {"error": f'"{key}" is a time of day, like 08:00.'}
             times[key] = (int(match.group(1)), int(match.group(2)))
-        scope = self.exporter.scope
+        scope = mind.exporter.scope
         args = argparse.Namespace(
             daemon_command="install" if on else "uninstall", hours=True, write=True,
             mine_at=times["mine"] if on else None, ours_at=times["ours"] if on else None,
@@ -191,14 +265,13 @@ class LogServer(ThreadingHTTPServer):
                 code = cli._cmd_daemon(args)
             except Exception as exc:  # anything else is one plain line, never a trace
                 code, _ = 1, failed.write(f"{exc}")
-        with self._lock:
-            self._documents = None
+        mind.forget()
         if code != 0:
             words = " ".join(failed.getvalue().split()) or " ".join(said.getvalue().split())
             return {"error": words[:400] or "The quiet hours couldn't be changed."}
         return {"result": " ".join(said.getvalue().split())[:400]}
 
-    def _read(self, ids: object) -> dict:
+    def _read(self, ids: object, mind: _Mind) -> dict:
         """Mark these notes of the agent's read, each once (one already read
         keeps its time), as `mnemos notes` marks the notes it shows: ``{"result":
         the ids this marked}``. Ids that aren't the agent's notes here mark
@@ -208,9 +281,9 @@ class LogServer(ThreadingHTTPServer):
         if (not isinstance(ids, list) or not ids or len(ids) > MOST_READ
                 or not all(isinstance(i, str) and i.strip() for i in ids)):
             return {"error": f'"note_ids" is a list of the notes read, at most {MOST_READ}.'}
-        if not self.exporter.db.is_file():
+        if not mind.exporter.db.is_file():
             return {"result": []}
-        scope = self.exporter.scope
+        scope = mind.exporter.scope
         writer = MnemosRuntime(db_path=scope.db_path, agent_id=scope.agent_id, person_id=scope.person_id,
                                project_scope=scope.project_scope, use_dedicated_model=False, marks_lived=False)
         try:
@@ -219,8 +292,7 @@ class LogServer(ThreadingHTTPServer):
             return {"error": "It couldn't be marked read just now."}
         finally:
             writer.close()
-        with self._lock:
-            self._documents = None
+        mind.forget()
         return {"result": marked}
 
     def addressed_here(self, host: str) -> bool:
@@ -229,19 +301,67 @@ class LogServer(ThreadingHTTPServer):
         name now points here) is refused."""
         return host.strip().lower() in {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
 
-    def documents(self) -> tuple[bytes, bytes]:
-        """``(life.json, memories.json)``, exported at most every few seconds.
-        memories.json is made again only when its version changes."""
+    def mind(self, agent: str | None = None) -> _Mind | None:
+        """The mind a request names (``?agent=``), or this server's own; None for one not on this machine."""
+        if not agent or agent == self.exporter.scope.agent_id:
+            return self._home
+        return self.others().get(agent)
+
+    def others(self) -> dict[str, _Mind]:
+        """The other minds beside this one, looked for again at most once a minute."""
         with self._lock:
             now = time.monotonic()
-            if self._documents is None or now - self._documents[0] >= CACHE_SECONDS:
-                life, memories = self.exporter.export()
+            if self._others is None or now - self._others[0] >= MINDS_SECONDS:
+                kept = self._others[1] if self._others else {}
+                self._others = (now, {e.scope.agent_id: kept.get(e.scope.agent_id) or _Mind(e)
+                                      for e in minds_beside(self.exporter)})
+            return self._others[1]
+
+    def minds(self) -> bytes:
+        """``minds.json``: every mind the page can show, this server's own first."""
+        out = []
+        for agent, mind in [(self.exporter.scope.agent_id, self._home), *self.others().items()]:
+            try:
+                life = json.loads(self.documents(agent)[0])
+            except Exception:
+                continue
+            who, memory = life.get("identity", {}), life.get("memory", {})
+            out.append({"agentId": agent, "name": who.get("name") or agent, "model": who.get("model", ""),
+                        "memories": memory.get("count", 0), "newest": memory.get("newest"),
+                        "home": mind is self._home, "missing": bool(life.get("missing"))})
+        return _dumps({"minds": out})
+
+    def documents(self, agent: str | None = None) -> tuple[bytes, bytes]:
+        """``(life.json, memories.json)`` for a mind, exported at most every few
+        seconds. memories.json is made again only when its version changes."""
+        mind = self.mind(agent)
+        if mind is None:
+            raise LookupError(agent)
+        with mind.lock:
+            now = time.monotonic()
+            if mind.documents is None or now - mind.documents[0] >= CACHE_SECONDS:
+                life, memories = mind.exporter.export()
+                if mind is not self._home:     # the server's own mind keeps the name its model gives it
+                    who = life.get("identity") or {}
+                    who["name"] = mind_name(who.get("agentId", ""), who.get("name", ""))
+                    from urllib.parse import quote
+                    for item in life.get("studio") or []:   # its pictures are its own studio's
+                        if item.get("picture"):
+                            item["picture"] += f"?agent={quote(mind.exporter.scope.agent_id)}"
                 version = memories.get("version")
-                if self._memories is None or self._memories[0] != version or version is None:
-                    self._memories = (version, _dumps(memories))
-                self._documents = (now, _dumps(life))
-            assert self._memories is not None
-            return self._documents[1], self._memories[1]
+                if mind.memories is None or mind.memories[0] != version or version is None:
+                    mind.memories = (version, _dumps(memories))
+                mind.documents = (now, _dumps(life))
+            assert mind.memories is not None
+            return mind.documents[1], mind.memories[1]
+
+
+def _agent(path: str) -> str | None:
+    """The mind a request names, ``?agent=<id>``, or None for the server's own."""
+    from urllib.parse import parse_qs
+
+    named = parse_qs(urlsplit(path).query).get("agent")
+    return named[0] if named else None
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -280,7 +400,7 @@ class _Handler(BaseHTTPRequestHandler):
             request = None
         if not isinstance(request, dict) or request.get("command") not in ACTS:
             return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, say a note was read, or turn the quiet hours on or off, and nothing else."})
-        answer = server.act(request)
+        answer = server.act(request, _agent(self.path))
         return self._json(HTTPStatus.OK if "result" in answer else HTTPStatus.BAD_REQUEST, answer)
 
     def log_message(self, format: str, *args: object) -> None:
@@ -298,6 +418,8 @@ class _Handler(BaseHTTPRequestHandler):
         if not path.startswith(f"{base}/"):
             return self._send(HTTPStatus.NOT_FOUND, b"Not here.\n", TYPES[".txt"], body)
         rel = unquote(path[len(base) + 1:])
+        if rel == "data/minds.json":
+            return self._send(HTTPStatus.OK, server.minds(), "application/json; charset=utf-8", body)
         if rel in ("data/life.json", "data/memories.json"):
             return self._data(rel, body)
         if rel.startswith("data/studio/"):
@@ -312,7 +434,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _data(self, rel: str, body: bool) -> None:
         try:
-            life, memories = self.server.documents()
+            life, memories = self.server.documents(_agent(self.path))
+        except LookupError:
+            return self._send(HTTPStatus.NOT_FOUND, b'{"error":"there is no such mind on this machine"}',
+                              "application/json; charset=utf-8", body)
         except Exception:
             # The page keeps what it has and asks again in twenty seconds.
             logger.warning("mnemos log: the memory couldn't be read just now", exc_info=True)
@@ -324,7 +449,8 @@ class _Handler(BaseHTTPRequestHandler):
     def _picture(self, rel: str, body: bool) -> None:
         """A picture from the studio, as it is: only a picture, only from
         inside the studio (links followed), never a hidden file."""
-        root = self.server.exporter.studio_dir
+        mind = self.server.mind(_agent(self.path))
+        root = mind.exporter.studio_dir if mind else None
         kind = PICTURE_TYPES.get(Path(rel).suffix.lower())
         if root is None or kind is None or any(part.startswith(".") for part in Path(rel).parts):
             return self._send(HTTPStatus.NOT_FOUND, b"Not here.\n", TYPES[".txt"], body)

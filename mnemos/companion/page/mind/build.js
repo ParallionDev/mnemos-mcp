@@ -21,7 +21,9 @@ import { random } from '../engine/gl.js';
 const INK = { skin: [0.42, 0.5, 1.0], nucleus: [0.7, 0.78, 1.0], dendrite: [0.36, 0.44, 1.0], fibre: [0.34, 0.4, 0.95], bouton: [0.5, 0.56, 1.0] };
 const inkOf = (l) => [INK.skin, INK.nucleus, INK.dendrite, INK.fibre, INK.bouton][l.part];
 const PACK = 0.34;                                   // drawn closer than laid out, so arbours and fibres meet as in tissue
-const POINTS_PER_MEMORY = 5300;                      // at detail 1, measured on a mind of 2,096 memories and 10,822 links
+// points at detail 1, measured on two real minds (2,097 memories and 10,825 links; 3,124 and 22,556): a memory's
+// body and arbour, and a fibre per link
+const POINTS_PER_MEMORY = 1583, POINTS_PER_LINK = 733;
 
 /* ---------- its concerns: Louvain communities, a fading memory's tie to its lesson counting triple ---------- */
 
@@ -159,7 +161,8 @@ function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0.5, lob
     heart[i] = core * (0.15 + 0.85 * Math.max(often, c.acc || 0));
     groups[comm[i]].push(i);
   });
-  forces(P, groups, memLinks, 900, { k: 0.55, home, pullHome, gravity: heart, rnd });
+  // a larger mind settles in fewer passes: the shape is there long before the last of them, and the first visit waits
+  forces(P, groups, memLinks, Math.round(Math.max(400, Math.min(900, 900 * 2000 / Math.max(1, n)))), { k: 0.55, home, pullHome, gravity: heart, rnd });
   // centred, and scaled so nearest neighbours sit about 0.9 apart: room for an arbour
   const mid = [0, 1, 2].map((d) => { let s = 0; for (let i = 0; i < n; i++) s += P[i * 3 + d]; return s / n; });
   for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) P[i * 3 + d] -= mid[d];
@@ -214,7 +217,7 @@ function work(job) {
   const MID = job.mid || [0, 1, 2].map((d) => places.reduce((a, p) => a + p[d], 0) / (places.length || 1));
   const drawn = cells.map((c, i) => ({ kind: c.lesson ? 'procedural' : 'episodic', strength: c.strength, stability: c.stability,
     p: [0, 1, 2].map((d) => MID[d] + (places[i][d] - MID[d]) * PACK) }));
-  const detail = Math.max(0.02, Math.min(1, budget / (POINTS_PER_MEMORY * Math.max(1, cells.length))));
+  const detail = Math.max(0.02, Math.min(1, budget / (POINTS_PER_MEMORY * Math.max(1, cells.length) + POINTS_PER_LINK * links.length)));
   const A = anatomy({ cells: drawn, links }, { detail, reach: 0.75 });
   const glyph = (ch) => glyphs[ch];
   const packed = pack(A.points, glyph, metrics, inkOf);

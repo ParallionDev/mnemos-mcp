@@ -31,6 +31,25 @@ main{max-width:1180px;margin:0 auto;padding:28px 28px 96px}
   background:rgba(236,239,244,calc(.18 + .76 * var(--k)));box-shadow:0 0 calc(2px + 12px * var(--k)) rgba(236,239,244,calc(.45 * var(--k)));
   transition:background 1.6s var(--ease),box-shadow 1.6s var(--ease)}
 .dot.cold{background:transparent;box-shadow:inset 0 0 0 1px var(--ink-3)}
+/* the minds on this machine: the name opens a short list, each a mind with its own memory */
+.pick-wrap{position:relative}
+.pick{all:unset;display:inline-flex;align-items:center;gap:8px;margin-top:6px;border-radius:8px;padding:2px 6px;margin-left:-6px;border:1px solid transparent;cursor:default}
+.pick:not([disabled]){cursor:pointer}
+.pick:not([disabled]):hover{background:var(--surface-1)}
+.pick:focus-visible{border-color:var(--focus)}
+.pick .chev{color:var(--ink-3);transition:transform var(--quick)}
+.pick[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.minds{position:absolute;z-index:10;top:calc(100% + 8px);left:-6px;min-width:320px;max-width:min(360px,calc(100vw - 32px));padding:8px;border-radius:14px;
+  background:var(--raised,#16171b);box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 50px rgba(0,0,0,.55),0 0 0 1px var(--hair)}
+.minds-h{padding:6px 10px 8px;color:var(--ink-4);font-size:var(--t-micro)}
+.minds ul{list-style:none;margin:0;padding:0}
+.minds a{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s4);padding:9px 10px;border-radius:9px;color:var(--ink-2);text-decoration:none;border:1px solid transparent}
+.minds a:hover{background:var(--surface-2);color:var(--ink-1)}
+.minds a:focus-visible{outline:none;border-color:var(--focus)}
+.minds a[aria-current="page"]{color:var(--ink-1);background:var(--surface-1)}
+.minds .mn{font:400 var(--t-body)/1.3 var(--sans);white-space:nowrap}
+.minds .mm{color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.pick .chev{transition:none}}
 .to-mind{all:unset;flex:none;margin-top:20px;cursor:pointer;padding:8px 14px;border-radius:999px;border:1px solid transparent;background:var(--surface-1);
   font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);transition:color var(--quick),border-color var(--quick),background var(--quick)}
 .to-mind:hover{color:var(--ink-1);background:var(--surface-2)}
@@ -149,7 +168,10 @@ dialog .cap button:focus-visible{border-color:var(--focus);color:var(--ink-1)}
   <header class="head">
     <div class="who">
       <span class="dot cold" id="dot" aria-hidden="true"></span>
-      <div><div class="house">Mnemos</div><div class="name" id="name">&nbsp;</div><div class="state" id="state">Reading its memory…</div></div>
+      <div class="who-text"><div class="house">Mnemos</div>
+        <div class="pick-wrap"><button class="name pick" id="pick" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="minds" disabled><span id="name">&nbsp;</span><svg class="chev" id="chev" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true" hidden><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="minds" id="minds" hidden><div class="minds-h">The minds on this machine</div><ul id="minds-list"></ul></div></div>
+        <div class="state" id="state">Reading its memory…</div></div>
     </div>
     <a class="to-mind" id="to-mind" href="../mind/" title="Its whole memory, every memory a cell and every link a fibre, live">Open the mind</a>
   </header>

@@ -58,6 +58,10 @@ from ..store.sqlite_store import RETIRED_REFLECTION_KINDS
 
 logger = logging.getLogger(__name__)
 
+# The person or project of a store from before memories were filed by them (the column there, but empty): read as
+# whatever is unfiled. Only the log reads such a store this way, for a mind found beside its own, and never writes it.
+UNFILED = ""
+
 PICTURES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 MOST_BYTES = 6 * 1024 * 1024
 # Links that tied memories together for sharing words like "the", made before
@@ -158,6 +162,9 @@ class _Reading:
         for name, value in (("person_id", self.scope.person_id),
                             ("project_scope", self.scope.project_scope)):
             if name in names:
+                if value == UNFILED:           # a store from before memories were filed by person and project
+                    parts.append(f"({name} IS NULL OR {name}='')")
+                    continue
                 parts.append(f"{name}=?")
                 params.append(value)
         return " AND ".join(parts), tuple(params)
@@ -527,7 +534,7 @@ class Exporter:
 
     def identity(self, model: str = "") -> dict:
         """Who this is: the model that signs its memories, named as Mnemos names it."""
-        return {"agentId": self.scope.agent_id, "model": model,
+        return {"agentId": self.scope.agent_id, "model": model, "unfiled": UNFILED in (self.scope.person_id, self.scope.project_scope),
                 "name": (display_name(model) if model else "") or self.scope.agent_id,
                 "person": self.person or None, "personId": self.scope.person_id,
                 "project": self.scope.project_scope, "store": self._store_shown()}

@@ -3,7 +3,7 @@
  * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
-import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName } from '../shared/words.js';
+import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent } from '../shared/words.js';
 
 const $ = (id) => document.getElementById(id);
 const nav = document.querySelector('.nav');
@@ -170,14 +170,14 @@ function transition(apply, from, to) {
 async function look() {
   if (document.hidden && life) return;
   let next;
-  try { next = await json('../data/life.json'); } catch { if (life) head(); return; }
+  try { next = await json(withAgent('../data/life.json')); } catch { if (life) head(); return; }
   if (life && next.made === life.made) { head(); return; }
   life = next;
   if (life.missing) return missing();
   nav.hidden = false;
   if (life.memory.version !== version) {
     try {
-      const m = await json('../data/memories.json');
+      const m = await json(withAgent('../data/memories.json'));
       mems = m.memories; version = m.version; byId = new Map(mems.map((x, i) => [x.id, i]));
     } catch { /* the next look will try again */ }
   }
@@ -194,18 +194,18 @@ function start() {
       transition,
       // what you write on the page: a reply, an answer or a note, sent to `mnemos log` (and on to the memory) as yours
       send: async (request) => {
-        const r = await fetch('../act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
+        const r = await fetch(withAgent('../act'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
         const answer = await r.json().catch(() => ({ error: 'It couldn’t be sent just now.' }));
         if (answer.result) await look();
         return answer;
       },
       // its notes you've read here, so it knows you have
       read: async (ids) => {
-        const r = await fetch('../act', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'read', note_ids: ids }) });
+        const r = await fetch(withAgent('../act'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'read', note_ids: ids }) });
         if (!r.ok) throw new Error('not marked');
         await look();
       },
-      mindLink: (id) => `../mind/#memory/${encodeURIComponent(id)}`,
+      mindLink: (id) => withAgent(`../mind/#memory/${encodeURIComponent(id)}`),
       picture: (src, cap) => { $('full-img').src = src; $('full-img').alt = cap; $('full-cap').textContent = cap; $('full').showModal(); },
       hour: (id) => {
         then = () => document.querySelector(`.ev[data-hour="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' });
@@ -243,7 +243,33 @@ for (const el of [$('margin'), $('glance')]) el.addEventListener('click', (e) =>
 $('full-close').addEventListener('click', () => $('full').close());
 $('full').addEventListener('click', (e) => { if (e.target === $('full')) $('full').close(); });
 
+/* ---------- the minds on this machine ---------- */
+
+let minds = [];
+async function lookForMinds() {
+  try { minds = (await json('../data/minds.json')).minds || []; } catch { return; }
+  const pick = $('pick'), more = minds.length > 1;
+  pick.disabled = !more; $('chev').hidden = !more;
+  pick.setAttribute('aria-label', more ? `${$('name').textContent}: choose another mind` : $('name').textContent);
+  const here = AGENT || minds.find((m) => m.home)?.agentId;
+  $('minds-list').innerHTML = minds.map((m) => {
+    const href = m.home ? './' : `./?agent=${encodeURIComponent(m.agentId)}`;
+    const last = m.newest ? `last ${ago(Date.now() - at(m.newest).getTime())}` : 'nothing yet';
+    return `<li><a href="${href}"${m.agentId === here ? ' aria-current="page"' : ''}><span class="mn">${esc(m.name)}</span><span class="mm">${plural(m.memories, 'memory', 'memories')} · ${last}</span></a></li>`;
+  }).join('');
+}
+function showMinds(open) {
+  $('minds').hidden = !open; $('pick').setAttribute('aria-expanded', String(open));
+  if (open) $('minds-list').querySelector('[aria-current]')?.focus();
+}
+$('pick').addEventListener('click', () => showMinds($('minds').hidden));
+addEventListener('click', (e) => { if (!$('minds').hidden && !e.target.closest('.pick-wrap')) showMinds(false); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('minds').hidden) { showMinds(false); $('pick').focus(); } });
+$('to-mind').href = withAgent('../mind/');
+
 await look();
 setInterval(look, EVERY);
+lookForMinds();
+setInterval(lookForMinds, 60_000);
 setInterval(() => { if (life && !life.missing) head(); }, 15_000);     // it cools while you read
 window.__log = { get room() { return room; }, get life() { return life; }, get count() { return mems.length; } };

@@ -110,3 +110,12 @@ export function trailSentence(h, inMemory = null) {
   const s = `It ${parts.length ? parts.join(', ') + ', and ' : ''}${tail}.`;
   return inMemory === 0 && (woke || waiting || reached) ? `${s} None of it is in the memory shown here.` : s;
 }
+
+/* Which mind the page shows: ?agent=<id>, or none for the one `mnemos log` was started for. Every address the page
+   asks for or links to carries it, so the log, the mind and what's written all stay with the same mind. */
+export const AGENT = new URLSearchParams(location.search).get('agent') || '';
+export const withAgent = (path) => {
+  if (!AGENT) return path;
+  const [base, hash = ''] = path.split('#');
+  return `${base}${base.includes('?') ? '&' : '?'}agent=${encodeURIComponent(AGENT)}${hash ? `#${hash}` : ''}`;
+};

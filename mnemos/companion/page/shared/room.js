@@ -320,7 +320,9 @@ export class Room {
   }
   notesHTML() {
     const { who } = this.ctx(), threads = this.threads();
-    const composer = this.box('new', `Leave ${who.name} a note`, 'It wakes with it, once, in its next session.');
+    // a mind whose memory is from before notes (an older store, found beside this one) is only read here
+    const composer = who.unfiled ? `<p class="set-d">${esc(who.name)}’s memory is from before notes, so this page only reads it.</p>`
+      : this.box('new', `Leave ${who.name} a note`, 'It wakes with it, once, in its next session.');
     if (!threads.length) return composer + `<p class="empty">No notes yet. It leaves one only when it passes the room test: something it would say if ${esc(person(who) === 'you' ? 'you' : person(who))} walked in right now.</p>`;
     const open = threads.filter((t) => this.asks(t)), rest = threads.filter((t) => !this.asks(t));
     return composer
@@ -341,7 +343,7 @@ export class Room {
     const asked = this.asks(list);
     // a question it asked you comes with its answer box already open
     if (asked && !this.closed.has(asked.id)) this.opened.add(asked.id);
-    return `<article class="jentry thread${asked ? ' asked' : ''}">${list.map(turn).join('')}${answer ? this.box(answer.id, asked ? 'Answer' : 'Reply', '') : ''}</article>`;
+    return `<article class="jentry thread${asked && !who.unfiled ? ' asked' : ''}">${list.map(turn).join('')}${answer && !who.unfiled ? this.box(answer.id, asked ? 'Answer' : 'Reply', '') : ''}</article>`;
   }
 
   /* a place to write: closed, one quiet word; open, a field and Send. What you type stays while the page refreshes
@@ -424,8 +426,10 @@ export class Room {
     const off = plan.filter((p) => !p.loaded);
     const row = (k, label, what) => `<label class="set-row"><span><span class="set-k">${label}</span><span class="set-d">${what}</span></span>
       <input class="set-time" type="time" data-hours-time="${k}" value="${esc(h[k])}"${h.on ? '' : ' disabled'} aria-label="${label}, starts at"></label>`;
+    const hoursPanel = who.unfiled ? `<div class="belief set"><div class="set-title">Quiet hours</div>
+        <p class="set-d">${esc(who.name)}’s memory is from before quiet hours, so there’s nothing here to set. This page only reads it.</p></div>` : null;
     return `<section class="settings">
-      <div class="belief set">
+      ${hoursPanel || `<div class="belief set">
         <div class="set-head"><div><div class="set-title">Quiet hours</div>
           <p class="set-d">Time between conversations that’s ${esc(who.name)}’s own: an hour a day to itself, half an hour for the day’s work, and a short time each night to dream over its memory. They run Claude on its own and use ${person(who) === 'you' ? 'your' : `${esc(person(who))}’s`} Claude plan.</p></div>
           <button class="switch" type="button" role="switch" aria-checked="${h.on}" data-hours-on="${h.on ? 'off' : 'on'}"><span class="knob" aria-hidden="true"></span><span class="vh">Quiet hours</span></button></div>
@@ -434,7 +438,7 @@ export class Room {
         <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (changed ? 'Not saved yet.' : h.on ? 'On, on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
           ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
           <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
-      </div>
+      </div>`}
       <div class="belief set">
         <div class="set-title">Where it lives</div>
         <dl class="set-facts">
