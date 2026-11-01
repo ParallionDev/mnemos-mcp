@@ -178,6 +178,9 @@ class LogServer(ThreadingHTTPServer):
     """The log's server for one scope, bound to 127.0.0.1: that mind first, and the others kept beside it."""
 
     daemon_threads = True
+    # The page asks for a burst of small files at once (a dozen workers drawing the glyphs, the mind's builder and its
+    # modules); Python's default backlog of 5 turns the rest away, and the browser reports ERR_SOCKET_NOT_CONNECTED.
+    request_queue_size = 128
 
     def __init__(self, exporter: Exporter, *, port: int = 0, token: str | None = None) -> None:
         self.exporter = exporter

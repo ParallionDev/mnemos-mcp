@@ -34,6 +34,15 @@ const FOV = (26 * Math.PI) / 180;
 const LIVE_EVERY = 20_000;                     // life.json is small; memories.json is read again only when it changes
 const DIM = 0.3;                               // the mind at rest: present, not lit (the damask's sheen)
 const LOOK = { rest: [0.4, 0.55, 0.22, 0.8], light: [0.85, 1.3, 0.55, 0.8], back: 0.45 };
+// the lens and the print, tunable from the address while they're being chosen (?pixels=&blur=&bloom=&ca=&grain=&skin=)
+const num = (k, d) => (params.has(k) ? Number(params.get(k)) : d);
+/* Chosen Oct 31 against the first studies' settings (2.4M pixels, the lens at full strength, bloom, fringe and grain
+ * as for a film), which with two thousand memories read as fog: the screen's own pixels (a Retina desk window whole),
+ * a lens that only whispers at a distance and still softens what's behind an opened memory, a little glow, no colour
+ * fringing, a finer grain, and the links at rest quieter, so they read when lit. */
+const LENS = { pixels: num('pixels', 5.2e6), blur: num('blur', 0.25), blurClose: num('blurclose', 0.5), bloom: num('bloom', 0.4), ca: num('ca', 0),
+  grain: num('grain', 0.5), skin: num('skin', 1), threads: num('threads', 0.45) };
+LOOK.rest[0] *= LENS.skin; LOOK.rest[3] *= LENS.threads;
 const SHEET = 560;
 const TURN_FOR = 45_000;                       // how long it keeps turning after you last touched it
 const TABS = ['memories', 'beliefs', 'questions', 'journal', 'notes', 'hours'];
@@ -83,8 +92,15 @@ function shape(list) {
   return { cells, links };
 }
 
-/* one job in a worker of its own, let go when it answers */
-function inWorker(job) {
+/* one job in a worker of its own, let go when it answers; a worker that couldn't even start (its script not fetched,
+ * a dropped connection) is tried once more before the job gives up */
+async function inWorker(job, tries = 2) {
+  for (let k = 1; ; k++) {
+    try { return await oneWorker(job); } catch (e) { if (k >= tries || !/could not be made|start/.test(e.message)) throw e; }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+function oneWorker(job) {
   return new Promise((resolve, reject) => {
     const w = new Worker(new URL('./build.js', import.meta.url), { type: 'module' });
     w.onmessage = ({ data: out }) => { w.terminate(); if (out.error) reject(new Error(out.error)); else resolve(out); };
@@ -108,7 +124,7 @@ function drawIn(data) {
  * where it sits, the same shape it has in the whole (its streams of chance are its own), and its light version is
  * dimmed to nothing, which costs nothing to draw. A few dozen memories finely, not thousands. */
 const NEAR_MOST = 48;
-let SH = null, near = null, nearAsked = -1;
+let SH = null, near = null, nearAsked = -1, nearPending = false, nearFailed = -1e9;
 function dropNear() { if (near) { near.tissue.dispose(); near = null; } }
 async function focusNear(i) {
   nearAsked = i;
@@ -125,7 +141,10 @@ async function focusNear(i) {
   const cells = list.map((g) => ({ key: g, p: P[g], kind: D.cells[g].lesson ? 'procedural' : 'episodic', strength: D.cells[g].strength,
     stability: D.cells[g].stability, apex0: v3(SH.apex, g), hillock0: v3(SH.hillock, g), incoming: SH.incoming[g], degree: SH.degree[g] }));
   let out;
-  try { out = await inWorker({ kind: 'local', cells, links, glyphs: GLYPHS, metrics: atlas.metrics }); } catch { return; }
+  nearPending = true;
+  try { out = await inWorker({ kind: 'local', cells, links, glyphs: GLYPHS, metrics: atlas.metrics }); }
+  catch { nearFailed = performance.now(); return; }              // asked again in a few seconds, never every frame
+  finally { nearPending = false; }
   if (nearAsked !== i || !tissue) return;
   dropNear();
   near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds };
@@ -135,14 +154,19 @@ async function focusNear(i) {
 let building = null, built = null;
 async function build(data) {
   const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
+  const open = selected >= 0 && D ? D.cells[selected]?.fullId : null;      // the memory being read, kept through a redraw
+  const t0 = performance.now();
   const out = await drawIn(data);
+  const t1 = performance.now();
   const oldFlash = flash;
   D = data; N = D.cells.length; NL = D.links.length;
   MID = out.mid;
   store.set(LAYOUT_KEY(), Object.fromEntries(D.cells.map((c, i) => [c.id, out.places[i].map((x) => Math.round(x * 1000) / 1000)])));
+  const t2 = performance.now();
   const next = new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
   if (tissue) tissue.dispose();
   tissue = next;
+  const t3 = performance.now();
   R = out.R; P = Array.from({ length: N }, (_, i) => [out.P[i * 3], out.P[i * 3 + 1], out.P[i * 3 + 2]]);
   SH = { apex: out.apex, hillock: out.hillock, incoming: out.incoming, degree: out.degree };
   dropNear(); nearAsked = -1;
@@ -160,8 +184,12 @@ async function build(data) {
   linkAt = new Float64Array(NL).fill(-1); linkLevel = new Float32Array(NL);
   heat = new Float32Array(N); linkHeat = new Float32Array(NL);
   if (keep && oldFlash) D.cells.forEach((c, i) => { const j = keep.get(c.fullId); if (j !== undefined && j < oldFlash.length) flash[i] = oldFlash[j]; });
-  built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now() };
+  built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now(),
+    took: { worker: Math.round(t1 - t0), keep: Math.round(t2 - t1), upload: Math.round(t3 - t2), rest: Math.round(performance.now() - t3) } };
   window.__built = built;
+  // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
+  if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
+  if (hoverCell >= N) hoverCell = -1;
 }
 
 async function readMemories() {
@@ -344,7 +372,7 @@ function bindPointer() {
 /* ---------- resolution and the loop ---------- */
 
 let post = null, heroSeen = true;
-const renderScale = clamp(Math.sqrt(2.4e6 / (innerWidth * innerHeight * Math.min(devicePixelRatio || 1, 2) ** 2)), 0.4, 1);
+const renderScale = clamp(Math.sqrt(LENS.pixels / (innerWidth * innerHeight * Math.min(devicePixelRatio || 1, 2) ** 2)), 0.4, 1);
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   const w = Math.round(innerWidth * dpr * renderScale), h = Math.round(innerHeight * dpr * renderScale);
@@ -396,6 +424,9 @@ function frame(now) {
   view = { eye, fwd, right, up };
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
   paint(now);
+  // a memory open is always drawn finely: whatever dropped its fine version (a redraw, a lighter budget, a page that
+  // opened straight onto it), it's asked for again
+  if (selected >= 0 && !nearPending && !building && (!near || near.of !== selected) && now - nearFailed > 4000) focusNear(selected);
   const kUp = 1 - Math.exp(-9 * dt), kDown = 1 - Math.exp(-2.2 * dt), kRead = 1 - Math.exp(-3.7 * dt);
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
@@ -408,13 +439,13 @@ function frame(now) {
     near.links.forEach((li, k) => { near.tissue.link(k, LF[li], LA[li], LT[li], LR[li]); tissue.link(li, 0, 0, 0, 0); });
   }
   const viewM = lookAt(eye, cam.target, [0, 1, 0]), proj = perspective(FOV, canvas.width / canvas.height, 0.01, 400);
-  const blurK = mix(14, 52, close * close) * (canvas.height / 804);
+  const blurK = mix(14 * LENS.blur, 52 * LENS.blurClose, close * close) * (canvas.height / 804);
   post.clear();
   const optics = { view: viewM, proj, focalPx: canvas.height / 2 / Math.tan(FOV / 2), focus: length(sub(cam.target, eye)), blurK, near: 0.02,
     fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close), ...LOOK };
   tissue.draw(post.accum, optics);
   if (near) near.tissue.draw(post.accum, optics);
-  post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close), grain: 0.025, vignette: 0.34, ca: 0.0015 }, (frames++ & 0xffff) + 1);
+  post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
   requestAnimationFrame(frame);
 }
 
@@ -807,7 +838,10 @@ setInterval(() => { if (!document.hidden) keepVisit(); }, 30_000);
 await readMemories();
 $('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${plural(mems.length, 'memory', 'memories')}…`
   : `finding the shape of ${plural(mems.length, 'memory', 'memories')}, the first time · a few seconds`;
-await build(shape(mems));
+try { await build(shape(mems)); } catch (e) {
+  $('loading').textContent = 'The mind couldn’t be drawn just now. Reload the page to try again.';
+  throw e;
+}
 warm();
 cam = { yaw: 0.35, pitch: 0.18, dist: HOME, target: centre.slice() };
 cam.goal = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: centre.slice() };
@@ -827,6 +861,6 @@ setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you w
 listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
-  get looping() { return looping; }, get built() { return built; }, light, ask, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get looping() { return looping; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
   openRoom, closeRoom, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null), byId: (id) => cellOf.get(id) };
 stir();
