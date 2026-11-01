@@ -23,7 +23,7 @@ import { glyphAtlas, DOT, STROKE, LINE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
-import { bendRim, grain } from '../shared/glass.js';
+import { bendRim } from '../shared/glass.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
   forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -417,6 +417,7 @@ function pointAt(i) {
   for (const [j, w, li] of nbrs[i]) { fAim[j] = Math.max(fAim[j], 0.45 + 0.4 * w); aimed.push(j); lAim[li] = 0.55 + 0.45 * w; aimedLinks.push(li); }
 }
 function hover(i) {
+  if (selected >= 0) i = -1;                       // with a memory open, moving around stays calm: pointing lights nothing
   if (i === hoverCell) return;
   hoverCell = i; pointAt(i); wake();
 }
@@ -491,7 +492,7 @@ function bindPointer() {
       pinch = now; return;
     }
     if (!dragging) {
-      if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY }; hover(pick(e.clientX, e.clientY, hoverCell)); canvas.style.cursor = hoverCell >= 0 ? 'pointer' : ''; }
+      if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY }; const h = pick(e.clientX, e.clientY, hoverCell); hover(h); canvas.style.cursor = h >= 0 ? 'pointer' : ''; }
       return;
     }
     const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y, t = performance.now(), dt = Math.max(1, t - dragging.at);
@@ -780,7 +781,7 @@ function renderPaper() {
 
 /* ---------- the reading room, as a drawer beside the mind ---------- */
 
-grain(); bendRim(document.querySelector('#room > .glass'), { pad: 16, radius: matchMedia('(max-width:600px)').matches ? 18 : 22 });
+bendRim(document.querySelector('#room > .glass'), { pad: 16, radius: matchMedia('(max-width:600px)').matches ? 18 : 22 });
 let sheetOpen = false;
 const room = new Room({
   tabsEl: $('tabs'), bodyEl: $('room-body'), tabs: TABS, sticky: true,
@@ -790,7 +791,7 @@ const room = new Room({
     hover: (id) => hover(id ? cellOf.get(id) ?? -1 : -1),
     open: (id) => {
       const i = id ? cellOf.get(id) : undefined;
-      if (i !== undefined) { selected = i; spread(i, performance.now()); aimAt(i); lastInput = performance.now(); focusNear(i); }
+      if (i !== undefined) { selected = i; hover(-1); spread(i, performance.now()); aimAt(i); lastInput = performance.now(); focusNear(i); }
       else if (selected >= 0) { selected = -1; if (!wandered) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } stir(); focusNear(-1); }
     },
     route: (hash) => { if (sheetOpen) history.replaceState(null, '', hash); },

@@ -1,7 +1,7 @@
 /* The glass the drawers are made of: dark glass laid over the living mind, so you read with it still glowing through.
  *
  * The material is CSS (in each page's own styles): the mind behind it softened and brought down to about an eighth
- * of its light, with a whisper of white, a fine grain, and a hairline lit from above. What makes it glass and not a
+ * of its light, with a whisper of white and a hairline lit from above. What makes it glass and not a
  * tinted panel is here: at its rim the glass bends the world just beyond its edge in toward it, the way a thick pane
  * does, so the mind's lines jog and gather as they pass under the edge. That's an SVG displacement map the browser
  * applies to what's behind (backdrop-filter: url(#…)), which only Chromium does; elsewhere the glass is the same
@@ -72,19 +72,4 @@ export function bendRim(el, { pad = 16, radius = 22, band = 22, pull = 14 } = {}
     f.innerHTML = `<feImage href="${map.url}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="${map.scale.toFixed(6)}" xChannelSelector="R" yChannelSelector="G"/>`;
     el.style.setProperty('--bend', `url(#${id})`);
   }).observe(el);
-}
-
-/* the grain every pane of this glass carries: a still, fine speckle of light and dark, so the surface reads as a
- * material and its soft gradients never band. Made once, set on the page as --grain. */
-export function grain() {
-  const n = 128, c = document.createElement('canvas');
-  c.width = c.height = n;
-  const g = c.getContext('2d'), img = g.createImageData(n, n);
-  for (let p = 0; p < n * n; p++) {
-    const v = Math.random() < 0.5 ? 0 : 255;
-    img.data[p * 4] = img.data[p * 4 + 1] = img.data[p * 4 + 2] = v;
-    img.data[p * 4 + 3] = Math.round(Math.random() * 9);
-  }
-  g.putImageData(img, 0, 0);
-  document.documentElement.style.setProperty('--grain', `url(${c.toDataURL()})`);
 }
