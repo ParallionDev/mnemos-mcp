@@ -10,6 +10,8 @@
 import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
   forPerson, temperature, tempWord, KIND, ASK, ASK_ORDER, RELATION, trailSentence, modelName, sameModel } from './words.js';
 
+import { telling, setTelling, canTell, refused } from './tell.js';
+
 const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours', settings: 'Settings' };
 const PAGE = 60;
 const SEEN_AFTER = 1200;                  // a note of its own is read once it has stayed on your screen this long
@@ -490,6 +492,7 @@ export class Room {
           ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
           <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
       </div>`}
+      ${this.tellPanel()}
       <div class="belief set">
         <div class="set-title">Where it lives</div>
         <dl class="set-facts">
@@ -501,6 +504,16 @@ export class Room {
         <p class="set-d set-foot">On this machine only. Nothing here leaves it.</p>
       </div>
     </section>`;
+  }
+  /* a quiet notification when it asks you something, only if you want one */
+  tellPanel() {
+    const { who } = this.ctx();
+    if (who.unfiled || !canTell()) return '';
+    const on = telling(who.agentId), denied = refused();
+    return `<div class="belief set"><div class="set-head"><div><div class="set-title">Tell me when it asks me something</div>
+      <p class="set-d">${denied ? 'Your browser is set not to allow notifications from this page. Allow them for this address in the browser’s site settings, then turn this on.'
+        : `One quiet notification when ${esc(who.name)} leaves you a question, only while this page isn’t in front of you. Each question is told once, however many of its pages are open.`}</p></div>
+      <button class="switch" type="button" role="switch" aria-checked="${on}" data-tell="${on ? 'off' : 'on'}"${denied ? ' disabled' : ''}><span class="knob" aria-hidden="true"></span><span class="vh">Tell me when it asks me something</span></button></div></div>`;
   }
   currentHours() {
     if (this.hours) return this.hours;
@@ -553,6 +566,8 @@ export class Room {
       if (fix) { const id = fix.dataset.fixSave; return this.memChange(id, { command: 'correct', memory_id: id, text: (this.drafts.get(`fix:${id}`) || '').trim() }); }
       const yes = e.target.closest('[data-forget-yes]');
       if (yes) { const id = yes.dataset.forgetYes; return this.memChange(id, { command: 'forget', memory_id: id, confirmed: true }); }
+      const tellSw = e.target.closest('[data-tell]');
+      if (tellSw) { const { who, life } = this.ctx(); return setTelling(who.agentId, tellSw.dataset.tell === 'on', life.notes).then(() => this.render()); }
       const sw = e.target.closest('[data-hours-on]');
       if (sw) { this.hours = { ...this.currentHours(), on: sw.dataset.hoursOn === 'on' }; this.notices.delete('hours'); return this.render(); }
       if (e.target.closest('[data-hours-reset]')) { this.hours = null; this.notices.delete('hours'); return this.render(); }

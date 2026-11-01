@@ -352,6 +352,12 @@ mind.
   fibre; recall lights up along the links as it happens. It also replays
   how it grew, and the times recall gathered several memories at once. It's
   drawn to fit your machine, and rests when nothing moves.
+- **What's new**: it opens on what's new since you were last here (the
+  questions waiting on you, new memories, hours, journal entries, beliefs
+  that changed), each a link to where it lives. If you turn it on in
+  Settings, it sends one quiet notification when your agent asks you
+  something while the page is in the background, and the tab counts
+  what's waiting.
 - **Every mind on this computer**: the agent's name opens the others that
   keep their memory beside it (`~/.mnemos/<agent>.db`), each called by its
   own name.

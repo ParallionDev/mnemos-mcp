@@ -24,7 +24,8 @@ import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
-  forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen } from '../shared/words.js';
+  forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
+import { tell, telling } from '../shared/tell.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -438,7 +439,8 @@ function verifyHTML(h) {
 }
 function updateFrame() {
   const who = L.identity, h = lastHour, temp = $('temp');
-  document.title = `${who.name} · the mind`;
+  const asks = waiting(L.notes || []).length;
+  document.title = `${asks ? `(${asks}) ` : ''}${who.name} · the mind`;
   $('who-name').textContent = who.name;
   canvas.setAttribute('aria-label', `${who.name}'s memory: every cell a memory, every fibre a real link; lit only where its last quiet hour went`);
   if (!h) {
@@ -630,6 +632,18 @@ function bindPage() {
 
 let lastMade = null;
 async function look(now = false) {
+  if (document.hidden && !now && !building && L.identity.agentId && telling(L.identity.agentId)) {
+    // behind other windows it draws nothing, but still tells you when it asks you something
+    try {
+      const next = await json('../data/life.json');
+      if (!next.missing) {
+        const asks = waiting(next.notes || []).length;
+        document.title = `${asks ? `(${asks}) ` : ''}${next.identity.name} · the mind`;
+        tell({ agent: next.identity.agentId, who: next.identity, notes: next.notes || [], open: () => openRoom({ tab: 'notes' }) });
+      }
+    } catch { /* the next look tries again */ }
+    return;
+  }
   if ((document.hidden && !now) || building) return;
   let life;
   try { life = await json('../data/life.json'); } catch { return; }
@@ -653,6 +667,7 @@ async function look(now = false) {
   renderPaper();
   if (sheetOpen) room.refresh();
   updateFrame(); sayNew();
+  tell({ agent: L.identity.agentId, who: L.identity, notes: L.notes || [], open: () => openRoom({ tab: 'notes' }) });
 }
 
 /* ---------- live: what comes to mind, as it comes ----------

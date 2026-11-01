@@ -4,7 +4,8 @@
 
 import { Room, parseRoute } from '../shared/room.js';
 import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent,
-  visit, sinceThen } from '../shared/words.js';
+  visit, sinceThen, waiting } from '../shared/words.js';
+import { tell, telling } from '../shared/tell.js';
 
 const $ = (id) => document.getElementById(id);
 const nav = document.querySelector('.nav');
@@ -24,7 +25,8 @@ async function json(path) {
 
 function head() {
   const who = life.identity, h = life.hours[0] || null, k = temperature(h);
-  document.title = `${who.name} · the log`;
+  const asks = waiting(life.notes || []).length;                  // what's waiting on you, counted in the tab
+  document.title = `${asks ? `(${asks}) ` : ''}${who.name} · the log`;
   $('name').textContent = who.name;
   const dot = $('dot');
   dot.classList.toggle('cold', !h || k < 0.1);
@@ -169,7 +171,19 @@ function transition(apply, from, to) {
 /* ---------- live ---------- */
 
 async function look() {
-  if (document.hidden && life) return;
+  // behind other windows it draws nothing; if it's to tell you when it asks you something, it still reads the small
+  // life document, only to tell and to count what's waiting in the tab
+  if (document.hidden && life) {
+    if (!telling(life.identity.agentId)) return;
+    try {
+      const next = await json(withAgent('../data/life.json'));
+      if (next.missing) return;
+      const asks = waiting(next.notes || []).length;
+      document.title = `${asks ? `(${asks}) ` : ''}${next.identity.name} · the log`;
+      tell({ agent: next.identity.agentId, who: next.identity, notes: next.notes || [], open: () => room?.go({ tab: 'notes' }) });
+    } catch { /* the next look tries again */ }
+    return;
+  }
   let next;
   try { next = await json(withAgent('../data/life.json')); } catch { if (life) head(); return; }
   if (life && next.made === life.made) { head(); return; }
@@ -185,6 +199,7 @@ async function look() {
   head();
   if (!room) start(); else { room.refresh(); margin(); placeMarker(room.s.tab, false); }
   sincebar();
+  tell({ agent: life.identity.agentId, who: life.identity, notes: life.notes || [], open: () => room?.go({ tab: 'notes' }) });
 }
 
 function start() {
