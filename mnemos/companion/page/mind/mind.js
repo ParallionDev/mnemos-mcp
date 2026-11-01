@@ -63,8 +63,9 @@ let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1
 document.fonts.add(await new FontFace('Mono', 'url(../fonts/jetbrains-mono-nl.woff)', { weight: '400' }).load());
 const canvas = $('mind');
 const gl = context(canvas);
-const PRINTABLE = Array.from({ length: 94 }, (_, i) => String.fromCharCode(33 + i)).join('');
-const atlas = await glyphAtlas(gl, { sets: [{ name: 'mono', glyphs: PRINTABLE + DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] }, { cell: 112 });
+// the mind is drawn in three shapes of light and no letters, so only those three are set (each at every blur level):
+// the whole alphabet took most of the page's start, about eight seconds of it on a busy machine
+const atlas = await glyphAtlas(gl, { sets: [{ name: 'mono', glyphs: DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] }, { cell: 112 });
 const GLYPHS = Object.fromEntries([DOT, STROKE, LINE].map((ch) => [ch, atlas.index[`mono:${ch}`]]));
 
 /* ---------- the memory, read, and drawn (again when it grows) ---------- */
@@ -153,11 +154,16 @@ async function focusNear(i) {
 
 let building = null, built = null;
 async function build(data) {
-  const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
-  const open = selected >= 0 && D ? D.cells[selected]?.fullId : null;      // the memory being read, kept through a redraw
   const t0 = performance.now();
   const out = await drawIn(data);
-  const t1 = performance.now();
+  apply(data, out, { worker: Math.round(performance.now() - t0) });
+  keepDrawing(data, out);
+}
+
+/* a drawing, made now or kept from before, put on the screen */
+function apply(data, out, took = {}) {
+  const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
+  const open = selected >= 0 && D ? D.cells[selected]?.fullId : null;      // the memory being read, kept through a redraw
   const oldFlash = flash;
   D = data; N = D.cells.length; NL = D.links.length;
   MID = out.mid;
@@ -166,7 +172,7 @@ async function build(data) {
   const next = new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
   if (tissue) tissue.dispose();
   tissue = next;
-  const t3 = performance.now();
+  took.upload = Math.round(performance.now() - t2);
   R = out.R; P = Array.from({ length: N }, (_, i) => [out.P[i * 3], out.P[i * 3 + 1], out.P[i * 3 + 2]]);
   SH = { apex: out.apex, hillock: out.hillock, incoming: out.incoming, degree: out.degree };
   dropNear(); nearAsked = -1;
@@ -184,12 +190,57 @@ async function build(data) {
   linkAt = new Float64Array(NL).fill(-1); linkLevel = new Float32Array(NL);
   heat = new Float32Array(N); linkHeat = new Float32Array(NL);
   if (keep && oldFlash) D.cells.forEach((c, i) => { const j = keep.get(c.fullId); if (j !== undefined && j < oldFlash.length) flash[i] = oldFlash[j]; });
-  built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now(),
-    took: { worker: Math.round(t1 - t0), keep: Math.round(t2 - t1), upload: Math.round(t3 - t2), rest: Math.round(performance.now() - t3) } };
+  built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now(), took };
   window.__built = built;
   // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
   if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
   if (hoverCell >= N) hoverCell = -1;
+}
+
+/* ---------- the drawing, kept ----------
+ * Making the drawing is the slow part: a few seconds on a quiet machine, many more on a busy one. So the last one is
+ * kept in this browser (IndexedDB, one per mind, a few hundred megabytes at most, written and read in a fraction of a
+ * second), and the page opens on it at once. When the memory has changed since, the kept one still opens the page,
+ * and a fresh one is made behind it and takes its place. Kept with the code's own version and this screen's budget: a
+ * drawing made by other code, or for another screen, is made again. A convenience only; without it, the page draws. */
+const DRAWING_V = '2026-10-31.3';   // glyph indices changed with the three-shape atlas
+const kept = (() => {
+  let opening = null;
+  const db = () => opening || (opening = new Promise((res, rej) => {
+    const r = indexedDB.open('mnemos-mind', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('drawings');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const call = async (mode, act) => {
+    const d = await db();
+    return new Promise((res, rej) => {
+      const tx = d.transaction('drawings', mode), q = act(tx.objectStore('drawings'));
+      tx.oncomplete = () => res(q?.result); tx.onerror = tx.onabort = () => rej(tx.error);
+    });
+  };
+  return { get: (k) => call('readonly', (st) => st.get(k)), put: (k, v) => call('readwrite', (st) => st.put(v, k)) };
+})();
+const drawingKey = () => `${L.identity.agentId || AGENT || 'agent'}`;
+function keepDrawing(data, out) {
+  // after the page has what it needs: a moment later, so writing never competes with showing
+  const version = memVersion;
+  setTimeout(() => {
+    kept.put(drawingKey(), { v: DRAWING_V, budget, version, at: Date.now(), cells: data.cells, links: data.links, out })
+      .catch(() => { /* full, or private: next time it draws again */ });
+  }, 1500);
+}
+async function keptDrawing() {
+  try {
+    const k = await kept.get(drawingKey());
+    return k && k.v === DRAWING_V && k.budget === budget && k.out?.count ? k : null;
+  } catch { return null; }
+}
+/* a kept drawing's memories, as they are now: the same ones in the same places (their order is the drawing's), each
+ * with what has changed since (how easy to reach, whether gone quiet); one let go since stays until the next drawing */
+function fromKept(k) {
+  const now = new Map(mems.map((m) => [m.id, m]));
+  const cells = k.cells.map((c) => { const m = now.get(c.id); return m ? { ...c, accessibility: m.acc, state: m.state, recalls: m.recalls } : c; });
+  return { cells, links: k.links };
 }
 
 async function readMemories() {
@@ -664,6 +715,7 @@ function bindPage() {
 let lastMade = null, grown = false, lastRedraw = performance.now();
 const REDRAW_EVERY = 90_000;
 async function look(now = false) {
+  if (!D) return;                                            // nothing drawn yet: the first drawing reads what it needs
   if (document.hidden && !now && !building && L.identity.agentId && telling(L.identity.agentId)) {
     // behind other windows it draws nothing, but still tells you when it asks you something
     try {
@@ -838,9 +890,16 @@ setInterval(() => { if (!document.hidden) keepVisit(); }, 30_000);
 await readMemories();
 $('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${plural(mems.length, 'memory', 'memories')}…`
   : `finding the shape of ${plural(mems.length, 'memory', 'memories')}, the first time · a few seconds`;
-try { await build(shape(mems)); } catch (e) {
-  $('loading').textContent = 'The mind couldn’t be drawn just now. Reload the page to try again.';
-  throw e;
+const tRead = performance.now(), keptOne = params.has('fresh') ? null : await keptDrawing(), readMs = Math.round(performance.now() - tRead);
+if (keptOne) {
+  apply(fromKept(keptOne), keptOne.out, { kept: true, read: readMs, start: Math.round(tRead) });
+  // the memory changed since it was kept: a fresh drawing is made behind this one, and takes its place
+  if (keptOne.version !== memVersion) { grown = true; lastRedraw = -Infinity; setTimeout(() => look(true), 2500); }
+} else {
+  try { await build(shape(mems)); } catch (e) {
+    $('loading').textContent = 'The mind couldn’t be drawn just now. Reload the page to try again.';
+    throw e;
+  }
 }
 warm();
 cam = { yaw: 0.35, pitch: 0.18, dist: HOME, target: centre.slice() };
