@@ -202,7 +202,7 @@ function apply(data, out, took = {}, ready = null) {
   // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
   if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
   if (hoverCell >= N) hoverCell = -1;
-  pointAt(hoverCell);
+  pointed = -2;                                    // drawn again: what's lit is worked out afresh
 }
 
 /* ---------- the drawing, kept ----------
@@ -343,7 +343,7 @@ function paint(now) {
     LF[li] = front; LA[li] = amount; LT[li] = trail;
   }
   for (let i = 0; i < N; i++) if (Math.abs((i === selected ? 1 : 0) - read[i]) > 2e-3 || Math.abs(fAim[i] - fc[i]) > 2e-3) { moving = true; break; }
-  if (Math.abs((hoverCell >= 0 ? 1 : 0) - dimNow) > 2e-3) moving = true;
+  if (Math.abs((lit() >= 0 ? 1 : 0) - dimNow) > 2e-3) moving = true;
   animating = moving;
 }
 
@@ -406,7 +406,10 @@ function aimAt(i) {
  * under the hand aims for all of it, those it's tied to for more the stronger the tie, and the links between them for
  * as much as the memory at their far end. Everything else is dimmed by how much the hand is on anything at all
  * (dimNow), so moving from one memory to the next never flashes the whole mind back up between them. */
-const QUIET = 0.74, LIT_G = 0.5, LIT_F = 0.95, LIT_L = 0.8;
+const QUIET = 0.74, QUIET_OPEN = 0.88, LIT_G = 0.5, LIT_F = 0.95, LIT_L = 0.8;
+// what's lit: the memory open, and with none open, the one under the hand
+const lit = () => (selected >= 0 ? selected : hoverCell);
+let pointed = -1;
 let dimNow = 0, aimed = [], aimedLinks = [];
 function pointAt(i) {
   for (const j of aimed) fAim[j] = 0;
@@ -419,7 +422,7 @@ function pointAt(i) {
 function hover(i) {
   if (selected >= 0) i = -1;                       // with a memory open, moving around stays calm: pointing lights nothing
   if (i === hoverCell) return;
-  hoverCell = i; pointAt(i); wake();
+  hoverCell = i; wake();
 }
 
 /* ---------- the camera in your hands ----------
@@ -629,8 +632,12 @@ function frame(now) {
   else if (want < 0 && near && !nearPending) focusNear(-1);
   const kUp = 1 - Math.exp(-9 * dt), kDown = 1 - Math.exp(-2.2 * dt), kRead = 1 - Math.exp(-3.7 * dt);
   const kIn = 1 - Math.exp(-11 * dt), kOut = 1 - Math.exp(-6 * dt);
-  dimNow += ((hoverCell >= 0 ? 1 : 0) - dimNow) * (hoverCell >= 0 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
-  const quiet = QUIET * dimNow;
+  // the memory open (or, with none open, the one under the hand) lights with its ties; the rest of the mind goes
+  // quiet, further with a memory open, so where it reaches can be seen
+  const on = lit();
+  if (on !== pointed) { pointed = on; pointAt(on); }
+  dimNow += ((on >= 0 ? 1 : 0) - dimNow) * (on >= 0 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
+  const quiet = (selected >= 0 ? QUIET_OPEN : QUIET) * dimNow;
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
     read[i] += ((i === selected ? 1 : 0) - read[i]) * kRead;
