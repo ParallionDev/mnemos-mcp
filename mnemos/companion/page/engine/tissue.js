@@ -166,7 +166,7 @@ void main() {
 // one program for every tissue on a context: compiling it is tens of milliseconds, and a tissue is made per redraw
 const programs = new WeakMap();
 const programFor = (gl) => programs.get(gl) || programs.set(gl, program(gl, VS, FS)).get(gl);
-const SLICE = 2 * 1024 * 1024 / 4;       // floats sent to the GPU per step when a tissue is sent without a pause
+const SLICE = 3 * 1024 * 1024 / 4;       // floats sent to the GPU a frame when a tissue is sent without a pause
 
 export class Tissue {
   /* A tissue sent to the GPU a slice at a time, a step per turn of the page, so a mind that's being moved never
@@ -179,7 +179,8 @@ export class Tissue {
       if (t.count === 0) return t;                                  // let go before it arrived
       gl.bindBuffer(gl.ARRAY_BUFFER, t.buf);
       gl.bufferSubData(gl.ARRAY_BUFFER, at * 4, data, at, Math.min(SLICE, data.length - at));
-      await new Promise((r) => setTimeout(r, 0));
+      // one slice a frame: sent faster, the driver's staging fills (about 16 MB in) and the page waits for the GPU
+      await new Promise((r) => (document.hidden ? setTimeout(r, 0) : requestAnimationFrame(() => r())));
     }
     return t;
   }

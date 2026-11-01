@@ -129,10 +129,19 @@ function drawIn(data) {
  * dimmed to nothing, which costs nothing to draw. A few dozen memories finely, not thousands. */
 const NEAR_MOST = 48;
 let SH = null, near = null, nearAsked = -1, nearPending = false, nearFailed = -1e9;
-function dropNear() { if (near) { near.tissue.dispose(); near = null; } }
+// the fine version fades in over the light one, and out again when let go, so the change of detail is never a jump
+const NEAR_FADE = 450;
+let leaving = null;
+function dropNear(fade = false) {
+  if (!near) return;
+  if (leaving) leaving.tissue.dispose();
+  leaving = fade && !reduce ? { ...near, at: performance.now() } : null;
+  if (!leaving) near.tissue.dispose();
+  near = null; wake();
+}
 async function focusNear(i) {
   nearAsked = i;
-  if (i < 0 || !SH) { dropNear(); wake(); return; }
+  if (i < 0 || !SH) { dropNear(true); return; }
   const ties = nbrs[i].slice().sort((a, b) => b[1] - a[1]).map(([j]) => j);
   const list = [...new Set([i, ...ties])].slice(0, NEAR_MOST);
   const at = new Map(list.map((g, k) => [g, k]));
@@ -150,8 +159,8 @@ async function focusNear(i) {
   catch { nearFailed = performance.now(); return; }              // asked again in a few seconds, never every frame
   finally { nearPending = false; }
   if (nearAsked !== i || !tissue) return;
-  dropNear();
-  near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds };
+  dropNear(true);
+  near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds, at: reduce ? -1e9 : performance.now() };
   wake();
 }
 
@@ -168,20 +177,25 @@ async function build(data) {
 
 /* a drawing, made now or kept from before, put on the screen */
 function apply(data, out, took = {}, ready = null) {
+  const tA = performance.now(), T = (k) => { took[k] = Math.round(performance.now() - tA); };
   const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
   const open = selected >= 0 && D ? D.cells[selected]?.fullId : null;      // the memory being read, kept through a redraw
   const oldFlash = flash;
   D = data; N = D.cells.length; NL = D.links.length;
   MID = out.mid;
   store.set(LAYOUT_KEY(), Object.fromEntries(D.cells.map((c, i) => [c.id, out.places[i].map((x) => Math.round(x * 1000) / 1000)])));
+  T('aStore');
   const t2 = performance.now();
   const next = ready || new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
-  if (tissue) tissue.dispose();
+  // the drawing it replaces is let go a moment later, not in the frame that swaps them: freeing a few hundred
+  // megabytes of GPU memory there held that frame up
+  if (tissue) { const old = tissue; setTimeout(() => old.dispose(), 1200); }
   tissue = next;
   took.upload = Math.round(performance.now() - t2);
+  T('aTissue');
   R = out.R; P = Array.from({ length: N }, (_, i) => [out.P[i * 3], out.P[i * 3 + 1], out.P[i * 3 + 2]]);
   SH = { apex: out.apex, hillock: out.hillock, incoming: out.incoming, degree: out.degree };
-  dropNear(); nearAsked = -1;
+  dropNear(); if (leaving) { leaving.tissue.dispose(); leaving = null; } nearAsked = -1;
   centre = scale(P.reduce(add, [0, 0, 0]), 1 / (N || 1));
   extent = Math.max(0.5, ...P.map((p) => length(sub(p, centre))));
   HOME = extent * 3.35 * Math.min(1.8, Math.max(1, 0.85 / (innerWidth / innerHeight)));
@@ -203,7 +217,7 @@ function apply(data, out, took = {}, ready = null) {
   // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
   if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
   if (hoverCell >= N) hoverCell = -1;
-  mapRegions(out.places);
+  T('aBefore'); mapRegions(out.places); T('aRegions');
   pointed = -2;                                    // drawn again: what's lit is worked out afresh
 }
 
@@ -232,13 +246,17 @@ const kept = (() => {
 })();
 const drawingKey = () => `${L.identity.agentId || AGENT || 'agent'}`;
 function keepDrawing(data, out) {
-  // when the page is idle and no one's moving the mind, so the keeping never takes a frame from either. The points go
-  // in as one Blob (a single copy, written to disk off the page's thread); copying them as an array took 150 ms
+  // when the page is idle and no one's moving the mind, and never on the page's thread: copying the points here took
+  // a frame or more (150 ms as an array, 90 to 130 as a Blob)
   const version = memVersion, at = Date.now();
   const keep = () => {
     if (performance.now() - lastNav < 2000 || dragging || fling) return void setTimeout(keep, 1500);
-    kept.put(drawingKey(), { v: DRAWING_V, budget, version, at, cells: data.cells, links: data.links, out: { ...out, data: new Blob([out.data]) } })
-      .catch(() => { /* full, or private: next time it draws again */ });
+    // handed to a worker of its own, the points moved rather than copied (the GPU has them by now): ./keep.js
+    try {
+      const w = new Worker(new URL('./keep.js', import.meta.url));
+      w.onmessage = w.onerror = () => w.terminate();
+      w.postMessage({ key: drawingKey(), record: { v: DRAWING_V, budget, version, at, cells: data.cells, links: data.links, out } }, [out.data.buffer]);
+    } catch { /* full, or private: next time it draws again */ }
   };
   setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(keep, { timeout: 8000 }) : keep()), 1500);
 }
@@ -735,27 +753,41 @@ function frame(now) {
   if (on !== pointed) { pointed = on; pointAt(on); }
   dimNow += ((on !== -1 ? 1 : 0) - dimNow) * (on !== -1 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
   const quiet = (selected >= 0 ? QUIET_OPEN : QUIET) * dimNow;
+  // what else is lit (the last hour's trail, a recall's light travelling) goes out entirely with a memory open, so
+  // nothing lit can be mistaken for its own; under the hand it only goes down with the rest
+  const hush = (selected >= 0 ? 1 : QUIET) * dimNow;
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
     read[i] += ((i === selected ? 1 : 0) - read[i]) * kRead;
     fc[i] += (fAim[i] - fc[i]) * (fAim[i] > fc[i] ? kIn : kOut);
     const keep = 1 - quiet * (1 - fc[i]);
     shownG[i] = glow[i] * keep + LIT_G * fc[i] * fc[i];
-    shownF[i] = flash[i] * keep + LIT_F * fc[i] * (fAim[i] === 1 ? 1 : 0.35);
+    shownF[i] = flash[i] * (1 - hush * (1 - fc[i])) + LIT_F * fc[i] * (fAim[i] === 1 ? 1 : 0.35);
     tissue.cell(i, shownG[i], shownF[i], 0, read[i]);
   }
   for (let li = 0; li < NL; li++) {
     lc[li] += (lAim[li] - lc[li]) * (lAim[li] > lc[li] ? kIn : kOut);
-    const keep = 1 - quiet * (1 - lc[li]);
-    tissue.link(li, Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), Math.max(LA[li] * keep, LIT_L * lc[li]), Math.max(LT[li], 0.4 * lc[li]), LR[li] * keep);
+    const keep = 1 - quiet * (1 - lc[li]), lit = 1 - hush * (1 - lc[li]);
+    tissue.link(li, Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), Math.max(LA[li] * lit, LIT_L * lc[li]), Math.max(LT[li] * lit, 0.4 * lc[li]), LR[li] * keep);
+  }
+  // the fine versions take their memories' light from the whole, by as much as they've faded in: what arrives,
+  // fully; what's being let go, less each frame, until it's gone
+  const share = (f, k) => {
+    f.cells.forEach((g, c) => { f.tissue.cell(c, shownG[g] * k, shownF[g] * k, 0, read[g]); tissue.cell(g, shownG[g] * (1 - k), shownF[g] * (1 - k), 0, read[g]); });
+    f.links.forEach((li, c) => {
+      const keep = 1 - quiet * (1 - lc[li]), lit = 1 - hush * (1 - lc[li]);
+      const a = Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), b = Math.max(LA[li] * lit, LIT_L * lc[li]), t = Math.max(LT[li] * lit, 0.4 * lc[li]), r = LR[li] * keep;
+      f.tissue.link(c, a, b * k, t * k, r * k); tissue.link(li, a, b * (1 - k), t * (1 - k), r * (1 - k));
+    });
+  };
+  if (leaving) {
+    const k = 1 - Math.min(1, (now - leaving.at) / NEAR_FADE);
+    if (k <= 0) { leaving.tissue.dispose(); leaving = null; } else { share(leaving, k * k); animating = true; }
   }
   if (near) {
-    near.cells.forEach((g, k) => { near.tissue.cell(k, shownG[g], shownF[g], 0, read[g]); tissue.cell(g, 0, 0, 0, 0); });
-    near.links.forEach((li, k) => {
-      const keep = 1 - quiet * (1 - lc[li]);
-      near.tissue.link(k, Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), Math.max(LA[li] * keep, LIT_L * lc[li]), Math.max(LT[li], 0.4 * lc[li]), LR[li] * keep);
-      tissue.link(li, 0, 0, 0, 0);
-    });
+    const k = Math.min(1, (now - near.at) / NEAR_FADE);
+    share(near, 1 - (1 - k) * (1 - k));
+    if (k < 1) animating = true;
   }
   const viewM = lookAt(eye, cam.target, [0, 1, 0]), proj = perspective(FOV, canvas.width / canvas.height, 0.01, 400);
   const blurK = mix(14 * LENS.blur, 52 * LENS.blurClose, close * close) * (canvas.height / 804);
@@ -763,6 +795,7 @@ function frame(now) {
   const optics = { view: viewM, proj, focalPx: canvas.height / 2 / Math.tan(FOV / 2), focus: length(sub(cam.target, eye)), blurK, near: 0.02,
     fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close), ...LOOK };
   tissue.draw(post.accum, optics);
+  if (leaving) leaving.tissue.draw(post.accum, optics);
   if (near) near.tissue.draw(post.accum, optics);
   post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
   requestAnimationFrame(frame);
@@ -1185,6 +1218,9 @@ listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
   get looping() { return looping; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  // what's lit right now, brightest first: for checking the light against what should be lit
+  get lit() { const o = []; for (let i = 0; i < N; i++) if (shownG[i] + shownF[i] > 0.12) o.push({ i, g: +shownG[i].toFixed(2), f: +shownF[i].toFixed(2), fc: +fc[i].toFixed(2), heat: +heat[i].toFixed(2), arrived: arrived.has(D.cells[i].fullId), fire: fireAt[i] >= 0, sel: i === selected, tie: nbrs[selected]?.some(([j]) => j === i) || false }); return o.sort((a, b) => b.g + b.f - a.g - a.f); },
+  get litLinks() { const o = []; for (let li = 0; li < NL; li++) { const a = Math.max(LA[li], 0); if (a > 0.05 || lc[li] > 0.05) o.push({ li, s: D.links[li].s, t: D.links[li].t, LA: +LA[li].toFixed(2), LF: +LF[li].toFixed(2), lc: +lc[li].toFixed(2), heat: +linkHeat[li].toFixed(2), at: linkAt[li] >= 0 }); } return o; },
   get regions() { return regions.map((g) => ({ k: g.k, n: g.n, name: g.name, words: g.words, on: g.on })); },
   openRoom, closeRoom, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null), byId: (id) => cellOf.get(id) };
 stir();

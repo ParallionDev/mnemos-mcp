@@ -28,12 +28,13 @@ function holder() {
 /* where each point of the rim looks: just outside the pane at the very edge, easing back to straight through by
  * `band` inside it. Offsets are stored as fractions of the box's width on both axes (Chromium scales by width alone). */
 function rimMap(W, H, { pad, radius, band, pull }) {
-  const sx = Math.max(2, Math.round(W / 2)), sy = Math.max(2, Math.round(H / 2));
+  const sx = Math.max(2, Math.round(W / 4)), sy = Math.max(2, Math.round(H / 4));      // smooth enough, filtered up
   const hw = W / 2 - pad, hh = H / 2 - pad, r = Math.min(radius, hw, hh);
   const off = new Float32Array(sx * sy * 2);
   let most = 0;
   for (let j = 0; j < sy; j++) for (let i = 0; i < sx; i++) {
     const px = (i + 0.5) / sx * W - W / 2, py = (j + 0.5) / sy * H - H / 2;
+    if (Math.abs(px) < hw - band - 2 && Math.abs(py) < hh - band - 2) continue;       // the middle sees straight through
     const qx = Math.abs(px) - (hw - r), qy = Math.abs(py) - (hh - r);
     const d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
     const inward = Math.max(0, -d);
@@ -47,14 +48,17 @@ function rimMap(W, H, { pad, radius, band, pull }) {
   }
   const scale = most * 2 + 1e-4, c = document.createElement('canvas');
   c.width = sx; c.height = sy;
-  const g = c.getContext('2d'), img = g.createImageData(sx, sy);
+  // kept in ordinary memory: a GPU canvas would have to be read back from a GPU busy drawing the mind (70 ms)
+  const g = c.getContext('2d', { willReadFrequently: true }), img = g.createImageData(sx, sy);
   for (let p = 0; p < sx * sy; p++) {
     img.data[p * 4] = Math.round(255 * (0.5 + off[p * 2] / scale));
     img.data[p * 4 + 1] = Math.round(255 * (0.5 + off[p * 2 + 1] / scale));
     img.data[p * 4 + 2] = 128; img.data[p * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  return { url: c.toDataURL(), scale };
+  // encoded and read off the page's thread: the map is ready a moment after the pane is, and the pane never waits for
+  // it (a data address, which the page's own rules allow for pictures; a blob's they don't)
+  return new Promise((done) => c.toBlob((b) => { const r = new FileReader(); r.onload = () => done({ url: r.result, scale }); r.readAsDataURL(b); }));
 }
 
 /* bend the rim of one glass element; its pane is the element less `pad` all round, with corners of `radius` */
@@ -64,11 +68,12 @@ export function bendRim(el, { pad = 16, radius = 22, band = 22, pull = 14 } = {}
   for (const [k, v] of Object.entries({ id, x: 0, y: 0, width: 1, height: 1, filterUnits: 'objectBoundingBox', primitiveUnits: 'objectBoundingBox', 'color-interpolation-filters': 'sRGB' })) f.setAttribute(k, v);
   holder().appendChild(f);
   let size = '';
-  new ResizeObserver(() => {
+  new ResizeObserver(async () => {
     const W = el.offsetWidth, H = el.offsetHeight, now = `${W}x${H}`;
     if (!W || !H || now === size) return;
     size = now;
-    const map = rimMap(W, H, { pad, radius, band, pull });
+    const map = await rimMap(W, H, { pad, radius, band, pull });
+    if (now !== size) return;
     f.innerHTML = `<feImage href="${map.url}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="map"/><feDisplacementMap in="SourceGraphic" in2="map" scale="${map.scale.toFixed(6)}" xChannelSelector="R" yChannelSelector="G"/>`;
     el.style.setProperty('--bend', `url(#${id})`);
   }).observe(el);
