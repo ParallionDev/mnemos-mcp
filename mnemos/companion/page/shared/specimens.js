@@ -6,12 +6,10 @@
  * each link, as long as the link is strong, barred where it supports and barbed where it contradicts; a ring for each
  * doubling of the times it came back; the threads around it as long as it's easy to reach; dashed, gone quiet.
  *
- * Two places show it. In the reading room the memory's life is drawn whole (./herbarium/figure.js): what it was
+ * It's shown in the reading room, where the memory's life is drawn whole (./herbarium/figure.js): what it was
  * distilled from and what it was distilled into, in the order they were kept, with the one you opened in full ink.
- * In the mind, a loupe of glass settles over the cell and the specimen engraves itself inside it, turned toward the
- * memory it was kept from or as. */
+ * (Laid over the living mind itself, a flat engraving read as pasted on; it belongs beside the mind, not on it.) */
 
-import { makeSpec, slotSpines, drawSpecimen, TIP } from './herbarium/specimen.js';
 import { composeFamily, drawFamily, pickFamily } from './herbarium/figure.js';
 
 const INK = [226, 232, 244], PAPER = 'rgb(10,10,13)', SIGNAL = '#6d93c9';
@@ -107,46 +105,3 @@ export function mountLife(canvas, model, i, { open } = {}) {
   canvas.addEventListener('pointerleave', () => { if (hover != null) { hover = null; if (!raf) draw(performance.now()); } });
   canvas.addEventListener('click', (e) => { const n = at(e); if (n != null && n !== i) open?.(model.cells[n].id); });
 }
-
-/* ---------- in the mind: the loupe ---------- */
-
-export class Loupe {
-  constructor(el) {
-    this.el = el; this.canvas = el.querySelector('canvas'); this.ctx = this.canvas.getContext('2d');
-    this.i = -1; this.spec = null; this.start = 0; this.size = 0; this.shown = false;
-  }
-  /* the memory it's over; -1 lets it go */
-  of(model, i) {
-    if (i === this.i && this.model === model) return;
-    this.i = i; this.model = model;
-    if (i < 0) { this.hide(); this.spec = null; return; }
-    this.spec = makeSpec(model, i); this.slots = slotSpines(this.spec); this.start = -1; this.drawn = null;
-  }
-  hide() { if (this.shown) { this.shown = false; this.el.classList.remove('on'); } }
-  /* put it over the memory at (x, y) on the screen, its axis turned to `rot`; true while it's still engraving */
-  place(x, y, rot, now) {
-    if (!this.spec) return false;
-    const size = this.el.offsetWidth;
-    if (size !== this.size) {
-      this.size = size;
-      const dpr = Math.min(devicePixelRatio || 1, 2);
-      this.canvas.width = this.canvas.height = Math.round(size * dpr); this.dpr = dpr;
-    }
-    if (!this.shown) { this.shown = true; this.el.classList.add('on'); if (this.start < 0) this.start = reduce ? -1e9 : now; }
-    this.el.style.translate = `${Math.round(x - size / 2)}px ${Math.round(y - size / 2)}px`;
-    // the engraving is drawn again only when it changes: while it engraves, or when the mind turns it
-    const g0 = Math.min(1, (now - this.start) / ENGRAVE);
-    if (g0 >= 1 && this.drawn && Math.abs(rot - this.drawn.rot) < 0.003 && this.drawn.size === size) return false;
-    this.drawn = { rot, size };
-    // as large as fits: the wall (a drop's front reaches further), then its longest spine or its threads
-    const s = this.spec, wmax = Math.max(0, ...s.spines.filter((p) => p.rel !== 'distilled_into').map((p) => p.w));
-    const reach = (s.round ? 1 : 1 + TIP) + Math.max(0.32 + 0.95 * wmax, s.dormant ? 0 : 1.45 * s.reach);
-    const R = (size / 2 - 12) / reach, g = Math.min(1, (now - this.start) / ENGRAVE);
-    const ctx = this.ctx;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0); ctx.clearRect(0, 0, size, size);
-    const o = { x: size / 2, y: size / 2, R, rot, ink: INK, paper: PAPER, signal: SIGNAL, t: 0 };
-    drawSpecimen(ctx, s, this.slots, { ...o, grow: Math.min(1, Math.max(0, (g - 0.35) / 0.65)), spineK: () => Math.min(1, Math.max(0, (g - 0.25) / 0.6)) });
-    return g < 1;
-  }
-}
-
