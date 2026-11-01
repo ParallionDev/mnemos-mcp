@@ -256,3 +256,7 @@
 .set-facts dd{color:var(--ink-2);overflow-wrap:anywhere}
 .set-foot{margin-top:var(--s4)}
 @media (prefers-reduced-motion:reduce){.switch,.switch .knob{transition:none}}
+
+/* new since the person was last here: the count in a filter, and a word on the row */
+.chip .n{margin-left:4px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.meta .new{display:inline-flex;align-items:center;color:var(--ink-1)}

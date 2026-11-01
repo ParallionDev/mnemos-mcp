@@ -24,7 +24,7 @@ import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
-  forPerson, sameModel, modelName, AGENT, withAgent } from '../shared/words.js';
+  forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen } from '../shared/words.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -470,11 +470,17 @@ function updateFrame() {
 
 /* ---------- since you were last here ---------- */
 
-const VISIT = () => `mnemos.mind.lastVisit.${L.identity.agentId || AGENT || 'agent'}`;
-let lastVisit = 0;
-const markVisit = () => store.set(VISIT(), Date.now());
-addEventListener('pagehide', markVisit);
-document.addEventListener('visibilitychange', () => { if (document.hidden) markVisit(); else { look(); wake(); } });
+// the same visit the log keeps (../shared/words.js): moving between the two is one visit, so what's new stays new
+let V = null, lastVisit = 0;
+const keepVisit = () => V?.keep();
+addEventListener('pagehide', keepVisit);
+document.addEventListener('visibilitychange', () => { if (document.hidden) keepVisit(); else { look(); wake(); } });
+function sayNew() {
+  const items = sinceThen(L, mems, lastVisit), el = $('since');
+  if (!items.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.textContent = [lastVisit ? `Since you were here, ${ago(Date.now() - lastVisit)}` : null, ...items.map((x) => x.say)].filter(Boolean).join(' · ');
+}
 
 /* ---------- paper: what each hour left ---------- */
 
@@ -530,7 +536,7 @@ function renderPaper() {
 let sheetOpen = false;
 const room = new Room({
   tabsEl: $('tabs'), bodyEl: $('room-body'), tabs: TABS, sticky: true,
-  ctx: () => ({ who: L.identity, life: L, mems, byId: memAt, heat: (id) => { const i = cellOf.get(id); return i === undefined || !heat ? 0 : heat[i]; } }),
+  ctx: () => ({ who: L.identity, life: L, mems, byId: memAt, since: lastVisit, heat: (id) => { const i = cellOf.get(id); return i === undefined || !heat ? 0 : heat[i]; } }),
   hooks: {
     // touching an entry lights it where it lives: the memory itself, and a soft pulse along what it's tied to
     hover: (id) => {
@@ -646,7 +652,7 @@ async function look(now = false) {
   if (newHour && lastHour) walk(lastHour, 300);
   renderPaper();
   if (sheetOpen) room.refresh();
-  updateFrame();
+  updateFrame(); sayNew();
 }
 
 /* ---------- live: what comes to mind, as it comes ----------
@@ -769,7 +775,8 @@ if (!firstLife || firstLife.missing) {
   throw new Error('no memory to draw');
 }
 L = firstLife; lastMade = L.made;
-lastVisit = Number(store.get(VISIT())) || 0;
+V = visit(L.identity.agentId || AGENT); lastVisit = V.since;
+setInterval(() => { if (!document.hidden) keepVisit(); }, 30_000);
 await readMemories();
 $('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${plural(mems.length, 'memory', 'memories')}…`
   : `finding the shape of ${plural(mems.length, 'memory', 'memories')}, the first time · a few seconds`;
@@ -780,9 +787,8 @@ cam.goal = { yaw: cam.yaw, pitch: cam.pitch, dist: cam.dist, target: centre.slic
 if (lastVisit) {
   const t = performance.now();
   D.cells.forEach((c, i) => { if (born[i] > lastVisit) arrived.set(c.fullId, t + 1800 + Math.random() * 1200); });
-  if (arrived.size) { $('since').hidden = false; $('since').textContent = `${plural(arrived.size, 'memory', 'memories')} formed since you were last here, ${ago(Date.now() - lastVisit)}`; }
 }
-setTimeout(markVisit, 15_000);
+sayNew();
 resize(); addEventListener('resize', resize);
 bindPointer(); bindPage(); bindAsk();
 renderPaper(); updateFrame();

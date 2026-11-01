@@ -211,7 +211,8 @@ export class Room {
     const { mems } = this.ctx(), heat = this.ctx().heat;
     const q = this.s.query.trim().toLowerCase(), f = this.s.filter, s = this.s.sort;
     let out = mems.filter((m) => f === 'all' || (f === 'lessons' ? m.lesson : f === 'standing' ? m.standing : f === 'asked' ? m.asked
-      : f === 'quiet' ? m.state === 'dormant' : f === 'warm' ? heat && heat(m.id) > 0.05 : f === 'colleagues' ? m.model && !sameModel(m.model, this.ctx().who.model) : true));
+      : f === 'quiet' ? m.state === 'dormant' : f === 'warm' ? heat && heat(m.id) > 0.05 : f === 'colleagues' ? m.model && !sameModel(m.model, this.ctx().who.model)
+      : f === 'new' ? this.isNew(m) : true));
     if (q) out = out.filter((m) => (m.content + ' ' + (m.impact || '')).toLowerCase().includes(q));
     const t = (m) => Date.parse(m.born);
     return out.sort((a, b) => s === 'recalled' ? b.recalls - a.recalls || t(b) - t(a) : s === 'connected' ? b.ties.length - a.ties.length
@@ -221,15 +222,18 @@ export class Room {
     const heat = this.ctx().heat, { who } = this.ctx();
     const tags = [m.lesson ? 'a lesson' : null, m.standing ? 'standing' : null, m.asked ? 'asked about' : null, m.state === 'dormant' ? 'gone quiet' : null,
       m.model && !sameModel(m.model, who.model) ? modelName(m.model) : null].filter(Boolean);
-    return `<li><button class="rowb" data-mem="${esc(m.id)}"><div class="meta"><span>${shortDay(at(m.born))}</span>${tags.map((x) => `<span class="k2">${esc(x)}</span>`).join('')}${heat && heat(m.id) > 0.05 ? '<span class="warm">warm from its hours</span>' : ''}${m.recalls ? `<span>recalled ${m.recalls}×</span>` : ''}</div>
+    return `<li><button class="rowb" data-mem="${esc(m.id)}"><div class="meta">${this.isNew(m) ? '<span class="k new"><span class="unread" aria-hidden="true"></span>new</span>' : ''}<span>${shortDay(at(m.born))}</span>${tags.map((x) => `<span class="k2">${esc(x)}</span>`).join('')}${heat && heat(m.id) > 0.05 ? '<span class="warm">warm from its hours</span>' : ''}${m.recalls ? `<span>recalled ${m.recalls}×</span>` : ''}</div>
       <div class="words">${esc(m.content)}</div></button></li>`;
   }
+  /* formed since the person was last here */
+  isNew(m) { const since = this.ctx().since; return !!since && Date.parse(m.born) > since; }
   memoriesHTML() {
     const { mems } = this.ctx(), all = this.list(), heat = this.ctx().heat;
+    const fresh = mems.filter((m) => this.isNew(m)).length;
     const chip = (g, v, label) => `<button class="chip" data-${g}="${v}" aria-pressed="${this.s[g] === v}">${label}</button>`;
     const colleagues = mems.some((m) => m.model && !sameModel(m.model, this.ctx().who.model));
     return `<div class="tools${this.sticky ? ' stick' : ''}"><input class="search" id="room-search" type="search" placeholder="Search its memory, in its own words" value="${esc(this.s.query)}" aria-label="Search its memory">
-      <div class="chips">${chip('filter', 'all', 'All')}${heat ? chip('filter', 'warm', 'Warm from its hours') : ''}${chip('filter', 'lessons', 'Lessons')}${chip('filter', 'standing', 'Standing')}${chip('filter', 'asked', 'Asked about')}${chip('filter', 'quiet', 'Gone quiet')}${colleagues ? chip('filter', 'colleagues', 'By colleagues') : ''}</div>
+      <div class="chips">${chip('filter', 'all', 'All')}${fresh ? chip('filter', 'new', `New since you were here <span class="n">${fresh}</span>`) : ''}${heat ? chip('filter', 'warm', 'Warm from its hours') : ''}${chip('filter', 'lessons', 'Lessons')}${chip('filter', 'standing', 'Standing')}${chip('filter', 'asked', 'Asked about')}${chip('filter', 'quiet', 'Gone quiet')}${colleagues ? chip('filter', 'colleagues', 'By colleagues') : ''}</div>
       <div class="chips"><span class="sep">Order</span>${chip('sort', 'newest', 'Newest')}${chip('sort', 'oldest', 'Oldest')}${chip('sort', 'recalled', 'Most recalled')}${chip('sort', 'connected', 'Most connected')}${chip('sort', 'easiest', 'Easiest to reach')}</div>
       <div class="count">${all.length === mems.length ? `All ${plural(mems.length, 'memory', 'memories')}` : `${plural(all.length, 'memory', 'memories')} of ${mems.length.toLocaleString('en-US')}`}</div></div>
       <ul class="rows">${all.slice(0, this.s.shown).map((m) => this.row(m)).join('')}</ul>${all.length > this.s.shown ? '<div class="more-rows"></div>' : ''}

@@ -119,3 +119,48 @@ export const withAgent = (path) => {
   const [base, hash = ''] = path.split('#');
   return `${base}${base.includes('?') ? '&' : '?'}agent=${encodeURIComponent(AGENT)}${hash ? `#${hash}` : ''}`;
 };
+
+/* ---------- since you were last here ----------
+ * A visit is a stretch with the page open; a gap of under half an hour (moving between the log and the mind, a reload)
+ * is the same visit, so what's new stays new until you've been away. Kept in this browser only, for each mind: a
+ * convenience, never needed (with none, nothing is called new). */
+const AWAY = 30 * 60_000;
+const visitKey = (agent) => `mnemos.visit.${agent || 'agent'}`;
+export function visit(agent, now = Date.now()) {
+  let v = null;
+  try { v = JSON.parse(localStorage.getItem(visitKey(agent))); } catch { v = null; }
+  const fresh = !v || !v.seen || now - v.seen > AWAY;
+  const out = { since: fresh ? (v?.seen || 0) : (v.since || 0), seen: now };
+  const save = () => { try { localStorage.setItem(visitKey(agent), JSON.stringify({ since: out.since, seen: Date.now() })); } catch { /* private */ } };
+  save();
+  return { since: out.since, keep: save };
+}
+
+/* the notes it left that end in a question no one has answered under: what's waiting on the person */
+export function waiting(notes) {
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const root = (n) => { let x = n; for (let i = 0; i < 50 && x.replyTo && byId.has(x.replyTo); i++) x = byId.get(x.replyTo); return x.id; };
+  const last = new Map();
+  for (const n of notes) { const r = root(n), l = last.get(r); if (!l || Date.parse(n.at) >= Date.parse(l.at)) last.set(r, n); }
+  return [...last.values()].filter((n) => n.author === 'agent' && /\?\s*$/.test(n.text.trim()));
+}
+
+/* what's new for the person since `since` (ms), each with where it lives: [{ n, say, go }] */
+export function sinceThen(life, mems, since) {
+  // on a first visit nothing is new, but a question waiting is waiting all the same
+  const after = (t) => !!since && !!t && Date.parse(t) > since;
+  const ask = waiting(life.notes || []).length;
+  const unread = (life.notes || []).filter((n) => n.author === 'agent' && !n.read && after(n.at) && !/\?\s*$/.test(n.text.trim())).length;
+  const made = mems.filter((m) => after(m.born)).length;
+  const hours = (life.hours || []).filter((h) => after(h.end)).length;
+  const journal = (life.journal || []).filter((j) => after(j.at)).length;
+  const beliefs = (life.beliefs || []).filter((b) => after(b.revised) || after(b.born)).length;
+  return [
+    ask && { n: ask, say: ask === 1 ? 'a question waiting on you' : `${words(ask)} questions waiting on you`, go: 'notes', you: true },
+    unread && { n: unread, say: unread === 1 ? 'a note for you' : `${words(unread)} notes for you`, go: 'notes', you: true },
+    made && { n: made, say: plural(made, 'new memory', 'new memories'), go: 'new' },
+    hours && { n: hours, say: hours === 1 ? 'a quiet hour' : `${words(hours)} quiet hours`, go: 'hours' },
+    journal && { n: journal, say: journal === 1 ? 'a journal entry' : `${words(journal)} journal entries`, go: 'journal' },
+    beliefs && { n: beliefs, say: beliefs === 1 ? 'a belief changed' : `${words(beliefs)} beliefs changed`, go: 'beliefs' },
+  ].filter(Boolean);
+}

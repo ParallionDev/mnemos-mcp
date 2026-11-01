@@ -63,6 +63,16 @@ main{max-width:1180px;margin:0 auto;padding:28px 28px 96px}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
 .verify.stale .fresh{color:var(--ink-1)}
 
+/* since you were last here: one quiet object, what's new and where it lives; what's waiting on you leads, with its dot */
+.sincebar{margin-top:var(--s5);display:flex;flex-wrap:wrap;align-items:baseline;gap:6px var(--s4);padding:12px 16px;border-radius:var(--r);background:var(--surface-1)}
+.sincebar[hidden]{display:none}
+.sincebar .when{color:var(--ink-3);font-size:var(--t-small)}
+.sincebar .go{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;color:var(--ink-1);font-size:var(--t-small);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.sincebar .go:hover{border-bottom-color:var(--ink-3)}
+.sincebar .go:focus-visible{border-bottom-color:var(--focus)}
+.sincebar .go .unread{margin:0}
+.sincebar .quiet{color:var(--ink-3);font-size:var(--t-small)}
+
 /* the categories stay in reach as you read */
 .nav{position:sticky;top:0;z-index:4;margin-top:var(--s5);padding-top:var(--s2);background:var(--floor)}
 /* the categories ride in one rounded track; a raised marker glides to the open one (iOS's settling curve), while the
@@ -182,6 +192,7 @@ dialog .cap button:focus-visible{border-color:var(--focus);color:var(--ink-1)}
     <a class="to-mind" id="to-mind" href="../mind/" title="Its whole memory, every memory a cell and every link a fibre, live">Open the mind</a>
   </header>
   <div class="verify" id="verify" aria-live="polite"></div>
+  <section class="sincebar" id="sincebar" aria-label="Since you were last here" hidden></section>
   <nav class="nav" aria-label="What it holds"><div class="scroller" id="scroller"><div class="track" id="track"><span class="marker" id="marker" aria-hidden="true"></span><div class="tabs" role="tablist" id="tabs"></div></div></div></nav>
   <div class="cols">
     <div class="story">

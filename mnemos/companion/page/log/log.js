@@ -3,7 +3,8 @@
  * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
-import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent } from '../shared/words.js';
+import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent,
+  visit, sinceThen } from '../shared/words.js';
 
 const $ = (id) => document.getElementById(id);
 const nav = document.querySelector('.nav');
@@ -183,12 +184,13 @@ async function look() {
   }
   head();
   if (!room) start(); else { room.refresh(); margin(); placeMarker(room.s.tab, false); }
+  sincebar();
 }
 
 function start() {
   room = new Room({
     tabsEl: $('tabs'), bodyEl: $('body'), tabs: TABS, sticky: false,
-    ctx: () => ({ who: life.identity, life, mems, byId }),
+    ctx: () => ({ who: life.identity, life, mems, byId, since: V?.since || 0 }),
     hooks: {
       route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
       transition,
@@ -242,6 +244,34 @@ for (const el of [$('margin'), $('glance')]) el.addEventListener('click', (e) =>
 });
 $('full-close').addEventListener('click', () => $('full').close());
 $('full').addEventListener('click', (e) => { if (e.target === $('full')) $('full').close(); });
+
+/* ---------- since you were last here ---------- */
+
+let V = null;
+function sincebar() {
+  if (!life || life.missing) return;
+  if (!V) {
+    V = visit(life.identity.agentId);
+    setInterval(() => { if (!document.hidden) V.keep(); }, 30_000);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) V.keep(); });
+    addEventListener('pagehide', () => V.keep());
+  }
+  const items = sinceThen(life, mems, V.since), el = $('sincebar');
+  if (!V.since && !items.length) { el.hidden = true; return; }
+  // on a first visit there's no "since", only what's waiting, said plainly
+  const say = (x, k) => (!V.since && k === 0 ? x.say[0].toUpperCase() + x.say.slice(1) : x.say);
+  el.innerHTML = (V.since ? `<span class="when">${esc(`Since you were here, ${ago(Date.now() - V.since)}`)}</span>` : '')
+    + (items.length ? items.map((x, k) => `<button class="go" type="button" data-since="${x.go}">${x.you ? '<span class="unread" aria-hidden="true"></span>' : ''}${esc(say(x, k))}</button>`).join('')
+      : '<span class="quiet">nothing new</span>');
+  el.hidden = false;
+}
+$('sincebar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-since]'); if (!b || !room) return;
+  const go = b.dataset.since;
+  if (go === 'new') { room.s.filter = 'new'; room.s.sort = 'newest'; room.go({ tab: 'memories' }); }
+  else room.go({ tab: go });
+  document.querySelector('.nav')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+});
 
 /* ---------- the minds on this machine ---------- */
 
