@@ -11,6 +11,7 @@ import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, ques
   forPerson, temperature, tempWord, KIND, ASK, ASK_ORDER, RELATION, trailSentence, modelName, sameModel } from './words.js';
 
 import { telling, setTelling, canTell, refused } from './tell.js';
+import { herbariumOf, lifeOf, lifeWords, mountLife } from './specimens.js';
 
 const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours', settings: 'Settings' };
 const PAGE = 60;
@@ -86,6 +87,8 @@ export class Room {
     const draft = typingIn && this.bodyEl.querySelector(`[data-draft="${CSS.escape(typingIn[0])}"]`);
     if (draft) { draft.focus({ preventScroll: true }); draft.setSelectionRange(typingIn[1], typingIn[2]); }
     this.watchReading();
+    const plate = open && this.bodyEl.querySelector('.specimen canvas');
+    if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }) });
     const more = this.bodyEl.querySelector('.more-rows');
     if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.sticky ? this.bodyEl : null, rootMargin: '400px' }).observe(more);
   }
@@ -252,7 +255,17 @@ export class Room {
       m.recalls ? `came back in logged recall ${plural(m.recalls, 'time')}` : null, `tied to ${plural(m.ties.length, 'other memory', 'other memories')}`,
       m.state === 'dormant' ? 'gone quiet' : null].filter(Boolean).join(' · ');
     const link = this.hooks.mindLink?.(id);
+    const H = herbariumOf(mems), hi = byId.get(id), hc = H.cells[hi], n2 = (v) => (v ?? 0).toFixed(2);
+    const readings = [['strength', n2(hc.strength)], ['stability', n2(hc.stability)], ['reach', n2(hc.accessibility)], ['links', hc.links], ['recalled', `${hc.accessCount}×`]];
     return `<div class="detail"><button class="back" data-back="1">← ${LABEL[this.s.tab] === 'Memories' ? 'All memories' : `Back to ${LABEL[this.s.tab].toLowerCase()}`}</button>
+      <figure class="specimen"><canvas role="img" aria-label="${esc(lifeWords(H, hi, lifeOf(H, hi)))}, drawn as a specimen"></canvas>
+        <figcaption><span class="life">${esc(lifeWords(H, hi, lifeOf(H, hi)))}</span>
+          <span class="readings">${readings.map(([k, v]) => `<span><i>${k}</i> ${v}</span>`).join('')}</span>
+          <details class="key"><summary>How to read the figure</summary><ul>
+            <li>Its size is how strongly it's kept. Round, it's a lesson; a drop is an experience, its front toward what it became.</li>
+            <li>A spine for each link, as long as the link is strong${hc.links > 64 ? ` (its strongest 64 of ${hc.links})` : ''}. Barred, it supports; barbed, it contradicts. The stalk joins an experience to its lesson.</li>
+            <li>A ring for each doubling of the times it came back. The centre grows as it settles. The threads around it reach as far as it's easy to reach.</li>
+            <li>Drawn dashed and hollow, it has gone quiet.</li></ul></details></figcaption></figure>
       <div class="meta">${longDay(d)}, ${clock(d)} · ${esc(sign)}</div>
       <div class="words">${esc(m.content)}</div>
       ${m.impact ? `<div class="changed"><span class="label">What it changed, in its words</span><p>${esc(m.impact)}</p></div>` : ''}

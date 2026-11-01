@@ -87,6 +87,18 @@
 .back:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .back:active{color:var(--ink-2)}
 .detail{padding-top:0}
+/* the memory up close, engraved as the herbarium draws it (specimens.js): on the surface itself, no card */
+.specimen{margin:var(--s4) 0 var(--s2)}
+.specimen canvas{display:block;width:100%}
+.specimen figcaption{margin-top:var(--s2);display:grid;gap:6px;font-size:var(--t-micro);color:var(--ink-3);line-height:1.5}
+.specimen .life{color:var(--ink-2);font-size:var(--t-small)}
+.specimen .readings{display:flex;flex-wrap:wrap;gap:2px var(--s4);font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.specimen .readings i{font-style:normal;color:var(--ink-4);margin-right:3px}
+.specimen .key summary{cursor:pointer;width:max-content;color:var(--ink-3);list-style:none;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.specimen .key summary::-webkit-details-marker{display:none}
+.specimen .key summary:hover{color:var(--ink-1)}
+.specimen .key summary:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
+.specimen .key ul{margin-top:var(--s2);padding-left:1.1em;display:grid;gap:4px;max-width:60ch;color:var(--ink-3)}
 .detail > .meta{margin-top:var(--s4);color:var(--ink-3);line-height:1.6}
 .detail .words{margin-top:var(--s4);max-width:66ch;font:400 16px/1.7 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
 .detail .changed{margin-top:var(--s5);padding:14px 16px;border-radius:var(--r-s);background:var(--card)}

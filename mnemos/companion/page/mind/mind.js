@@ -24,6 +24,7 @@ import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
 import { bendRim } from '../shared/glass.js';
+import { herbariumOf, Loupe } from '../shared/specimens.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
   forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -558,6 +559,28 @@ function nearWanted(now) {
   return closeTo = bd < cam.goal.dist * 0.6 ? best : -1;
 }
 
+/* ---------- up close: the memory open, pressed ----------
+ * Once the camera has come close to the memory open, a loupe settles over its cell and its specimen engraves itself,
+ * its axis turned toward the memory it was distilled from or into. Gone again when you go back out, or when the
+ * memory leaves the screen or slips under the reading room. */
+let pressed = -1, pressedAt = 0, partner = -1;
+function press(now) {
+  if (selected < 0 || !mems.length) { pressed = -1; loupe.of(null, -1); return; }
+  if (selected !== pressed) {
+    pressed = selected; pressedAt = now;
+    const H = herbariumOf(mems), mi = memAt.get(D.cells[selected].fullId) ?? -1;
+    loupe.of(H, mi);
+    const l = mi >= 0 ? H.cells[mi].inc.find((x) => x.rel === 'distilled_into') : null;
+    partner = l ? cellOf.get(mems[l.s === mi ? l.t : l.s].id) ?? -1 : -1;
+  }
+  if (sheetOpen && innerWidth <= 860) { loupe.hide(); return; }    // the reading room covers the whole screen
+  const s = project(P[selected]), covered = sheetOpen && innerWidth > 860 ? Math.min(SHEET, innerWidth) + 20 : 0;
+  const m = $('loupe').offsetWidth * 0.3;
+  if (!s || cam.dist > HOME * 0.5 || now - pressedAt < 450 || s.x < m || s.y < m || s.x > innerWidth - covered - m || s.y > innerHeight - m) { loupe.hide(); return; }
+  const q = partner >= 0 ? project(P[partner]) : null;
+  if (loupe.place(s.x, s.y, q ? Math.atan2(q.y - s.y, q.x - s.x) : 0, now)) animating = true;
+}
+
 /* ---------- resolution and the loop ---------- */
 
 let post = null, heroSeen = true;
@@ -622,6 +645,7 @@ function frame(now) {
   if ((frames & 3) === 0) pointing();
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
   paint(now);
+  press(now);                                                       // after paint: an engraving keeps the loop awake
   // a memory open is always drawn finely: whatever dropped its fine version (a redraw, a lighter budget, a page that
   // opened straight onto it), it's asked for again
   const want = nearWanted(now);
@@ -781,6 +805,8 @@ function renderPaper() {
 
 /* ---------- the reading room, as a drawer beside the mind ---------- */
 
+const loupe = new Loupe($('loupe'));
+bendRim($('loupe').querySelector('.glass'), { pad: 16, radius: $('loupe').offsetWidth / 2 });
 bendRim(document.querySelector('#room > .glass'), { pad: 16, radius: matchMedia('(max-width:600px)').matches ? 18 : 22 });
 let sheetOpen = false;
 const room = new Room({

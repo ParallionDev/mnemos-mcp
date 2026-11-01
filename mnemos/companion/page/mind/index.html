@@ -172,6 +172,21 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .paper .promise{margin-top:var(--s5);color:var(--p-ink-4);font-size:var(--t-micro);max-width:80ch}
 
 /* ── the reading room: everything it holds, clean and readable, joined to the mind ── */
+/* The loupe: up close, a memory open is pressed. A lens of the same glass settles over its cell and the specimen
+   engraves itself inside (../shared/specimens.js). It arrives by growing, never by fading: glass is shape, and a
+   fading parent would switch the glass's view of the mind off while it faded. */
+.loupe{--loupe:300px;position:fixed;left:0;top:0;width:var(--loupe);height:var(--loupe);z-index:3;pointer-events:none;border-radius:50%;
+  scale:0;visibility:hidden;transition:scale .45s var(--sheet-ease),visibility 0s .45s}
+.loupe.on{scale:1;visibility:visible;transition:scale .8s var(--sheet-ease)}
+.loupe::before{content:"";position:absolute;inset:0;border-radius:50%;box-shadow:0 18px 50px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.25)}
+.loupe > .glass{position:absolute;inset:-16px;clip-path:inset(16px round 50%);background:var(--glass-lift);
+  -webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--bend,) var(--glass-see)}
+.loupe::after{content:"";position:absolute;inset:0;z-index:2;border-radius:50%;padding:var(--hl);
+  background:linear-gradient(180deg,var(--rim-top),var(--rim-side) 30%,var(--rim-side) 70%,var(--rim-foot));
+  -webkit-mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.loupe canvas{position:absolute;inset:0;width:100%;height:100%;z-index:1}
+@media (max-width:600px){.loupe{--loupe:220px}}
+
 /* A pane of dark glass, floating just off the window's edge: the mind goes on glowing through it, softened, and
    its lines bend as they pass under the rim. Its cards are tone on the glass, never panes of their own. */
 .room{--g-pad:16px;--g-r:22px;position:fixed;top:10px;right:10px;bottom:10px;width:min(var(--sheet),calc(100vw - 20px));z-index:6;border-radius:var(--g-r);
@@ -220,8 +235,8 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (max-width:600px){.room{--g-r:18px;top:8px;right:8px;bottom:8px;width:calc(100vw - 16px)}.room-head{padding:18px 18px 0}.room-body{padding:var(--s4) 18px var(--s8)}}
 /* asked for less see-through, or a browser without it: the same surfaces, solid */
-@media (prefers-reduced-transparency:reduce){.room > .glass,.ask::before,.ask-list,.pill{-webkit-backdrop-filter:none;backdrop-filter:none;background:#0e0e12}}
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.room > .glass,.ask::before,.ask-list,.pill{background:#0e0e12}}
+@media (prefers-reduced-transparency:reduce){.loupe > .glass,.room > .glass,.ask::before,.ask-list,.pill{-webkit-backdrop-filter:none;backdrop-filter:none;background:#0e0e12}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.loupe > .glass,.room > .glass,.ask::before,.ask-list,.pill{background:#0e0e12}}
 </style>
 </head>
 <body>
@@ -263,6 +278,8 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
 <section class="paper" id="paper" aria-label="What the hour left">
   <div class="wrap" id="paper-wrap"></div>
 </section>
+
+<div class="loupe" id="loupe" aria-hidden="true"><div class="glass"></div><canvas></canvas></div>
 
 <aside class="room sheet" id="room" role="dialog" aria-modal="false" aria-labelledby="room-title" hidden>
   <div class="glass" aria-hidden="true"></div>
