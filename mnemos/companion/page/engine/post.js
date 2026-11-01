@@ -74,10 +74,10 @@ void main() {
 }`;
 
 export class Post {
-  constructor(gl, W, H, levels = 7) {
+  constructor(gl, W, H, levels = 7, { accum = 'RGBA32F' } = {}) {
     this.gl = gl;
     this.W = W; this.H = H;
-    this.accum = target(gl, W, H, 'RGBA32F');
+    this.accum = target(gl, W, H, accum);
     this.down = [];
     let w = W, h = H;
     for (let i = 0; i < levels; i++) {
@@ -94,6 +94,7 @@ export class Post {
   dispose() {
     const { gl } = this;
     for (const t of [this.accum, ...this.down, ...this.up]) { gl.deleteFramebuffer(t.fbo); gl.deleteTexture(t.tex); }
+    for (const p of [this.downP, this.upP, this.finalP]) gl.deleteProgram(p.p);   // a window resized many times made many
   }
 
   clear() {

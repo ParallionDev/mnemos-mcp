@@ -43,10 +43,10 @@ const num = (k, d) => (params.has(k) ? Number(params.get(k)) : d);
  * a lens that only whispers at a distance and still softens what's behind an opened memory, a little glow, no colour
  * fringing, a finer grain, and the links at rest quieter, so they read when lit. */
 const LENS = { pixels: num('pixels', 5.2e6), blur: num('blur', 0.25), blurClose: num('blurclose', 0.5), bloom: num('bloom', 0.4), ca: num('ca', 0),
-  grain: num('grain', 0.5), skin: num('skin', 1), threads: num('threads', 0.45) };
+  grain: num('grain', 0.5), skin: num('skin', 1), threads: num('threads', 0.45), pad: num('pad', 0.75) };
 LOOK.rest[0] *= LENS.skin; LOOK.rest[3] *= LENS.threads;
 const SHEET = 560;
-const TURN_FOR = 45_000;                       // how long it keeps turning after you last touched it
+const TURN_FOR = 30_000;                       // how long it keeps turning after you last touched it
 const TABS = ['memories', 'beliefs', 'questions', 'journal', 'notes', 'hours'];
 const json = async (path) => { const r = await fetch(withAgent(path), { cache: 'no-store' }); if (!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const store = {
@@ -57,8 +57,8 @@ const store = {
 /* how many points this screen draws smoothly: a phone or a small machine far fewer than a desk; once a screen has
  * shown what it can do, the page remembers (a convenience: without it the guess is used again) */
 const small = innerWidth < 760 || (navigator.deviceMemory || 8) <= 4;
-const BUDGET_KEY = 'mnemos.mind.budget.v2';
-let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1_200_000 : 3_200_000);
+const BUDGET_KEY = 'mnemos.mind.budget.v3';      // v3: the budget is counted truly (a fibre by its length)
+let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1_200_000 : 2_400_000);
 
 /* ---------- the renderer ---------- */
 
@@ -118,7 +118,7 @@ function drawIn(data) {
     const tune = Object.fromEntries(['gap', 'together'].filter((k) => params.has(k)).map((k) => [k, Number(params.get(k))]));
     return inWorker({ tune, cells: data.cells.map((c) => ({ id: c.id, lesson: c.lesson, strength: c.strength, stability: c.stability, recalls: c.recalls, acc: c.accessibility })),
       links: data.links, known: params.has('relayout') ? {} : store.get(LAYOUT_KEY()) || {}, budget,
-      glyphs: GLYPHS, metrics: atlas.metrics, mid: MID });
+      glyphs: GLYPHS, metrics: atlas.metrics, mid: MID, drawW: DRAW_W });
   }
 }
 
@@ -128,6 +128,9 @@ function drawIn(data) {
  * where it sits, the same shape it has in the whole (its streams of chance are its own), and its light version is
  * dimmed to nothing, which costs nothing to draw. A few dozen memories finely, not thousands. */
 const NEAR_MOST = 48;
+// at rest a link is strung across the mind once it's come back more than once (./build.js says why); `strung` marks them
+const DRAW_W = 0.4;
+let strung = new Uint8Array(0);
 let SH = null, near = null, nearAsked = -1, nearPending = false, nearFailed = -1e9;
 // the fine version fades in over the light one, and out again when let go, so the change of detail is never a jump
 const NEAR_FADE = 450;
@@ -170,7 +173,7 @@ async function build(data) {
   const out = await drawIn(data);
   const worker = Math.round(performance.now() - t0), t1 = performance.now();
   // a drawing replacing one on screen arrives a slice at a time, while the old one goes on; the first is sent at once
-  const ready = tissue ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length }) : null;
+  const ready = tissue ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length, blocks: out.blocks }) : null;
   apply(data, out, { worker, ...(ready ? { sent: Math.round(performance.now() - t1) } : {}) }, ready);
   keepDrawing(data, out);
 }
@@ -186,7 +189,7 @@ function apply(data, out, took = {}, ready = null) {
   store.set(LAYOUT_KEY(), Object.fromEntries(D.cells.map((c, i) => [c.id, out.places[i].map((x) => Math.round(x * 1000) / 1000)])));
   T('aStore');
   const t2 = performance.now();
-  const next = ready || new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
+  const next = ready || new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL, blocks: out.blocks });
   // the drawing it replaces is let go a moment later, not in the frame that swaps them: freeing a few hundred
   // megabytes of GPU memory there held that frame up
   if (tissue) { const old = tissue; setTimeout(() => old.dispose(), 1200); }
@@ -203,6 +206,7 @@ function apply(data, out, took = {}, ready = null) {
   born = D.cells.map((c) => Date.parse(c.born));
   acc = D.cells.map((c) => c.accessibility);
   nbrs = Array.from({ length: N }, () => []);
+  strung = Uint8Array.from(D.links, (l) => (l.rel === 'co_activated' && l.w < DRAW_W ? 0 : 1));
   D.links.forEach((l, li) => { nbrs[l.s].push([l.t, l.w, li]); nbrs[l.t].push([l.s, l.w, li]); });
   glow = new Float32Array(N); flash = new Float32Array(N); aim = new Float32Array(N); read = new Float32Array(N);
   LF = new Float32Array(NL); LA = new Float32Array(NL); LT = new Float32Array(NL); LR = new Float32Array(NL);
@@ -227,7 +231,7 @@ function apply(data, out, took = {}, ready = null) {
  * second), and the page opens on it at once. When the memory has changed since, the kept one still opens the page,
  * and a fresh one is made behind it and takes its place. Kept with the code's own version and this screen's budget: a
  * drawing made by other code, or for another screen, is made again. A convenience only; without it, the page draws. */
-const DRAWING_V = '2026-11-01.1';   // the regions set apart (and, before, the three-shape atlas)
+const DRAWING_V = '2026-11-01.6';   // once-only links unstrung at rest; lines and bodies by blocks of space; regions apart
 const kept = (() => {
   let opening = null;
   const db = () => opening || (opening = new Promise((res, rej) => {
@@ -245,12 +249,18 @@ const kept = (() => {
   return { get: (k) => call('readonly', (st) => st.get(k)), put: (k, v) => call('readwrite', (st) => st.put(v, k)) };
 })();
 const drawingKey = () => `${L.identity.agentId || AGENT || 'agent'}`;
+const KEEP_EVERY = 10 * 60_000;
+let keptAt = -Infinity;
 function keepDrawing(data, out) {
   // when the page is idle and no one's moving the mind, and never on the page's thread: copying the points here took
   // a frame or more (150 ms as an array, 90 to 130 as a Blob)
+  // Kept at most every KEEP_EVERY: a drawing a few minutes old still opens the page at once, and is made fresh behind
+  // it; writing a few hundred megabytes at every redraw was work for nothing.
+  if (performance.now() - keptAt < KEEP_EVERY) return;
   const version = memVersion, at = Date.now();
   const keep = () => {
     if (performance.now() - lastNav < 2000 || dragging || fling) return void setTimeout(keep, 1500);
+    keptAt = performance.now();
     // handed to a worker of its own, the points moved rather than copied (the GPU has them by now): ./keep.js
     try {
       const w = new Worker(new URL('./keep.js', import.meta.url));
@@ -448,7 +458,10 @@ function pointAt(i) {
   }
   if (i < 0 || i >= N) return;
   fAim[i] = 1; aimed.push(i);
-  for (const [j, w, li] of nbrs[i]) { fAim[j] = Math.max(fAim[j], 0.45 + 0.4 * w); aimed.push(j); lAim[li] = 0.55 + 0.45 * w; aimedLinks.push(li); }
+  // only ties that can be seen as lines: under the hand, those strung at rest; a memory open, those its fine version
+  // draws (its strongest, NEAR_MOST in all). A tie lit without a line to it reads as a stray light, not a connection
+  const ties = i === selected ? nbrs[i].slice().sort((a, b) => b[1] - a[1]).slice(0, NEAR_MOST - 1) : nbrs[i].filter(([, , li]) => strung[li]);
+  for (const [j, w, li] of ties) { fAim[j] = Math.max(fAim[j], 0.45 + 0.4 * w); aimed.push(j); lAim[li] = 0.55 + 0.45 * w; aimedLinks.push(li); }
 }
 function hover(i) {
   if (selected >= 0) i = -1;                       // with a memory open, moving around stays calm: pointing lights nothing
@@ -685,7 +698,7 @@ function resize() {
   if (canvas.width === w && canvas.height === h && post) return;
   canvas.width = w; canvas.height = h;
   if (post) post.dispose();
-  post = new Post(gl, w, h);
+  post = new Post(gl, w, h, 7, { accum: params.get('accum') === '16' ? 'RGBA16F' : 'RGBA32F' });
   wake();
 }
 new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) wake(); }, { threshold: 0.02 }).observe($('hero'));
@@ -709,10 +722,13 @@ function frame(now) {
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
   if (!animating && settled && spin < 0.01 && !meet && !fling && frames > 2) { looping = false; return; }
-  const gap = !animating && !dragging && now - lastInput > 1500 ? 42 : 0;     // the slow turn alone: 24 frames are enough
-  if (gap && now - last < gap) { requestAnimationFrame(frame); return; }
+  // never more than 60 frames a second, whatever the screen offers: a 120 or 240 Hz screen asks for two to four times
+  // that, which for a mind moving this softly is heat and nothing you'd see. The slow turn alone, 15: it moves less
+  // than a pixel a frame, and from across the room every frame is the whole mind, the costliest frame there is
+  const gap = !animating && !dragging && now - lastInput > 1500 ? 66 : 1000 / 60;
+  if (now - last < gap - 1.5) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
-  if (!gap && now - last < 250 && now - built.at > 1500) {
+  if (gap < 40 && now - last < 250 && now - built.at > 1500) {
     slow.push(now - last);
     if (slow.length >= 90) { slow.sort((a, b) => a - b); if (slow[45] > 24) lighten(); slow = []; }
   }
@@ -793,12 +809,31 @@ function frame(now) {
   const blurK = mix(14 * LENS.blur, 52 * LENS.blurClose, close * close) * (canvas.height / 804);
   post.clear();
   const optics = { view: viewM, proj, focalPx: canvas.height / 2 / Math.tan(FOV / 2), focus: length(sub(cam.target, eye)), blurK, near: 0.02,
-    fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close), ...LOOK };
+    fade: [0.1, 0.34], cocMax: canvas.height * 0.05, cull: mix(0.0002, 0.0016, close), pad: LENS.pad, ...LOOK };
+  const q1 = gpuBegin();
   tissue.draw(post.accum, optics);
   if (leaving) leaving.tissue.draw(post.accum, optics);
   if (near) near.tissue.draw(post.accum, optics);
+  gpuEnd(q1, 'points'); gpuPoll();
+  const q2 = gpuBegin();
   post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
+  gpuEnd(q2, 'finish');
   requestAnimationFrame(frame);
+}
+
+/* ---------- what the frame costs the GPU, for measuring (?gpu): milliseconds drawing the points, and finishing ---------- */
+const gpuT = params.has('gpu') ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
+let gpuQ = [], gpuMs = {};
+function gpuBegin() { if (!gpuT) return null; const q = gl.createQuery(); gl.beginQuery(gpuT.TIME_ELAPSED_EXT, q); return q; }
+function gpuEnd(q, label) { if (q) { gl.endQuery(gpuT.TIME_ELAPSED_EXT); gpuQ.push([q, label]); } }
+function gpuPoll() {
+  if (!gpuT) return;
+  gpuQ = gpuQ.filter(([q, label]) => {
+    if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) return true;
+    if (!gl.getParameter(gpuT.GPU_DISJOINT_EXT)) (gpuMs[label] ||= []).push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6);
+    gl.deleteQuery(q);
+    return false;
+  });
 }
 
 /* ---------- what the frame says (third person; only its own words say "I") ---------- */
@@ -1010,7 +1045,7 @@ function bindPage() {
 /* ---------- live: the store, looked at again ---------- */
 
 let lastMade = null, grown = false, lastRedraw = performance.now();
-const REDRAW_EVERY = 90_000;
+const REDRAW_EVERY = 120_000, LINKS_EVERY = 10 * 60_000;
 async function look(now = false) {
   if (!D) return;                                            // nothing drawn yet: the first drawing reads what it needs
   if (document.hidden && !now && !building && L.identity.agentId && telling(L.identity.agentId)) {
@@ -1034,7 +1069,12 @@ async function look(now = false) {
   if ((await readMemories()) || grown) {
     const shaped = shape(mems);
     const before = new Set(D.cells.map((c) => c.fullId));
-    if (shaped.cells.length !== D.cells.length || shaped.links.length !== D.links.length || shaped.cells.some((c) => !before.has(c.fullId))) {
+    // a new memory is drawn in within REDRAW_EVERY. New links between memories already drawn wait for the next
+    // redraw, or LINKS_EVERY: recall makes them all the time, and redrawing the whole mind for each, every minute and
+    // a half while you talked to it, was most of what this page cost
+    const cellsMoved = shaped.cells.length !== D.cells.length || shaped.cells.some((c) => !before.has(c.fullId));
+    const linksMoved = !cellsMoved && shaped.links.length !== D.links.length;
+    if (cellsMoved || (linksMoved && performance.now() - lastRedraw > LINKS_EVERY)) {
       // a redraw costs a few seconds of work, so a growing mind is drawn again at most every REDRAW_EVERY, and never
       // behind other windows; until then what's new waits, and arrives white-hot when it's drawn
       if (performance.now() - lastRedraw < REDRAW_EVERY || document.hidden) grown = true;
@@ -1045,8 +1085,9 @@ async function look(now = false) {
         wake();
       }
     } else {
+      // the same memories: what each is now (how easy to reach, gone quiet) is taken up; the links stay the ones drawn
       grown = false;
-      D = { ...shaped, cells: shaped.cells };
+      D = { ...shaped, cells: shaped.cells, links: linksMoved ? D.links : shaped.links };
       acc = D.cells.map((c) => c.accessibility);
     }
   }
@@ -1217,7 +1258,7 @@ setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you w
 listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
-  get looping() { return looping; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get looping() { return looping; }, get frames() { return frames; }, gpu: () => { const o = {}; for (const [k, v] of Object.entries(gpuMs)) { v.sort((a, b) => a - b); o[k] = { n: v.length, p50: +v[v.length >> 1].toFixed(2), p90: +v[Math.floor(v.length * 0.9)].toFixed(2) }; } gpuMs = {}; return o; }, get drawn() { return tissue ? [tissue.drawn, tissue.count] : null; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
   // what's lit right now, brightest first: for checking the light against what should be lit
   get lit() { const o = []; for (let i = 0; i < N; i++) if (shownG[i] + shownF[i] > 0.12) o.push({ i, g: +shownG[i].toFixed(2), f: +shownF[i].toFixed(2), fc: +fc[i].toFixed(2), heat: +heat[i].toFixed(2), arrived: arrived.has(D.cells[i].fullId), fire: fireAt[i] >= 0, sel: i === selected, tie: nbrs[selected]?.some(([j]) => j === i) || false }); return o.sort((a, b) => b.g + b.f - a.g - a.f); },
   get litLinks() { const o = []; for (let li = 0; li < NL; li++) { const a = Math.max(LA[li], 0); if (a > 0.05 || lc[li] > 0.05) o.push({ li, s: D.links[li].s, t: D.links[li].t, LA: +LA[li].toFixed(2), LF: +LF[li].toFixed(2), lc: +lc[li].toFixed(2), heat: +linkHeat[li].toFixed(2), at: linkAt[li] >= 0 }); } return o; },

@@ -163,8 +163,10 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
     }
   }
 
-  /* ---------- the fibres: one per link, the sender's axon to a bouton on the receiver ---------- */
+  /* ---------- the fibres: one per link, the sender's axon to a bouton on the receiver ----------
+   * A link marked `bare` keeps its place (and its index) but is drawn without a fibre: the page decides which. */
   const fibres = data.links.map((l, li) => {
+    if (l.bare) return null;
     rnd = own(linkKey(l, li), 7);
     const a = cells[l.s], b = cells[l.t];
     // the axon leaves the sender's body at its hillock; the bouton lands on the receiver's body, on the side
@@ -178,7 +180,7 @@ export function anatomy(data, { seed = 11, detail = 1, reach = 1, fibre = 0.0024
     const P = path([from, add(from, scale(a.hillock, lead)), add(add(mixv(from, land, 0.5), bow), scale(rnd.dir(), span * 0.025)),
       add(land, scale(toward, lead)), land], 12);
     return { li, P, len: P.length, land };
-  });
+  }).filter(Boolean);
   for (const f of fibres) {
     strand(f.P, fibre * 1.25, fibre, PART.FIBRE, { link: f.li, cell: data.links[f.li].s });
     // varicosities: beads along the axon, closer together the stronger the link

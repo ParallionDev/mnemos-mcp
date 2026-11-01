@@ -23,15 +23,19 @@ const inkOf = (l) => [INK.skin, INK.nucleus, INK.dendrite, INK.fibre, INK.bouton
 const PACK = 0.34;                                   // drawn closer than laid out, so arbours and fibres meet as in tissue
 // what each part costs, in points at full detail, measured on a real mind (2,097 memories, 10,825 links): a body's
 // membrane and granules, its nucleus, the spines on its boughs, the boughs themselves; and a link's fibre, and its bouton
-const COST = { skin: 2680, core: 347, spine: 517, bough: 343, fibre: 113, bouton: 7 };
+// points per memory for each part at full detail; a fibre's are per unit of its length (its strokes and its beads), and
+// its bouton's are its own
+const COST = { skin: 2680, core: 347, spine: 517, bough: 343, fibre: 49, bouton: 7 };
 
 /* how to spend a budget of points on this mind. The lines come first: a bough or a fibre laid with fewer strokes
  * breaks into beads, so they keep full detail down to a floor. What gives is what the eye can't count at this size:
  * a membrane's points (each grows as they thin, so it keeps its glow), then its spines and nucleus, and the lines
  * last, never below the floor. A small mind gets everything back, in the opposite order. */
-function spend(budget, n, nl) {
+function spend(budget, n, nl, reach) {
+  // (reach: how far the drawn fibres run, all together: a fibre's points are its length, and a mind set out in
+  // regions has long ones; counted per fibre instead, the budget came out a third over)
   const cost = (o) => n * (COST.skin * o.skin + COST.core * o.core + COST.spine * o.spine + COST.bough * o.strand)
-    + nl * (COST.fibre * o.strand + COST.bouton);
+    + reach * COST.fibre * o.strand + nl * COST.bouton;
   const o = { strand: 1, spine: 0.4, core: 0.4, skin: 0.12 };
   const fit = (key, lo, hi) => {                     // move one part to land on the budget, within its bounds
     const without = cost({ ...o, [key]: 0 }), per = cost({ ...o, [key]: 1 }) - without;
@@ -305,14 +309,21 @@ function work(job) {
   const MID = job.mid || [0, 1, 2].map((d) => places.reduce((a, p) => a + p[d], 0) / (places.length || 1));
   const drawn = cells.map((c, i) => ({ kind: c.lesson ? 'procedural' : 'episodic', strength: c.strength, stability: c.stability,
     p: [0, 1, 2].map((d) => MID[d] + (places[i][d] - MID[d]) * PACK) }));
-  const parts = spend(budget, Math.max(1, cells.length), links.length);
-  const A = anatomy({ cells: drawn, links }, { strand: parts.strand, spine: parts.spine, skin: parts.skin, core: parts.core, reach: 0.75 });
+  // At rest a link is drawn once it has come back more than once: recalled together once, it's the faintest tie there
+  // is, two of every three links, and as fibres it was half of all the points (and most of the tangle). It's still a
+  // link (it lights, and an opened memory draws all of its ties finely); it just isn't strung across the mind at rest.
+  const shown = links.map((l) => (l.rel === 'co_activated' && l.w < (job.drawW ?? 0.4) ? { ...l, bare: true } : l));
+  const strung = shown.filter((l) => !l.bare);
+  const reach = strung.reduce((a, l) => a + Math.hypot(drawn[l.s].p[0] - drawn[l.t].p[0], drawn[l.s].p[1] - drawn[l.t].p[1], drawn[l.s].p[2] - drawn[l.t].p[2]), 0);
+  const parts = spend(budget, Math.max(1, cells.length), strung.length, reach);
+  const A = anatomy({ cells: drawn, links: shown }, { strand: parts.strand, spine: parts.spine, skin: parts.skin, core: parts.core, reach: 0.75 });
   const glyph = (ch) => glyphs[ch];
-  const packed = pack(A.points, glyph, metrics, inkOf);
+  // laid in by blocks of space, so the page can leave out what the camera can't see
+  const packed = pack(A.points, glyph, metrics, inkOf, { blocks: 160 });
   const n = A.cells.length, R = new Float32Array(n), P = new Float32Array(n * 3), apex = new Float32Array(n * 3), hillock = new Float32Array(n * 3);
   const incoming = new Uint16Array(n), degree = new Uint16Array(n);
   for (const l of links) { incoming[l.t]++; degree[l.t]++; degree[l.s]++; }
   A.cells.forEach((c, i) => { R[i] = c.R; P.set(c.P, i * 3); apex.set(c.apex, i * 3); hillock.set(c.hillock, i * 3); });
-  postMessage({ data: packed.data, count: packed.count, R, P, apex, hillock, incoming, degree, places, mid: MID, fresh, laidOut, detail: parts,
-    ms: { layout: Math.round(tLayout), total: Math.round(performance.now() - t0) } }, [packed.data.buffer, R.buffer, P.buffer, apex.buffer, hillock.buffer]);
+  postMessage({ data: packed.data, count: packed.count, blocks: packed.blocks, R, P, apex, hillock, incoming, degree, places, mid: MID, fresh, laidOut, detail: parts,
+    ms: { layout: Math.round(tLayout), total: Math.round(performance.now() - t0) } }, [packed.data.buffer, packed.blocks.buffer, R.buffer, P.buffer, apex.buffer, hillock.buffer]);
 }
