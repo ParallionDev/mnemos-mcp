@@ -35,7 +35,7 @@ const LIVE_EVERY = 20_000;                     // life.json is small; memories.j
 const DIM = 0.3;                               // the mind at rest: present, not lit (the damask's sheen)
 const LOOK = { rest: [0.4, 0.55, 0.22, 0.8], light: [0.85, 1.3, 0.55, 0.8], back: 0.45 };
 const SHEET = 560;
-const TURN_FOR = 120_000;                      // how long it keeps turning after the last thing that happened
+const TURN_FOR = 45_000;                       // how long it keeps turning after you last touched it
 const TABS = ['memories', 'beliefs', 'questions', 'journal', 'notes', 'hours'];
 const json = async (path) => { const r = await fetch(withAgent(path), { cache: 'no-store' }); if (!r.ok) throw new Error(`${path}: ${r.status}`); return r.json(); };
 const store = {
@@ -357,7 +357,7 @@ function resize() {
 new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) wake(); }, { threshold: 0.02 }).observe($('hero'));
 
 /* The loop runs only while something moves: light travelling, a memory arriving, a hand on it, the camera settling.
- * The slow turn goes on for two minutes after the last of those, at thirty frames a second, then eases to a stop, and
+ * The slow turn goes on for 45 seconds after you last touched it, at 24 frames a second, then eases to a stop, and
  * the loop sleeps until something wakes it. Under the paper the mind isn't seen, so it doesn't draw. While it runs
  * it watches its own frames: if they come slowly the drawing is remade at half the points (twice at most), and the
  * budget that worked is remembered for this screen. */
@@ -375,7 +375,7 @@ function frame(now) {
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
   if (!animating && settled && spin < 0.01 && !meet && frames > 2) { looping = false; return; }
-  const gap = !animating && !dragging && now - lastInput > 1500 ? 33 : 0;
+  const gap = !animating && !dragging && now - lastInput > 1500 ? 42 : 0;     // the slow turn alone: 24 frames are enough
   if (gap && now - last < gap) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
   if (!gap && now - last < 250 && now - built.at > 1500) {
@@ -630,7 +630,8 @@ function bindPage() {
 
 /* ---------- live: the store, looked at again ---------- */
 
-let lastMade = null;
+let lastMade = null, grown = false, lastRedraw = performance.now();
+const REDRAW_EVERY = 90_000;
 async function look(now = false) {
   if (document.hidden && !now && !building && L.identity.agentId && telling(L.identity.agentId)) {
     // behind other windows it draws nothing, but still tells you when it asks you something
@@ -650,14 +651,21 @@ async function look(now = false) {
   if (!life || life.missing) return;
   const newHour = life.hours[0] && (!L.hours[0] || life.hours[0].id !== L.hours[0].id);
   L = life; lastMade = life.made;
-  if (await readMemories()) {
+  if ((await readMemories()) || grown) {
     const shaped = shape(mems);
     const before = new Set(D.cells.map((c) => c.fullId));
     if (shaped.cells.length !== D.cells.length || shaped.links.length !== D.links.length || shaped.cells.some((c) => !before.has(c.fullId))) {
-      building = build(shaped); await building; building = null;
-      for (const c of D.cells) if (!before.has(c.fullId)) arrived.set(c.fullId, performance.now());
-      stir();
+      // a redraw costs a few seconds of work, so a growing mind is drawn again at most every REDRAW_EVERY, and never
+      // behind other windows; until then what's new waits, and arrives white-hot when it's drawn
+      if (performance.now() - lastRedraw < REDRAW_EVERY || document.hidden) grown = true;
+      else {
+        grown = false; lastRedraw = performance.now();
+        building = build(shaped); await building; building = null;
+        for (const c of D.cells) if (!before.has(c.fullId)) arrived.set(c.fullId, performance.now());
+        wake();
+      }
     } else {
+      grown = false;
       D = { ...shaped, cells: shaped.cells };
       acc = D.cells.map((c) => c.accessibility);
     }
@@ -700,15 +708,19 @@ async function listen() {
     if (!first) for (const e of fresh) light(e);
   } catch { /* the next look tries again */ } finally { pulsing = false; }
 }
+let lastMeet = -1e9;
 function light(e) {
-  if (e.kind === 'kept') look(true);                       // a new memory: read it in, and it arrives white-hot
+  // a new memory is read in with the next look, and drawn in with the next redraw: never one redraw a memory
   const now = performance.now(), cells = e.ids.map((id) => cellOf.get(id)).filter((i) => i !== undefined);
   cells.forEach((i, k) => spread(i, now + k * 140, GAIN[e.kind] || 0.7));
-  if (cells.length && selected < 0 && !sheetOpen && now - lastInput > 8000) {
+  // the light wakes the drawing only while it travels; what other sessions do never sets the mind turning again, and
+  // it turns toward them at most once in a while, so a busy day of sessions still lets it rest
+  if (cells.length && selected < 0 && !sheetOpen && now - lastInput > 8000 && now - lastMeet > 45000) {
     const c = scale(cells.map((i) => P[i]).reduce(add, [0, 0, 0]), 1 / cells.length);
     meet = { target: mixv(centre, c, 0.35), dist: HOME * 0.86, until: now + 7000 };
+    lastMeet = now;
   }
-  stir();
+  wake();
   lastSaid = { text: (SAY[e.kind] || SAY.recall)(e.kind === 'kept' ? cells.length || e.ids.length : e.ids.length), at: Date.now() };
   sayNow();
 }
