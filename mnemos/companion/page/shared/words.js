@@ -66,6 +66,7 @@ export function modelName(model) {
 }
 export const sameModel = (a, b) => !!a && !!b && (a === b || modelName(a) === modelName(b));
 export function signedBy(m, who) {
+  if (m.author === 'person') return who.person ? `in ${who.person}’s words` : 'in your words';   // a correction, or a memory kept as theirs
   if (m.model && sameModel(m.model, who.model)) return `signed ${who.name}`;
   if (m.model) return `written by ${modelName(m.model)}, a colleague`;
   if (m.author === 'agent') return `written by ${who.name} before memories were signed`;

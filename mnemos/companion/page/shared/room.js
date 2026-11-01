@@ -46,6 +46,7 @@ export class Room {
   }
   hash() { return this.s.memory ? `#read/memory/${this.s.memory}` : `#read/${this.s.tab}`; }
   go({ tab = this.s.tab, memory = null } = {}, keepPage = false) {
+    if (this.editing && this.editing.id !== memory) this.editing = null;
     const from = this.s.tab, changed = tab !== this.s.tab || memory !== this.s.memory;
     const apply = () => {
       this.s.tab = tab; this.s.memory = memory;
@@ -254,6 +255,7 @@ export class Room {
       <div class="words">${esc(m.content)}</div>
       ${m.impact ? `<div class="changed"><span class="label">What it changed, in its words</span><p>${esc(m.impact)}</p></div>` : ''}
       ${link ? `<a class="textlink mindlink" href="${esc(link)}">See it in the mind →</a>` : ''}
+      ${this.memActs(m)}
       ${beliefs.length ? `<h3>A belief rests on it</h3><ul class="lines">${beliefs.map((b) => `<li><span class="a">${esc(b.text)}</span><span class="m">held at ${Math.round(b.confidence * 100)}%</span></li>`).join('')}</ul>` : ''}
       ${hours.length ? `<h3>In its hours</h3><ul class="lines">${hours.map((h) => { const t = h.trail || {};
         const how = (t.reached || []).includes(id) ? 'reached for it' : (t.waiting || []).includes(id) ? 'found it waiting, as a question' : 'woke with it in hand';
@@ -415,6 +417,51 @@ export class Room {
         <div class="q">${esc(trailSentence(h))}</div>${h.journal.length ? `<div class="ex">${esc(firstLine(h.journal[h.journal.length - 1].text, 200))}</div>` : ''}</button></li>`; }).join('')}</ul>`;
   }
 
+  /* ---------- a memory, corrected in the person's words, or let go ----------
+   * The two things a person can do to a memory itself, each said plainly before it's done. A correction replaces its
+   * words with the person's (its own stay in its history) and it wakes knowing, once; letting one go archives it, never
+   * deletes it, and it's told once that a memory was let go, never what it said. Neither is offered for a mind the page
+   * only reads. */
+  memActs(m) {
+    const { who } = this.ctx();
+    if (who.unfiled || !this.hooks.send) return '';
+    const key = `fix:${m.id}`, mode = this.editing?.id === m.id ? this.editing.mode : null, notice = this.notices.get(key);
+    if (mode === 'correct') {
+      const draft = this.drafts.has(key) ? this.drafts.get(key) : m.content;
+      return `<div class="compose fix"><span class="label">Correct it, in your words</span>
+        <textarea class="field" rows="5" data-draft="${esc(key)}" aria-label="The memory, corrected in your words">${esc(draft)}</textarea>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || `Its own words stay in its history. ${who.name} wakes knowing you corrected it, once.`)}</span>
+          <button class="cancel" type="button" data-mem-cancel="1">Cancel</button>
+          <button class="send" type="button" data-fix-save="${esc(m.id)}"${draft.trim() && draft.trim() !== m.content.trim() && this.sending !== key ? '' : ' disabled'}>${this.sending === key ? 'Saving…' : 'Save correction'}</button></div></div>`;
+    }
+    if (mode === 'forget') {
+      return `<div class="confirm" role="alertdialog" aria-labelledby="let-go-h"><div class="set-title" id="let-go-h">Let this memory go?</div>
+        <p class="set-d">It won't come back by its words, its meaning or its id. It's kept in the archive, not deleted, and ${esc(who.name)} will know, once, that you let a memory go, though not what it said.</p>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || '')}</span>
+          <button class="cancel" type="button" data-mem-cancel="1">Keep it</button>
+          <button class="send danger" type="button" data-forget-yes="${esc(m.id)}"${this.sending === key ? ' disabled' : ''}>${this.sending === key ? 'Letting go…' : 'Let it go'}</button></div></div>`;
+    }
+    return `<div class="mem-acts"><button class="reply-open" type="button" data-mem-act="correct" data-id="${esc(m.id)}">Correct it</button>
+      <button class="reply-open" type="button" data-mem-act="forget" data-id="${esc(m.id)}">Let it go</button></div>`;
+  }
+  async memChange(id, request) {
+    const key = `fix:${id}`;
+    if (this.sending) return;
+    this.sending = key; this.notices.delete(key); this.render();
+    let answer;
+    try { answer = await this.hooks.send(request); }
+    catch { answer = { error: 'It couldn’t be changed just now. Is `mnemos log` still running?' }; }
+    this.sending = null;
+    if (answer?.result) {
+      this.editing = null; this.drafts.delete(key);
+      const next = request.command === 'correct' ? answer.result.id || answer.result.memory?.id : null;
+      const { byId } = this.ctx();
+      return this.go({ tab: this.s.tab, memory: next && byId.has(next) ? next : null });
+    }
+    this.notices.set(key, answer?.error || 'It couldn’t be changed.');
+    this.render();
+  }
+
   /* ---------- settings: what's the person's to decide ---------- */
 
   /* The quiet hours are the one setting that's yours: whether it has them, and when each starts. Everything else in
@@ -496,6 +543,16 @@ export class Room {
       const cancel = e.target.closest('[data-cancel]');
       if (cancel) { const k = cancel.dataset.cancel; this.opened.delete(k); this.closed.add(k); this.drafts.delete(k); this.notices.delete(k); return this.render(); }
       const send = e.target.closest('[data-send]'); if (send) return this.send(send.dataset.send);
+      const act = e.target.closest('[data-mem-act]');
+      if (act) {
+        this.editing = { id: act.dataset.id, mode: act.dataset.memAct }; this.render();
+        return this.bodyEl.querySelector(act.dataset.memAct === 'correct' ? '.fix .field' : '[data-mem-cancel]')?.focus();
+      }
+      if (e.target.closest('[data-mem-cancel]')) { if (this.editing) this.drafts.delete(`fix:${this.editing.id}`); this.editing = null; return this.render(); }
+      const fix = e.target.closest('[data-fix-save]');
+      if (fix) { const id = fix.dataset.fixSave; return this.memChange(id, { command: 'correct', memory_id: id, text: (this.drafts.get(`fix:${id}`) || '').trim() }); }
+      const yes = e.target.closest('[data-forget-yes]');
+      if (yes) { const id = yes.dataset.forgetYes; return this.memChange(id, { command: 'forget', memory_id: id, confirmed: true }); }
       const sw = e.target.closest('[data-hours-on]');
       if (sw) { this.hours = { ...this.currentHours(), on: sw.dataset.hoursOn === 'on' }; this.notices.delete('hours'); return this.render(); }
       if (e.target.closest('[data-hours-reset]')) { this.hours = null; this.notices.delete('hours'); return this.render(); }
@@ -510,7 +567,12 @@ export class Room {
     });
     body.addEventListener('keydown', (e) => {
       // ⌘↩ or Ctrl↩ sends what you wrote
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) { e.preventDefault(); this.send(e.target.dataset.draft); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) {
+        e.preventDefault();
+        const k = e.target.dataset.draft;
+        if (k.startsWith('fix:')) this.bodyEl.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
+      }
+      if (e.key === 'Escape' && this.editing) { this.editing = null; this.render(); }
     });
     body.addEventListener('input', (e) => {
       const time = e.target.dataset?.hoursTime;
@@ -526,6 +588,10 @@ export class Room {
         this.drafts.set(key, e.target.value);
         const send = this.bodyEl.querySelector(`[data-send="${CSS.escape(key)}"]`);
         if (send) send.disabled = !e.target.value.trim() || this.sending === key;
+        if (key.startsWith('fix:')) {
+          const id = key.slice(4), m = this.ctx().mems[this.ctx().byId.get(id)], save = this.bodyEl.querySelector('[data-fix-save]');
+          if (save && m) save.disabled = !e.target.value.trim() || e.target.value.trim() === m.content.trim();
+        }
         return;
       }
       if (e.target.id !== 'room-search') return;

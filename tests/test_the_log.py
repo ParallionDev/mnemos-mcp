@@ -593,14 +593,16 @@ def test_nothing_but_the_page_itself_can_write(mind):
         assert not agents_note(server)["read"]
 
 
-def test_the_page_can_write_nothing_but_a_reply_a_note_or_what_was_read(mind):
+def test_the_page_can_write_nothing_but_what_the_person_does(mind):
     with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
         memories = json.loads(server.documents()[1])["memories"]
         target = memories[0]["id"]
-        for request in ({"command": "forget", "memory_id": target}, {"command": "correct", "memory_id": target, "text": "x"},
-                        {"command": "search", "query": "ferry"}, {"command": "memories"}, {"text": "no command"}):
+        for request in ({"command": "search", "query": "ferry"}, {"command": "memories"}, {"text": "no command"}):
             status, answer = post(server, request)
             assert status == 400 and "nothing else" in answer["error"], request
+        # letting a memory go is asked twice: once by the page, and the request says so
+        status, answer = post(server, {"command": "forget", "memory_id": target})
+        assert status == 400 and "asked for twice" in answer["error"]
         assert [m["id"] for m in json.loads(server.documents()[1])["memories"]] == [m["id"] for m in memories]
 
 
@@ -849,3 +851,43 @@ def test_a_question_finds_memories_and_changes_nothing(mind):
         assert status == 200 and empty["results"] == []
         assert get(server, "data/search.json?q=x&agent=nobody")[0] == 404
     assert digest(store_path()) == sealed
+
+
+
+# ---------- 11. A memory corrected in the person's words, or let go ----------
+# From the page, a correction or a forget is always the person's: their words unsigned, the memory archived as theirs
+# to let go, and the agent told once. That holds when an agent's own server serves the page (its process carries
+# CLAUDECODE), which is exactly when the command line would call it the agent's.
+
+def test_a_memory_corrected_on_the_page_is_the_persons_even_from_an_agents_server(mind, monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")                     # an agent's shell, as mnemos_page serves from
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        memories = json.loads(server.documents()[1])["memories"]
+        ferry = next(m for m in memories if "ferry" in m["content"])
+        status, answer = post(server, {"command": "correct", "memory_id": ferry["id"], "text": "The 7:55 is the 8:05 now."})
+        assert status == 200, answer
+        after = json.loads(server.documents()[1])["memories"]
+        corrected = next(m for m in after if m["content"] == "The 7:55 is the 8:05 now.")
+        assert corrected["author"] == "person" and not corrected["model"]
+        assert ferry["id"] not in {m["id"] for m in after}
+
+
+def test_a_memory_let_go_on_the_page_is_archived_as_the_persons(mind, monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        memories = json.loads(server.documents()[1])["memories"]
+        target = next(m for m in memories if "read-only" in m["content"])
+        status, answer = post(server, {"command": "forget", "memory_id": target["id"], "confirmed": True})
+        assert status == 200, answer
+        assert answer["result"]["state"] == "archived"
+        assert target["id"] not in {m["id"] for m in json.loads(server.documents()[1])["memories"]}
+    import sqlite3
+
+    conn = sqlite3.connect(f"file:{store_path()}?mode=ro", uri=True)
+    try:
+        row = conn.execute("SELECT state FROM engrams WHERE id = ?", (target["id"],)).fetchone()
+        reason = conn.execute("SELECT archive_reason FROM archive WHERE id = ?", (target["id"],)).fetchone()
+    finally:
+        conn.close()
+    assert row[0] == "archived"
+    assert reason and reason[0] == "forgotten_by_person"      # the person's, not the agent's, though an agent served it

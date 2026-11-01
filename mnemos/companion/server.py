@@ -51,9 +51,11 @@ from .export import MOST_BYTES, UNFILED, Exporter
 logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 5.0
-# What the page may write: only the person's own words, which notes they read, and whether and when the agent's
-# quiet hours run (the one setting that's the person's to decide; the rest of Mnemos tunes itself).
-ACTS = ("reply", "note", "read", "hours")
+# What the page may write: only the person's own words (a note, a reply, a correction in their words, a memory they
+# let go), which notes they read, and whether and when the agent's quiet hours run (the one setting that's the
+# person's to decide; the rest of Mnemos tunes itself). A correction or a forget is always the person's, whoever
+# serves the page.
+ACTS = ("reply", "note", "read", "hours", "correct", "forget")
 CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 MOST_READ = 200
 MOST_ACT_BYTES = 32 * 1024
@@ -222,7 +224,20 @@ class LogServer(ThreadingHTTPServer):
             return self._read(request.get("note_ids"), mind)
         if request.get("command") == "hours":
             return self._hours(request, mind)
+        if request.get("command") == "forget" and request.get("confirmed") is not True:
+            return {"error": "Letting a memory go is asked for twice: the page asks first."}
         scope = mind.exporter.scope
+        if request.get("command") in ("correct", "forget"):
+            # through the warm reading the search keeps (a correction's words are embedded as they're kept), as the person
+            with mind.searching:
+                if mind.interface is None:
+                    mind.interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id, person_id=scope.person_id,
+                                               project_scope=scope.project_scope, person=True)
+                    mind.interface.warm()
+                answer = mind.interface.answer(json.dumps({k: v for k, v in request.items() if k != "confirmed"}))
+            answer.pop("id", None)
+            mind.forget()
+            return answer
         interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id,
                               person_id=scope.person_id, project_scope=scope.project_scope)
         answer = interface.answer(json.dumps(request))
@@ -356,7 +371,7 @@ class LogServer(ThreadingHTTPServer):
             if mind.interface is None:
                 scope = mind.exporter.scope
                 mind.interface = Interface(db_path=scope.db_path, agent_id=scope.agent_id, person_id=scope.person_id,
-                                           project_scope=scope.project_scope)
+                                           project_scope=scope.project_scope, person=True)
                 mind.interface.warm()
             if not query.strip():
                 return _dumps({"query": "", "results": []})
@@ -431,7 +446,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             request = None
         if not isinstance(request, dict) or request.get("command") not in ACTS:
-            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, say a note was read, or turn the quiet hours on or off, and nothing else."})
+            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, correct a memory or let one go, say a note was read, or turn the quiet hours on or off, and nothing else."})
         answer = server.act(request, _agent(self.path))
         return self._json(HTTPStatus.OK if "result" in answer else HTTPStatus.BAD_REQUEST, answer)
 

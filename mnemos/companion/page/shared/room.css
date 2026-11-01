@@ -260,3 +260,13 @@
 /* new since the person was last here: the count in a filter, and a word on the row */
 .chip .n{margin-left:4px;color:var(--ink-4);font-variant-numeric:tabular-nums}
 .meta .new{display:inline-flex;align-items:center;color:var(--ink-1)}
+
+/* a memory corrected, or let go: asked plainly, the one red for the one thing that can't be taken back here */
+.mem-acts{display:flex;gap:var(--s5);margin-top:var(--s4)}
+.mem-acts .reply-open{margin-top:0}
+.compose.fix{margin-top:var(--s5)}
+.compose.fix .label{display:block;margin-bottom:var(--s2)}
+.compose.fix .field{background:var(--card)}
+.confirm{margin-top:var(--s5);padding:var(--s4) var(--s5);border-radius:var(--r);background:var(--card)}
+.send.danger{background:#e5484d;color:#fff}
+.send.danger:hover{opacity:.9}

@@ -378,10 +378,14 @@ The page reads the memory and writes only what you write there, a reply or
 a note, kept exactly as you wrote it and marked as yours (as `mnemos notes
 reply` and `mnemos notes write` keep them), and which of the agent's notes
 you've read: one counts as read once it has stayed on your screen a moment.
-In Settings it turns the quiet hours on or off and sets when they start,
-exactly as `mnemos daemon install --hours --write` and `mnemos daemon
-uninstall --hours --write` do. Nothing else on it can change the memory or
-the machine. A mind whose memory is from before notes (an older store) is
+On any memory you can correct it in your own words (its own stay in its
+history, and it wakes knowing you corrected it), or let it go (archived,
+never deleted; it's told once that a memory was let go, never what it
+said). Both are always yours, whoever serves the page, and letting go is
+asked twice. In Settings it turns the quiet hours on or off and sets when
+they start, exactly as `mnemos daemon install --hours --write` and `mnemos
+daemon uninstall --hours --write` do. Nothing else on it can change the
+memory or the machine. A mind whose memory is from before notes (an older store) is
 only read. It runs on this computer alone (127.0.0.1, at an address made fresh
 each time), only the page itself can send to it, and it asks nothing of the
 internet, since its fonts ship with Mnemos. If your agent has no quiet

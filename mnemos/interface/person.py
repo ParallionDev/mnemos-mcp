@@ -254,7 +254,11 @@ class Interface:
     """
 
     def __init__(self, *, db_path: str | None = None, agent_id: str | None = None,
-                 person_id: str | None = None, project_scope: str | None = None) -> None:
+                 person_id: str | None = None, project_scope: str | None = None,
+                 person: bool | None = None) -> None:
+        # Whose a correction or a forget is: the person's own app says so (``person=True``: the page someone clicked,
+        # even when an agent's server is serving it); with None, as the command line decides, by the shell it runs in.
+        self._person = person
         self._flags = {
             "db_path": db_path, "agent_id": agent_id,
             "person_id": person_id, "project_scope": project_scope,
@@ -264,6 +268,9 @@ class Interface:
         # The meaning model, once loaded: an index of no store, only a backend.
         self._model: EmbeddingIndex | None = None
         self._loading: threading.Thread | None = None
+
+    def _as_person(self) -> bool:
+        return self._person if self._person is not None else not run_by_agent()
 
     def warm(self) -> None:
         """Start loading the meaning model in the background, once."""
@@ -350,7 +357,7 @@ class Interface:
         self._loaded()  # the new words are embedded as they are kept
         writer = self._runtime(read_only=False)
         try:
-            return writer.correct_memory(memory_id, text, person=not run_by_agent())
+            return writer.correct_memory(memory_id, text, person=self._as_person())
         finally:
             writer.close()
 
@@ -360,7 +367,7 @@ class Interface:
             raise NothingChanged(f"No memory {memory_id.strip()} is held here.")
         writer = self._runtime(read_only=False)
         try:
-            return writer.forget_memory(memory_id, person=not run_by_agent())
+            return writer.forget_memory(memory_id, person=self._as_person())
         finally:
             writer.close()
 
