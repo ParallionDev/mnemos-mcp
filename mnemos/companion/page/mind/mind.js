@@ -23,6 +23,7 @@ import { glyphAtlas, DOT, STROKE, LINE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
+import { bendRim, grain } from '../shared/glass.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
   forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -75,6 +76,7 @@ let L = { identity: { name: '', person: null }, hours: [], journal: [], notes: [
 let mems = [], memAt = new Map(), memVersion = null;
 let D, N = 0, NL = 0, tissue = null, R, P, centre, extent, HOME, MID = null, cellOf = new Map();
 let born, acc, nbrs, glow, flash, aim, read, LF, LA, LT, LR, fireAt, fireLevel, linkAt, linkLevel, heat, linkHeat;
+let fc, fAim, lc, lAim, shownG, shownF;          // the light of what you're pointing at (see "pointing")
 const LAYOUT_KEY = () => `mnemos.mind.layout.v2.${L.identity.agentId || AGENT || 'agent'}`;
 
 /* the export's memories as the anatomy reads them: a cell per memory, a link per tie (counted once, from its sender) */
@@ -156,12 +158,15 @@ let building = null, built = null;
 async function build(data) {
   const t0 = performance.now();
   const out = await drawIn(data);
-  apply(data, out, { worker: Math.round(performance.now() - t0) });
+  const worker = Math.round(performance.now() - t0), t1 = performance.now();
+  // a drawing replacing one on screen arrives a slice at a time, while the old one goes on; the first is sent at once
+  const ready = tissue ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length }) : null;
+  apply(data, out, { worker, ...(ready ? { sent: Math.round(performance.now() - t1) } : {}) }, ready);
   keepDrawing(data, out);
 }
 
 /* a drawing, made now or kept from before, put on the screen */
-function apply(data, out, took = {}) {
+function apply(data, out, took = {}, ready = null) {
   const keep = D ? new Map(D.cells.map((c, i) => [c.fullId, i])) : null;
   const open = selected >= 0 && D ? D.cells[selected]?.fullId : null;      // the memory being read, kept through a redraw
   const oldFlash = flash;
@@ -169,7 +174,7 @@ function apply(data, out, took = {}) {
   MID = out.mid;
   store.set(LAYOUT_KEY(), Object.fromEntries(D.cells.map((c, i) => [c.id, out.places[i].map((x) => Math.round(x * 1000) / 1000)])));
   const t2 = performance.now();
-  const next = new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
+  const next = ready || new Tissue(gl, atlas, out.data, out.count, { cells: N, links: NL });
   if (tissue) tissue.dispose();
   tissue = next;
   took.upload = Math.round(performance.now() - t2);
@@ -189,12 +194,15 @@ function apply(data, out, took = {}) {
   fireAt = new Float64Array(N).fill(-1); fireLevel = new Float32Array(N);
   linkAt = new Float64Array(NL).fill(-1); linkLevel = new Float32Array(NL);
   heat = new Float32Array(N); linkHeat = new Float32Array(NL);
+  fc = new Float32Array(N); fAim = new Float32Array(N); lc = new Float32Array(NL); lAim = new Float32Array(NL);
+  shownG = new Float32Array(N); shownF = new Float32Array(N);
   if (keep && oldFlash) D.cells.forEach((c, i) => { const j = keep.get(c.fullId); if (j !== undefined && j < oldFlash.length) flash[i] = oldFlash[j]; });
   built = { points: out.count, parts: out.detail, budget, ms: out.ms, laidOut: out.laidOut, fresh: out.fresh, at: performance.now(), took };
   window.__built = built;
   // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
   if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
   if (hoverCell >= N) hoverCell = -1;
+  pointAt(hoverCell);
 }
 
 /* ---------- the drawing, kept ----------
@@ -222,17 +230,22 @@ const kept = (() => {
 })();
 const drawingKey = () => `${L.identity.agentId || AGENT || 'agent'}`;
 function keepDrawing(data, out) {
-  // after the page has what it needs: a moment later, so writing never competes with showing
-  const version = memVersion;
-  setTimeout(() => {
-    kept.put(drawingKey(), { v: DRAWING_V, budget, version, at: Date.now(), cells: data.cells, links: data.links, out })
+  // when the page is idle and no one's moving the mind, so the keeping never takes a frame from either. The points go
+  // in as one Blob (a single copy, written to disk off the page's thread); copying them as an array took 150 ms
+  const version = memVersion, at = Date.now();
+  const keep = () => {
+    if (performance.now() - lastNav < 2000 || dragging || fling) return void setTimeout(keep, 1500);
+    kept.put(drawingKey(), { v: DRAWING_V, budget, version, at, cells: data.cells, links: data.links, out: { ...out, data: new Blob([out.data]) } })
       .catch(() => { /* full, or private: next time it draws again */ });
-  }, 1500);
+  };
+  setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(keep, { timeout: 8000 }) : keep()), 1500);
 }
 async function keptDrawing() {
   try {
     const k = await kept.get(drawingKey());
-    return k && k.v === DRAWING_V && k.budget === budget && k.out?.count ? k : null;
+    if (!(k && k.v === DRAWING_V && k.budget === budget && k.out?.count)) return null;
+    if (k.out.data instanceof Blob) k.out.data = new Float32Array(await k.out.data.arrayBuffer());
+    return k;
   } catch { return null; }
 }
 /* a kept drawing's memories, as they are now: the same ones in the same places (their order is the drawing's), each
@@ -329,7 +342,8 @@ function paint(now) {
     }
     LF[li] = front; LA[li] = amount; LT[li] = trail;
   }
-  for (let i = 0; i < N; i++) if ((i === selected || i === hoverCell ? 1 : 0) - read[i] > 2e-3 || read[i] - (i === selected || i === hoverCell ? 1 : 0) > 2e-3) { moving = true; break; }
+  for (let i = 0; i < N; i++) if (Math.abs((i === selected ? 1 : 0) - read[i]) > 2e-3 || Math.abs(fAim[i] - fc[i]) > 2e-3) { moving = true; break; }
+  if (Math.abs((hoverCell >= 0 ? 1 : 0) - dimNow) > 2e-3) moving = true;
   animating = moving;
 }
 
@@ -362,13 +376,14 @@ function project(p) {
   if (z <= 0.02) return null;
   return { x: ((dot(v, view.right) / (z * t * (W / H)) + 1) / 2) * W, y: ((1 - dot(v, view.up) / (z * t)) / 2) * H, z };
 }
-function pick(x, y) {
+function pick(x, y, keep = -1) {
   if (!view) return -1;
   let best = -1, bd = Infinity;
   for (let i = 0; i < N; i++) {
     const s = project(P[i]); if (!s) continue;
     const r = Math.max(9, ((R[i] * 1.2) / (s.z * Math.tan(FOV / 2))) * (innerHeight / 2));
     const d = Math.hypot(s.x - x, s.y - y) / r;
+    if (i === keep && d < 1.35) return i;          // what you're already on holds a little past its edge: no flicker
     if (d < 1 && d < bd) { bd = d; best = i; }
   }
   return best;
@@ -382,42 +397,164 @@ function aimAt(i) {
   const perPx = (2 * dist * Math.tan(FOV / 2)) / innerHeight;
   cam.goal.target = add(P[i], scale(right, (sheet / 2) * perPx));
   cam.goal.dist = dist;
+  lastNav = -1e9; moved(false);
   stir();
 }
 
+/* ---------- pointing: what you point at lights, with all it's tied to, and the rest goes quiet ----------
+ * Each memory carries how much it's being pointed at (fc, easing toward fAim), and each link the same (lc). The memory
+ * under the hand aims for all of it, those it's tied to for more the stronger the tie, and the links between them for
+ * as much as the memory at their far end. Everything else is dimmed by how much the hand is on anything at all
+ * (dimNow), so moving from one memory to the next never flashes the whole mind back up between them. */
+const QUIET = 0.74, LIT_G = 0.5, LIT_F = 0.95, LIT_L = 0.8;
+let dimNow = 0, aimed = [], aimedLinks = [];
+function pointAt(i) {
+  for (const j of aimed) fAim[j] = 0;
+  for (const li of aimedLinks) lAim[li] = 0;
+  aimed = []; aimedLinks = [];
+  if (i < 0 || i >= N) return;
+  fAim[i] = 1; aimed.push(i);
+  for (const [j, w, li] of nbrs[i]) { fAim[j] = Math.max(fAim[j], 0.45 + 0.4 * w); aimed.push(j); lAim[li] = 0.55 + 0.45 * w; aimedLinks.push(li); }
+}
+function hover(i) {
+  if (i === hoverCell) return;
+  hoverCell = i; pointAt(i); wake();
+}
+
+/* ---------- the camera in your hands ----------
+ * Turning (drag), sliding (shift-drag, a right or middle drag, two fingers), and coming closer (the wheel, a pinch,
+ * + and -). Coming closer is a scaling of the whole camera about the point under the hand: the eye moves along the
+ * line through that point, so the point stays exactly where it is on the screen, whatever its depth. Going back out
+ * drifts the camera home to the middle, so you're never lost; Recenter (or 0) goes straight there. Every input only
+ * moves where the camera is going; one loop eases it there (fast while your hand is on it, slow when it moves itself),
+ * and a turn or slide let go carries on a little and settles. Close enough to a memory, it's drawn finely. */
+const ZMIN = 0.42, ZOUT = 1.7;
+let lastNav = -1e9, fling = null, wheelPage = -1e9, wandered = false;
+const tanH = Math.tan(FOV / 2);
+function basis(c) {
+  const eye = eyeOf(c), fwd = normalize(sub(c.target, eye)), right = normalize(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
+  return { eye, fwd, right, up };
+}
+// where the hand points, in the mind: the memory under it if there is one, else the point at the target's depth
+function under(x, y) {
+  if (hoverCell >= 0) return P[hoverCell];
+  const b = basis(cam.goal), nx = (x / innerWidth) * 2 - 1, ny = 1 - (y / innerHeight) * 2;
+  const dir = add(b.fwd, add(scale(b.right, nx * tanH * (innerWidth / innerHeight)), scale(b.up, ny * tanH)));
+  return add(b.eye, scale(dir, cam.goal.dist));            // dir's forward part is 1, so this lands on that plane
+}
+function moved(on = true) {
+  wandered = on; $('recenter').classList.toggle('on', on);
+  $('recenter').tabIndex = on ? 0 : -1;
+}
+function nav() { lastNav = performance.now(); lastInput = lastNav; meet = null; if (!wandered) moved(true); stir(); }
+function zoomAt(x, y, k) {
+  const g = cam.goal, d = clamp(g.dist * k, ZMIN, HOME * ZOUT), s = d / g.dist;
+  if (Math.abs(s - 1) < 1e-5) return;
+  const Q = under(x, y);
+  g.target = add(Q, scale(sub(g.target, Q), s)); g.dist = d;
+  // going out past a close look, the camera drifts home as it goes: all the way out, it's back in the middle
+  if (s > 1) g.target = mixv(g.target, centre, clamp((d - HOME * 0.55) / (HOME * 0.5)) * (1 - 1 / s) * 1.6);
+  nav();
+}
+function slide(dx, dy) {
+  const b = basis(cam.goal), perPx = (2 * cam.goal.dist * tanH) / innerHeight;
+  cam.goal.target = add(cam.goal.target, add(scale(b.right, -dx * perPx), scale(b.up, dy * perPx)));
+}
+function turn(dx, dy) {
+  cam.goal.yaw -= dx * 0.005;
+  cam.goal.pitch = clamp(cam.goal.pitch + dy * 0.004, -1.2, 1.2);
+}
+function recenter() {
+  cam.goal.target = centre.slice(); cam.goal.dist = HOME; fling = null; lastNav = -1e9; moved(false); stir();
+}
+
 function bindPointer() {
+  const touches = new Map();
+  let pinch = null, mouse = null;
+  const twoOf = () => { const [a, b] = [...touches.values()]; return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) }; };
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('pointerdown', (e) => {
-    dragging = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now() };
+    canvas.setPointerCapture(e.pointerId);
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    fling = null;
+    if (touches.size === 2) { pinch = twoOf(); dragging = null; return; }
+    const sliding = e.shiftKey || e.button === 1 || e.button === 2;
+    dragging = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(), sliding, vx: 0, vy: 0, at: performance.now() };
     canvas.classList.add('dragging'); lastInput = performance.now(); stir();
   });
   canvas.addEventListener('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size === 2) {
+      const now = twoOf();
+      if (now.d > 0 && pinch.d > 0) zoomAt(now.x, now.y, pinch.d / now.d);
+      slide(now.x - pinch.x, now.y - pinch.y);
+      pinch = now; return;
+    }
     if (!dragging) {
-      if (e.pointerType === 'mouse') {
-        const h = pick(e.clientX, e.clientY);
-        if (h !== hoverCell) { hoverCell = h; wake(); }
-        canvas.style.cursor = hoverCell >= 0 ? 'pointer' : '';
-      }
+      if (e.pointerType === 'mouse') { mouse = { x: e.clientX, y: e.clientY }; hover(pick(e.clientX, e.clientY, hoverCell)); canvas.style.cursor = hoverCell >= 0 ? 'pointer' : ''; }
       return;
     }
-    cam.goal.yaw -= (e.clientX - dragging.x) * 0.005;
-    if (e.pointerType === 'mouse') cam.goal.pitch = clamp(cam.goal.pitch + (e.clientY - dragging.y) * 0.004, -1.2, 1.2);
-    dragging.x = e.clientX; dragging.y = e.clientY; lastInput = performance.now(); stir();
+    const dx = e.clientX - dragging.x, dy = e.clientY - dragging.y, t = performance.now(), dt = Math.max(1, t - dragging.at);
+    if (dragging.sliding) slide(dx, dy);
+    else { cam.goal.yaw -= dx * 0.005; if (e.pointerType === 'mouse') cam.goal.pitch = clamp(cam.goal.pitch + dy * 0.004, -1.2, 1.2); }
+    // how fast the hand is going, smoothed over the last few moves, for the carry when it lets go
+    dragging.vx = dragging.vx * 0.6 + (dx / dt) * 0.4; dragging.vy = dragging.vy * 0.6 + (dy / dt) * 0.4;
+    dragging.x = e.clientX; dragging.y = e.clientY; dragging.at = t;
+    if (Math.hypot(e.clientX - dragging.x0, e.clientY - dragging.y0) >= 6) { if (hoverCell >= 0) hover(-1); nav(); }
   });
   const drop = (e) => {
+    touches.delete(e.pointerId);
+    if (touches.size < 2) pinch = null;
     if (dragging && e?.type === 'pointerup' && Math.hypot(e.clientX - dragging.x0, e.clientY - dragging.y0) < 6 && performance.now() - dragging.t0 < 450) {
       const c = pick(e.clientX, e.clientY);
       if (c >= 0 && memAt.has(D.cells[c].fullId)) openRoom({ tab: 'memories', memory: D.cells[c].fullId });
+    } else if (dragging && performance.now() - dragging.at < 80 && !reduce) {
+      // let go while moving: it carries on, slowing as if through something thick
+      fling = { vx: dragging.vx * 1000, vy: (e.pointerType === 'mouse' || dragging.sliding ? dragging.vy : 0) * 1000, sliding: dragging.sliding };
     }
     dragging = null; canvas.classList.remove('dragging');
   };
   canvas.addEventListener('pointerup', drop); canvas.addEventListener('pointercancel', drop);
-  canvas.addEventListener('pointerleave', () => { if (hoverCell >= 0) { hoverCell = -1; wake(); } });
-  // a pinch (or ⌘/ctrl and the wheel) moves closer; a plain wheel scrolls on to what the hour left
+  canvas.addEventListener('pointerleave', () => { mouse = null; if (!dragging) hover(-1); });
+  // the wheel and a pinch come closer, toward the hand. While the page is scrolled down to what the hour left, the
+  // wheel scrolls it, and a scroll that carries on up to the top doesn't turn into a zoom until the hand lifts
   canvas.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey && !e.metaKey) return;
+    const t = performance.now();
+    if (!e.ctrlKey && (scrollY > 2 || t - wheelPage < 260)) { wheelPage = t; return; }
     e.preventDefault();
-    cam.goal.dist = clamp(cam.goal.dist * Math.exp(e.deltaY * 0.004), 0.45, HOME * 1.3); lastInput = performance.now(); stir();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1, dy = e.deltaY * unit, dx = e.deltaX * unit;
+    if (!e.ctrlKey && Math.abs(dx) > Math.abs(dy) * 1.2) { cam.goal.yaw -= dx * 0.004; nav(); return; }
+    zoomAt(e.clientX, e.clientY, Math.exp(clamp(dy, -240, 240) * (e.ctrlKey ? 0.011 : 0.0022)));
   }, { passive: false });
+  addEventListener('keydown', (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || '') || document.activeElement?.closest?.('#room, dialog') || scrollY > innerHeight * 0.5) return;
+    const x = mouse?.x ?? innerWidth / 2, y = mouse?.y ?? innerHeight / 2;
+    if (e.key === '+' || e.key === '=') zoomAt(x, y, 0.8);
+    else if (e.key === '-' || e.key === '_') zoomAt(x, y, 1.25);
+    else if (e.key === '0') recenter();
+    else if (e.key.startsWith('Arrow')) {
+      const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (e.shiftKey) slide(-d[0] * 60, -d[1] * 60); else turn(d[0] * 40, d[1] * 30);
+      nav();
+    } else return;
+    e.preventDefault();
+  });
+  $('recenter').addEventListener('click', recenter);
+  // the hand still over the mind while it turns: what's under it changes, so look again
+  pointing = () => { if (mouse && !dragging) hover(pick(mouse.x, mouse.y, hoverCell)); };
+}
+let pointing = () => {};
+
+/* close enough to a memory, with none open, the one in the middle of the view is drawn finely, with its ties */
+let closeTo = -1, closeSince = 0;
+function nearWanted(now) {
+  if (selected >= 0) return selected;
+  if (cam.goal.dist > Math.min(2.4, HOME * 0.45)) return closeTo = -1;
+  if (now - closeSince < 350) return closeTo;
+  closeSince = now;
+  let best = -1, bd = Infinity;
+  for (let i = 0; i < N; i++) { const d = length(sub(P[i], cam.goal.target)); if (d < bd) { bd = d; best = i; } }
+  return closeTo = bd < cam.goal.dist * 0.6 ? best : -1;
 }
 
 /* ---------- resolution and the loop ---------- */
@@ -449,11 +586,11 @@ async function lighten() {
 }
 function frame(now) {
   if (!heroSeen) { looping = false; return; }
-  const turning = !reduce && selected < 0 && !dragging && now - lastStir < TURN_FOR;
+  const turning = !reduce && selected < 0 && hoverCell < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
-  if (!animating && settled && spin < 0.01 && !meet && frames > 2) { looping = false; return; }
+  if (!animating && settled && spin < 0.01 && !meet && !fling && frames > 2) { looping = false; return; }
   const gap = !animating && !dragging && now - lastInput > 1500 ? 42 : 0;     // the slow turn alone: 24 frames are enough
   if (gap && now - last < gap) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
@@ -463,31 +600,57 @@ function frame(now) {
   }
   last = now;
   if (meet) {
-    if (now < meet.until) { if (selected < 0 && now - lastInput > 1500) { cam.goal.target = meet.target; cam.goal.dist = meet.dist; } }
-    else { if (selected < 0) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } meet = null; }
+    // the mind turns toward what it's doing only while you've left it where it was; a view you chose stays yours
+    if (now < meet.until) { if (selected < 0 && !wandered && now - lastInput > 1500) { cam.goal.target = meet.target; cam.goal.dist = meet.dist; } }
+    else { if (selected < 0 && !wandered) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } meet = null; }
   }
   if (spin > 0.001) cam.goal.yaw += 0.012 * dt * spin;
-  const ke = 1 - Math.exp(-(dragging ? 21 : 2.2) * dt);
+  if (fling) {
+    if (fling.sliding) slide(fling.vx * dt, fling.vy * dt); else turn(fling.vx * dt, fling.vy * dt);
+    const k = Math.exp(-4.5 * dt); fling.vx *= k; fling.vy *= k;
+    if (Math.hypot(fling.vx, fling.vy) < 4) fling = null;
+  }
+  // fast while your hand is on it (and for a moment after), slow when the camera moves itself
+  const hand = Math.exp(-(now - lastNav) / 500);
+  const ke = 1 - Math.exp(-(dragging ? 21 : 2.2 + 9.8 * Math.max(hand, fling ? 1 : 0)) * dt);
   cam.yaw += (cam.goal.yaw - cam.yaw) * ke; cam.pitch += (cam.goal.pitch - cam.pitch) * ke;
   cam.dist = Math.exp(Math.log(cam.dist) + (Math.log(cam.goal.dist) - Math.log(cam.dist)) * ke);
   cam.target = mixv(cam.target, cam.goal.target, ke);
   const eye = eyeOf(cam), fwd = normalize(sub(cam.target, eye)), right = normalize(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
   view = { eye, fwd, right, up };
+  if ((frames & 3) === 0) pointing();
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
   paint(now);
   // a memory open is always drawn finely: whatever dropped its fine version (a redraw, a lighter budget, a page that
   // opened straight onto it), it's asked for again
-  if (selected >= 0 && !nearPending && !building && (!near || near.of !== selected) && now - nearFailed > 4000) focusNear(selected);
+  const want = nearWanted(now);
+  if (want >= 0 && !nearPending && !building && (!near || near.of !== want) && now - nearFailed > 4000) focusNear(want);
+  else if (want < 0 && near && !nearPending) focusNear(-1);
   const kUp = 1 - Math.exp(-9 * dt), kDown = 1 - Math.exp(-2.2 * dt), kRead = 1 - Math.exp(-3.7 * dt);
+  const kIn = 1 - Math.exp(-11 * dt), kOut = 1 - Math.exp(-6 * dt);
+  dimNow += ((hoverCell >= 0 ? 1 : 0) - dimNow) * (hoverCell >= 0 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
+  const quiet = QUIET * dimNow;
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
-    read[i] += ((i === selected || i === hoverCell ? 1 : 0) - read[i]) * kRead;
-    tissue.cell(i, glow[i], flash[i], 0, read[i]);
+    read[i] += ((i === selected ? 1 : 0) - read[i]) * kRead;
+    fc[i] += (fAim[i] - fc[i]) * (fAim[i] > fc[i] ? kIn : kOut);
+    const keep = 1 - quiet * (1 - fc[i]);
+    shownG[i] = glow[i] * keep + LIT_G * fc[i] * fc[i];
+    shownF[i] = flash[i] * keep + LIT_F * fc[i] * (fAim[i] === 1 ? 1 : 0.35);
+    tissue.cell(i, shownG[i], shownF[i], 0, read[i]);
   }
-  for (let li = 0; li < NL; li++) tissue.link(li, LF[li], LA[li], LT[li], LR[li]);
+  for (let li = 0; li < NL; li++) {
+    lc[li] += (lAim[li] - lc[li]) * (lAim[li] > lc[li] ? kIn : kOut);
+    const keep = 1 - quiet * (1 - lc[li]);
+    tissue.link(li, Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), Math.max(LA[li] * keep, LIT_L * lc[li]), Math.max(LT[li], 0.4 * lc[li]), LR[li] * keep);
+  }
   if (near) {
-    near.cells.forEach((g, k) => { near.tissue.cell(k, glow[g], flash[g], 0, read[g]); tissue.cell(g, 0, 0, 0, 0); });
-    near.links.forEach((li, k) => { near.tissue.link(k, LF[li], LA[li], LT[li], LR[li]); tissue.link(li, 0, 0, 0, 0); });
+    near.cells.forEach((g, k) => { near.tissue.cell(k, shownG[g], shownF[g], 0, read[g]); tissue.cell(g, 0, 0, 0, 0); });
+    near.links.forEach((li, k) => {
+      const keep = 1 - quiet * (1 - lc[li]);
+      near.tissue.link(k, Math.max(LF[li], lc[li] > 1e-3 ? 1 : 0), Math.max(LA[li] * keep, LIT_L * lc[li]), Math.max(LT[li], 0.4 * lc[li]), LR[li] * keep);
+      tissue.link(li, 0, 0, 0, 0);
+    });
   }
   const viewM = lookAt(eye, cam.target, [0, 1, 0]), proj = perspective(FOV, canvas.width / canvas.height, 0.01, 400);
   const blurK = mix(14 * LENS.blur, 52 * LENS.blurClose, close * close) * (canvas.height / 804);
@@ -617,23 +780,18 @@ function renderPaper() {
 
 /* ---------- the reading room, as a drawer beside the mind ---------- */
 
+grain(); bendRim(document.querySelector('#room > .glass'), { pad: 16, radius: matchMedia('(max-width:600px)').matches ? 18 : 22 });
 let sheetOpen = false;
 const room = new Room({
   tabsEl: $('tabs'), bodyEl: $('room-body'), tabs: TABS, sticky: true,
   ctx: () => ({ who: L.identity, life: L, mems, byId: memAt, since: lastVisit, heat: (id) => { const i = cellOf.get(id); return i === undefined || !heat ? 0 : heat[i]; } }),
   hooks: {
     // touching an entry lights it where it lives: the memory itself, and a soft pulse along what it's tied to
-    hover: (id) => {
-      const i = id ? cellOf.get(id) ?? -1 : -1;
-      if (i === hoverCell) return;
-      hoverCell = i;
-      if (i >= 0 && i !== selected) spread(i, performance.now(), 0.6);
-      wake();
-    },
+    hover: (id) => hover(id ? cellOf.get(id) ?? -1 : -1),
     open: (id) => {
       const i = id ? cellOf.get(id) : undefined;
       if (i !== undefined) { selected = i; spread(i, performance.now()); aimAt(i); lastInput = performance.now(); focusNear(i); }
-      else if (selected >= 0) { selected = -1; cam.goal.target = centre.slice(); cam.goal.dist = HOME; stir(); focusNear(-1); }
+      else if (selected >= 0) { selected = -1; if (!wandered) { cam.goal.target = centre.slice(); cam.goal.dist = HOME; } stir(); focusNear(-1); }
     },
     route: (hash) => { if (sheetOpen) history.replaceState(null, '', hash); },
     picture: showPicture,
@@ -671,8 +829,9 @@ function closeRoom() {
   const sheet = $('room'); sheet.classList.remove('open');
   setTimeout(() => { if (!sheetOpen) sheet.hidden = true; }, 460);
   $('open-room').setAttribute('aria-expanded', 'false');
-  selected = -1; hoverCell = -1; focusNear(-1);
-  cam.goal.target = centre.slice(); cam.goal.dist = Math.max(cam.goal.dist, HOME); stir();
+  selected = -1; hover(-1); focusNear(-1);
+  if (!wandered) { cam.goal.target = centre.slice(); cam.goal.dist = Math.max(cam.goal.dist, HOME); }
+  stir();
   history.replaceState(null, '', location.pathname + location.search);
   $('open-room').focus({ preventScroll: true });
 }
@@ -865,7 +1024,7 @@ function bindAsk() {
     if (e.key === 'ArrowUp') { e.preventDefault(); (k <= 0 ? q : hits[k - 1]).focus(); }
     if (e.key === 'Escape') { q.focus(); }
   });
-  const touch = (e) => { const h = e.target.closest('[data-hit]'); const i = h ? cellOf.get(found[+h.dataset.hit]?.id) : undefined; if (i !== undefined && i !== hoverCell) { hoverCell = i; spread(i, performance.now(), 0.8); } };
+  const touch = (e) => { const h = e.target.closest('[data-hit]'); const i = h ? cellOf.get(found[+h.dataset.hit]?.id) : undefined; if (i !== undefined) hover(i); };
   list.addEventListener('pointerover', touch); list.addEventListener('focusin', touch);
   list.addEventListener('click', (e) => {
     const h = e.target.closest('[data-hit]'); if (!h) return;

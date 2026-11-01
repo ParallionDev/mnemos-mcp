@@ -163,17 +163,37 @@ void main() {
   o = vec4(v_col * dens, 1.0);
 }`;
 
+// one program for every tissue on a context: compiling it is tens of milliseconds, and a tissue is made per redraw
+const programs = new WeakMap();
+const programFor = (gl) => programs.get(gl) || programs.set(gl, program(gl, VS, FS)).get(gl);
+const SLICE = 2 * 1024 * 1024 / 4;       // floats sent to the GPU per step when a tissue is sent without a pause
+
 export class Tissue {
+  /* A tissue sent to the GPU a slice at a time, a step per turn of the page, so a mind that's being moved never
+   * stops for it: the drawing already on screen goes on being drawn until this one has all arrived. */
+  static async load(gl, atlas, data, count, opts) {
+    const t = new Tissue(gl, atlas, null, count, opts);
+    gl.bindBuffer(gl.ARRAY_BUFFER, t.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data.byteLength, gl.STATIC_DRAW);
+    for (let at = 0; at < data.length; at += SLICE) {
+      if (t.count === 0) return t;                                  // let go before it arrived
+      gl.bindBuffer(gl.ARRAY_BUFFER, t.buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, at * 4, data, at, Math.min(SLICE, data.length - at));
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    return t;
+  }
+
   constructor(gl, atlas, data, count, { cells = STATE_W, links = STATE_W } = {}) {
     this.gl = gl;
     this.atlas = atlas;
     this.count = count;
-    this.prog = program(gl, VS, FS);
+    this.prog = programFor(gl);
     this.vao = gl.createVertexArray();
     this.buf = gl.createBuffer();
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    if (data) gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
     const layout = [[0, 3, 0], [1, 1, 3], [2, 1, 4], [3, 3, 5], [4, 3, 8], [5, 3, 11], [6, 1, 14], [7, 1, 15], [8, 3, 16], [9, 2, 19], [10, 1, 21], [11, 3, 22]];
     for (const [loc, size, offset] of layout) {
       gl.enableVertexAttribArray(loc);
@@ -196,7 +216,7 @@ export class Tissue {
   /* let the GPU have its memory back: a mind that grows builds a new tissue, and the old one must not linger */
   dispose() {
     const { gl } = this;
-    gl.deleteBuffer(this.buf); gl.deleteVertexArray(this.vao); gl.deleteTexture(this.stateTex); gl.deleteProgram(this.prog.p);
+    gl.deleteBuffer(this.buf); gl.deleteVertexArray(this.vao); gl.deleteTexture(this.stateTex);   // the program is shared
     this.count = 0;
   }
 

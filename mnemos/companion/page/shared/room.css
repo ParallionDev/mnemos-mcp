@@ -20,8 +20,12 @@
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
   --r:14px;--r-s:10px;--quick:.18s;--calm:.45s;--ease:cubic-bezier(.2,.7,.2,1);
 }
-/* on a raised sheet, the cards step up one tone */
-.sheet{--card:var(--surface-2);--card-in:var(--surface-3);--card-hover:var(--surface-3);--card-press:var(--surface-4)}
+/* on a sheet of glass (the mind's drawer), the surfaces are tones of light on the glass, so the mind still shows
+   through every card; a card never becomes a pane of its own. The bar that sticks over a scrolling list is the one
+   place that softens what passes under it. */
+.sheet{--surface-1:rgba(255,255,255,.03);--surface-2:rgba(255,255,255,.045);--surface-3:rgba(255,255,255,.07);--surface-4:rgba(255,255,255,.095);
+  --card:var(--surface-2);--card-in:var(--surface-3);--card-hover:var(--surface-3);--card-press:var(--surface-4)}
+.sheet .tools.stick{background:rgba(12,12,16,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 /* one kind of label for every section and kind: small capitals, opened up, quiet */
 .label{font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 

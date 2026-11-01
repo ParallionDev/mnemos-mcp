@@ -24,8 +24,13 @@
   --t-temp:72px;--t-h2:40px;--t-name:24px;--t-own-xl:22px;--t-own:19px;--t-own-s:16.5px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11px;
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;--s9:112px;
   --edge:30px;--sheet:560px;--r:14px;--r-s:8px;
-  --quick:.18s;--calm:.45s;--slow:.9s;--ease:cubic-bezier(.2,.7,.2,1);
+  --quick:.18s;--calm:.45s;--slow:.9s;--ease:cubic-bezier(.2,.7,.2,1);--sheet-ease:cubic-bezier(.32,.72,0,1);
+  /* the glass (../shared/glass.js): Dark glass as our web glass measures it, 0.13 of the mind's light, softened, with
+     a whisper of white over it; a hairline lit from above; the rim bends what's behind (--bend, Chromium only) */
+  --glass-see:blur(10px) brightness(.13) saturate(1.5);--glass-lift:rgba(255,255,255,.033);
+  --rim-top:rgba(255,255,255,.16);--rim-side:rgba(255,255,255,.055);--rim-foot:rgba(255,255,255,.075);--hl:1px;
 }
+@media (min-resolution:2dppx){:root{--hl:.5px}}
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--floor);color:var(--ink-1);scroll-behavior:smooth}
 body{font:400 var(--t-body)/1.5 var(--sans);-webkit-font-smoothing:antialiased;background:var(--floor)}
@@ -55,31 +60,39 @@ canvas#mind.dragging{cursor:grabbing}
 .who small.now:not(.fresh) i{box-shadow:none;opacity:.55}
 @keyframes breathe{50%{opacity:.45}}
 /* ask its memory: one field, the results lit where they live in the mind, and a short list to open them */
-.ask{position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;border-radius:999px;background:rgba(20,20,25,.78);
-  border:1px solid transparent;color:var(--ink-3);text-shadow:none;transition:border-color var(--quick),background var(--quick),width var(--calm) var(--ease);width:220px}
-.ask:focus-within{border-color:var(--hair-2);background:rgba(16,16,20,.94);width:320px;color:var(--ink-2)}
-.ask input{all:unset;flex:1;min-width:0;font:400 var(--t-small)/1 var(--sans);color:var(--ink-1)}
+.ask{position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;border-radius:999px;
+  color:var(--ink-3);text-shadow:none;transition:width var(--calm) var(--ease);width:220px}
+/* its glass is a layer of its own, so the list that opens under it can be glass too (a glass element can't see
+   past its own glass to what's behind) */
+.ask::before{content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;background:var(--glass-lift) var(--grain);
+  -webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);transition:box-shadow var(--quick)}
+.ask > *{position:relative;z-index:1}
+.ask:focus-within{width:320px;color:var(--ink-2)}
+.ask:focus-within::before{box-shadow:inset 0 0 0 var(--hl) rgba(255,255,255,.2),inset 0 var(--hl) 0 rgba(255,255,255,.26)}
+.ask input{all:unset;position:relative;z-index:1;flex:1;min-width:0;font:400 var(--t-small)/1 var(--sans);color:var(--ink-1)}
 .ask input::placeholder{color:var(--ink-3)}
 .ask input::-webkit-search-cancel-button{display:none}
 .ask kbd{font:500 10.5px/1 var(--sans);color:var(--ink-4);padding:3px 6px;border-radius:5px;background:rgba(255,255,255,.06)}
 .ask:focus-within kbd{display:none}
-.ask-list{position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 32px));max-height:min(60vh,520px);overflow-y:auto;padding:6px;border-radius:14px;
-  background:var(--raised);box-shadow:0 0 0 1px var(--hair),0 24px 60px rgba(0,0,0,.55)}
+.ask-list{position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 32px));max-height:min(60vh,520px);overflow-y:auto;padding:6px;border-radius:16px;
+  background:var(--glass-lift) var(--grain);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+  box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top),0 24px 60px rgba(0,0,0,.4)}
 .ask-list[hidden]{display:none}
 .ask-list .hit{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:10px 12px;border-radius:9px;border:1px solid transparent}
-.ask-list .hit:hover,.ask-list .hit.on{background:var(--surface-2)}
+.ask-list .hit:hover,.ask-list .hit.on{background:rgba(255,255,255,.06)}
 .ask-list .hit:focus-visible{border-color:var(--focus)}
 .ask-list .hit .w{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font:400 var(--t-small)/1.45 var(--sans);color:var(--ink-1)}
 .ask-list .hit .m{margin-top:4px;color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums}
 .ask-list .say{padding:10px 12px;color:var(--ink-3);font-size:var(--t-small)}
 @media (max-width:860px){.ask{width:150px}.ask:focus-within{width:min(260px,calc(100vw - 32px))}.ask kbd{display:none}}
 .actions{top:26px;right:var(--edge);display:flex;gap:var(--s2);align-items:center}
-.pill{all:unset;cursor:pointer;padding:8px 15px;border-radius:999px;border:1px solid transparent;background:rgba(20,20,25,.78);
-  font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;transition:color var(--quick),border-color var(--quick),background var(--quick)}
-.pill:hover{color:var(--ink-1);border-color:var(--hair-2)}
-.pill:focus-visible{border-color:var(--focus);color:var(--ink-1)}
-.pill:active{background:rgba(255,255,255,.04)}
-.pill[aria-expanded="true"]{color:var(--ink-1);border-color:var(--hair-2);background:rgba(255,255,255,.045)}
+.pill{all:unset;cursor:pointer;padding:8px 15px;border-radius:999px;background:var(--glass-lift) var(--grain);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+  box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);
+  font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;transition:color var(--quick),box-shadow var(--quick),background-color var(--quick)}
+.pill:hover{color:var(--ink-1);background-color:rgba(255,255,255,.06)}
+.pill:focus-visible{color:var(--ink-1);box-shadow:inset 0 0 0 1px var(--focus)}
+.pill:active{background-color:rgba(255,255,255,.09)}
+.pill[aria-expanded="true"]{color:var(--ink-1);background-color:rgba(255,255,255,.06)}
 .textlink{color:var(--ink-3);text-decoration:none;font-size:var(--t-small);padding:8px 6px;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .textlink:hover{color:var(--ink-1)}
 .textlink:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
@@ -96,6 +109,16 @@ canvas#mind.dragging{cursor:grabbing}
 .verify .textlink{padding:0;font-size:inherit}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
 .left-cue{right:var(--edge);bottom:30px;text-align:right}
+/* back to the whole mind: there only once you've moved away from it */
+.recenter{all:unset;left:50%;bottom:30px;translate:-50% 8px;opacity:0;pointer-events:none;cursor:pointer;padding:8px 15px;border-radius:999px;
+  background:var(--glass-lift) var(--grain);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+  box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;
+  transition:opacity var(--calm) var(--ease),translate var(--calm) var(--sheet-ease),color var(--quick),background-color var(--quick)}
+.hero .recenter{position:absolute;pointer-events:none}
+.hero .recenter.on{opacity:1;translate:-50% 0;pointer-events:auto}
+.recenter:hover{color:var(--ink-1);background-color:rgba(255,255,255,.06)}
+.recenter:focus-visible{color:var(--ink-1);box-shadow:inset 0 0 0 1px var(--focus)}
+.recenter:active{background-color:rgba(255,255,255,.09)}
 .left-cue button{all:unset;cursor:pointer;display:block;padding:var(--s2) 0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick);color:var(--ink-2);font-size:var(--t-small)}
 .left-cue button:hover{color:var(--ink-1)}
 .left-cue button:focus-visible{border-bottom-color:var(--focus);color:var(--ink-1)}
@@ -149,10 +172,20 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .paper .promise{margin-top:var(--s5);color:var(--p-ink-4);font-size:var(--t-micro);max-width:80ch}
 
 /* ── the reading room: everything it holds, clean and readable, joined to the mind ── */
-.room{position:fixed;top:0;right:0;bottom:0;width:min(var(--sheet),100vw);z-index:6;background:var(--raised);
-  display:flex;flex-direction:column;transform:translateX(102%);transition:transform var(--calm) var(--ease);box-shadow:-30px 0 80px rgba(0,0,0,.45)}
+/* A pane of dark glass, floating just off the window's edge: the mind goes on glowing through it, softened, and
+   its lines bend as they pass under the rim. Its cards are tone on the glass, never panes of their own. */
+.room{--g-pad:16px;--g-r:22px;position:fixed;top:10px;right:10px;bottom:10px;width:min(var(--sheet),calc(100vw - 20px));z-index:6;border-radius:var(--g-r);
+  display:flex;flex-direction:column;transform:translateX(calc(100% + 40px));transition:transform .55s var(--sheet-ease)}
 .room.open{transform:none}
 .room[hidden]{display:none}
+.room::before{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:0 30px 70px rgba(0,0,0,.32),0 2px 10px rgba(0,0,0,.18);pointer-events:none}
+.room > .glass{position:absolute;inset:calc(-1 * var(--g-pad));clip-path:inset(var(--g-pad) round var(--g-r));pointer-events:none;
+  background:var(--glass-lift) var(--grain);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--bend,) var(--glass-see)}
+/* the rim: a hairline, brightest along the top where the light falls, quiet down the sides, a little back at the foot */
+.room::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;padding:var(--hl);pointer-events:none;
+  background:linear-gradient(180deg,var(--rim-top),var(--rim-side) 18%,var(--rim-side) 82%,var(--rim-foot));
+  -webkit-mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+.room > .room-head,.room > .room-body{position:relative;z-index:1}
 .room-head{padding:22px 24px 0}
 .room-top{display:flex;justify-content:space-between;align-items:baseline}
 .room-top h2{font:300 20px/1.2 var(--display);letter-spacing:-.01em}
@@ -160,10 +193,10 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .close{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);padding:4px 8px;border:1px solid transparent;border-radius:6px;transition:color var(--quick),border-color var(--quick)}
 .close:hover{color:var(--ink-1)}
 .close:focus-visible{border-color:var(--focus);color:var(--ink-1)}
-.room-body{flex:1;overflow-y:auto;padding:var(--s4) 24px var(--s8);overscroll-behavior:contain}
+.room-body{flex:1;overflow-y:auto;padding:var(--s4) 24px var(--s8);overscroll-behavior:contain;border-radius:0 0 var(--g-r) var(--g-r)}
 .room .tabs{margin-top:var(--s4)}
 dialog{margin:auto;border:0;border-radius:var(--r);background:var(--raised);padding:0;max-width:min(92vw,1100px);max-height:92vh;overflow:hidden;color:var(--ink-1)}
-dialog::backdrop{background:rgba(6,6,8,.88)}
+dialog::backdrop{background:rgba(6,6,8,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 dialog img{display:block;max-width:min(92vw,1100px);max-height:calc(92vh - 46px);object-fit:contain}
 dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);color:var(--ink-3);font-size:var(--t-small);background:var(--surface-2)}
 
@@ -185,6 +218,10 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
   .who small{max-width:60vw}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+@media (max-width:600px){.room{--g-r:18px;top:8px;right:8px;bottom:8px;width:calc(100vw - 16px)}.room-head{padding:18px 18px 0}.room-body{padding:var(--s4) 18px var(--s8)}}
+/* asked for less see-through, or a browser without it: the same surfaces, solid */
+@media (prefers-reduced-transparency:reduce){.room > .glass,.ask::before,.ask-list,.pill{-webkit-backdrop-filter:none;backdrop-filter:none;background:#0e0e12}}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.room > .glass,.ask::before,.ask-list,.pill{background:#0e0e12}}
 </style>
 </head>
 <body>
@@ -216,6 +253,7 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
     <div class="trail-line" id="trail-line"></div>
     <div class="verify" id="verify"></div>
   </div>
+  <button class="ui recenter" id="recenter" type="button" tabindex="-1">Recenter</button>
   <div class="ui left-cue" id="left-cue" hidden>
     <button id="to-paper">What it left ↓</button>
     <small id="left-sum"></small>
@@ -227,6 +265,7 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
 </section>
 
 <aside class="room sheet" id="room" role="dialog" aria-modal="false" aria-labelledby="room-title" hidden>
+  <div class="glass" aria-hidden="true"></div>
   <div class="room-head">
     <div class="room-top"><h2 id="room-title" tabindex="-1">Everything it holds</h2><button class="close" id="close-room">Close</button></div>
     <div class="tabs" role="tablist" id="tabs"></div>
