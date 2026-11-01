@@ -24,6 +24,7 @@ import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
 import { bendRim } from '../shared/glass.js';
+import { nameRegions } from '../shared/regions.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
   forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -77,7 +78,7 @@ let mems = [], memAt = new Map(), memVersion = null;
 let D, N = 0, NL = 0, tissue = null, R, P, centre, extent, HOME, MID = null, cellOf = new Map();
 let born, acc, nbrs, glow, flash, aim, read, LF, LA, LT, LR, fireAt, fireLevel, linkAt, linkLevel, heat, linkHeat;
 let fc, fAim, lc, lAim, shownG, shownF;          // the light of what you're pointing at (see "pointing")
-const LAYOUT_KEY = () => `mnemos.mind.layout.v2.${L.identity.agentId || AGENT || 'agent'}`;
+const LAYOUT_KEY = () => `mnemos.mind.layout.v3.${L.identity.agentId || AGENT || 'agent'}`;   // v3: its regions set apart
 
 /* the export's memories as the anatomy reads them: a cell per memory, a link per tie (counted once, from its sender) */
 function shape(list) {
@@ -114,7 +115,7 @@ function oneWorker(job) {
 }
 function drawIn(data) {
   {
-    const tune = Object.fromEntries(['core', 'lobes', 'together'].filter((k) => params.has(k)).map((k) => [k, Number(params.get(k))]));
+    const tune = Object.fromEntries(['gap', 'together'].filter((k) => params.has(k)).map((k) => [k, Number(params.get(k))]));
     return inWorker({ tune, cells: data.cells.map((c) => ({ id: c.id, lesson: c.lesson, strength: c.strength, stability: c.stability, recalls: c.recalls, acc: c.accessibility })),
       links: data.links, known: params.has('relayout') ? {} : store.get(LAYOUT_KEY()) || {}, budget,
       glyphs: GLYPHS, metrics: atlas.metrics, mid: MID });
@@ -202,6 +203,7 @@ function apply(data, out, took = {}, ready = null) {
   // a redraw starts the light over; the memory being read stays read, and lit, wherever its place is now
   if (open) { selected = cellOf.get(open) ?? -1; if (selected >= 0) spread(selected, performance.now()); }
   if (hoverCell >= N) hoverCell = -1;
+  mapRegions(out.places);
   pointed = -2;                                    // drawn again: what's lit is worked out afresh
 }
 
@@ -211,7 +213,7 @@ function apply(data, out, took = {}, ready = null) {
  * second), and the page opens on it at once. When the memory has changed since, the kept one still opens the page,
  * and a fresh one is made behind it and takes its place. Kept with the code's own version and this screen's budget: a
  * drawing made by other code, or for another screen, is made again. A convenience only; without it, the page draws. */
-const DRAWING_V = '2026-10-31.3';   // glyph indices changed with the three-shape atlas
+const DRAWING_V = '2026-11-01.1';   // the regions set apart (and, before, the three-shape atlas)
 const kept = (() => {
   let opening = null;
   const db = () => opening || (opening = new Promise((res, rej) => {
@@ -343,7 +345,7 @@ function paint(now) {
     LF[li] = front; LA[li] = amount; LT[li] = trail;
   }
   for (let i = 0; i < N; i++) if (Math.abs((i === selected ? 1 : 0) - read[i]) > 2e-3 || Math.abs(fAim[i] - fc[i]) > 2e-3) { moving = true; break; }
-  if (Math.abs((lit() >= 0 ? 1 : 0) - dimNow) > 2e-3) moving = true;
+  if (Math.abs((lit() !== -1 ? 1 : 0) - dimNow) > 2e-3) moving = true;
   animating = moving;
 }
 
@@ -408,13 +410,24 @@ function aimAt(i) {
  * (dimNow), so moving from one memory to the next never flashes the whole mind back up between them. */
 const QUIET = 0.74, QUIET_OPEN = 0.88, LIT_G = 0.5, LIT_F = 0.95, LIT_L = 0.8;
 // what's lit: the memory open, and with none open, the one under the hand
-const lit = () => (selected >= 0 ? selected : hoverCell);
+// (a region's name under the hand lights the region: its key is -10 - k)
+const lit = () => (selected >= 0 ? selected : hoverCell >= 0 ? hoverCell : regionLit >= 0 ? -10 - regionLit : -1);
 let pointed = -1;
 let dimNow = 0, aimed = [], aimedLinks = [];
 function pointAt(i) {
   for (const j of aimed) fAim[j] = 0;
   for (const li of aimedLinks) lAim[li] = 0;
   aimed = []; aimedLinks = [];
+  if (i <= -10) {
+    // a region: its memories, the links among them, and brighter, the links that leave it: where it reaches
+    const k = -10 - i, g = regions.find((r) => r.k === k);
+    if (!g) return;
+    for (const c of g.cells) {
+      fAim[c] = 0.62; aimed.push(c);
+      for (const [j, , li] of nbrs[c]) { lAim[li] = Math.max(lAim[li], regionOf[j] === k ? 0.22 : 0.16); aimedLinks.push(li); }
+    }
+    return;
+  }
   if (i < 0 || i >= N) return;
   fAim[i] = 1; aimed.push(i);
   for (const [j, w, li] of nbrs[i]) { fAim[j] = Math.max(fAim[j], 0.45 + 0.4 * w); aimed.push(j); lAim[li] = 0.55 + 0.45 * w; aimedLinks.push(li); }
@@ -561,6 +574,89 @@ function nearWanted(now) {
   return closeTo = bd < cam.goal.dist * 0.6 ? best : -1;
 }
 
+/* ---------- its regions, named ----------
+ * The layout gives each concern a place of its own (./build.js); here each is named in its own words
+ * (../shared/regions.js) and the names are set over the mind like a chart's names for its constellations: the
+ * biggest from across the room, more of them as you come closer, none where one would cover another, none with a
+ * memory open. A name under the hand lights its region and where it reaches; a name clicked goes there. */
+let regions = [], regionOf = new Int32Array(0), regionLit = -1, regionsNamed = '';
+function mapRegions(places) {
+  regionOf = Int32Array.from(places, (p) => (p[3] ?? -1));
+  const K = Math.max(-1, ...regionOf) + 1, cells = Array.from({ length: K }, () => []);
+  regionOf.forEach((k, i) => { if (k >= 0) cells[k].push(i); });
+  const old = new Map(regions.map((g) => [g.k, g]));
+  regions = cells.map((list, k) => {
+    if (list.length < 6) return null;
+    const c = scale(list.reduce((s, i) => add(s, P[i]), [0, 0, 0]), 1 / list.length);
+    const d = list.map((i) => length(sub(P[i], c))).sort((x, y) => x - y);
+    const g = old.get(k) || { k, el: null, on: false, name: '', words: [] };
+    return Object.assign(g, { cells: list, n: list.length, c, r: d[Math.floor(d.length * 0.85)] || 0.5 });
+  }).filter(Boolean).sort((a, b) => b.n - a.n);
+  for (const g of old.values()) if (!regions.includes(g)) g.el?.remove();
+  if (regionLit >= 0 && !regions.some((g) => g.k === regionLit)) regionLit = -1;
+  // naming reads every memory's words: a few dozen milliseconds, done when the page is idle, and again only when
+  // the memories or their regions change
+  const key = `${memVersion}:${K}:${N}`;
+  if (key === regionsNamed) return;
+  regionsNamed = key;
+  const name = () => {
+    const words = D.cells.map((c) => mems[memAt.get(c.fullId)] || { content: '' });
+    const named = nameRegions(words, Array.from(regionOf), [L.identity.name, L.identity.person?.name, L.identity.person, 'Claude']);
+    for (const g of regions) { const r = named[g.k]; if (r) { g.name = r.name; g.words = r.words; } labelOf(g); }
+    wake();
+  };
+  window.requestIdleCallback ? requestIdleCallback(name, { timeout: 3000 }) : setTimeout(name, 200);
+}
+function labelOf(g) {
+  if (!g.name) return;
+  if (!g.el) {
+    g.el = document.createElement('button');
+    g.el.className = 'region'; g.el.type = 'button'; g.el.tabIndex = -1;
+    g.el.addEventListener('pointerenter', () => { regionLit = g.k; wake(); });
+    g.el.addEventListener('pointerleave', () => { if (regionLit === g.k) { regionLit = -1; wake(); } });
+    g.el.addEventListener('focus', () => { regionLit = g.k; wake(); });
+    g.el.addEventListener('blur', () => { if (regionLit === g.k) { regionLit = -1; wake(); } });
+    g.el.addEventListener('click', () => flyTo(g));
+    $('regions').appendChild(g.el);
+  }
+  g.el.innerHTML = `<span class="nm">${esc(g.name)}</span><span class="ct">${g.n.toLocaleString('en-US')}</span>${g.words.length ? `<span class="wd">${g.words.map(esc).join(' · ')}</span>` : ''}`;
+  g.el.setAttribute('aria-label', `${g.name}: ${plural(g.n, 'memory', 'memories')}${g.words.length ? `, about ${g.words.join(', ')}` : ''}. Go there`);
+  g.w = 0;
+}
+function flyTo(g) {
+  hover(-1); fling = null; meet = null;
+  cam.goal.target = g.c.slice(); cam.goal.dist = clamp((g.r / tanH) * 1.5, ZMIN, HOME * ZOUT);
+  lastNav = -1e9; moved(true); stir();
+}
+function placeRegions() {
+  if (!regions.length) return;
+  const W = innerWidth, H = innerHeight, covered = sheetOpen && W > 860 ? Math.min(SHEET, W) + 20 : 0, placed = [];
+  // from across the room only the big regions are named; coming closer, smaller ones are
+  const fewest = Math.max(6, Math.round(44 * (cam.dist / HOME) ** 2));
+  for (const g of regions) {
+    let on = false;
+    if (g.el && selected < 0 && g.n >= fewest) {
+      const s = project(g.c);
+      if (s) {
+        if (!g.w) g.w = g.el.offsetWidth || g.name.length * 8 + 40;
+        const rs = (g.r / (s.z * tanH)) * (H / 2), x = s.x, y = s.y, w = g.w;
+        on = rs > 34 && rs < H * 0.8 && x - w / 2 > 12 && x + w / 2 < W - covered - 12 && y > 110 && y < H - 170;
+        for (let b = 0; on && b < placed.length; b++) if (Math.abs(placed[b][0] - x) < (placed[b][2] + w) / 2 + 12 && Math.abs(placed[b][1] - y) < 34) on = false;
+        if (on) {
+          placed.push([x, y, w]);
+          const t = `${Math.round(x - w / 2)}px ${Math.round(y - 13)}px`;
+          if (g.el.style.translate !== t) g.el.style.translate = t;
+        }
+      }
+    }
+    if (on !== g.on || (!on && regionLit === g.k)) {
+      g.on = on; g.el?.classList.toggle('on', on);
+      if (g.el) g.el.tabIndex = on ? 0 : -1;
+      if (!on && regionLit === g.k) regionLit = -1;
+    }
+  }
+}
+
 /* ---------- resolution and the loop ---------- */
 
 let post = null, heroSeen = true;
@@ -590,7 +686,7 @@ async function lighten() {
 }
 function frame(now) {
   if (!heroSeen) { looping = false; return; }
-  const turning = !reduce && selected < 0 && hoverCell < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
+  const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
@@ -623,6 +719,7 @@ function frame(now) {
   const eye = eyeOf(cam), fwd = normalize(sub(cam.target, eye)), right = normalize(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
   view = { eye, fwd, right, up };
   if ((frames & 3) === 0) pointing();
+  placeRegions();
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
   paint(now);
   // a memory open is always drawn finely: whatever dropped its fine version (a redraw, a lighter budget, a page that
@@ -636,7 +733,7 @@ function frame(now) {
   // quiet, further with a memory open, so where it reaches can be seen
   const on = lit();
   if (on !== pointed) { pointed = on; pointAt(on); }
-  dimNow += ((on >= 0 ? 1 : 0) - dimNow) * (on >= 0 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
+  dimNow += ((on !== -1 ? 1 : 0) - dimNow) * (on !== -1 ? 1 - Math.exp(-8 * dt) : 1 - Math.exp(-4.5 * dt));
   const quiet = (selected >= 0 ? QUIET_OPEN : QUIET) * dimNow;
   for (let i = 0; i < N; i++) {
     flash[i] += (aim[i] - flash[i]) * (aim[i] > flash[i] ? kUp : kDown);
@@ -1088,5 +1185,6 @@ listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
   get looping() { return looping; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get regions() { return regions.map((g) => ({ k: g.k, n: g.n, name: g.name, words: g.words, on: g.on })); },
   openRoom, closeRoom, pick: (x, y) => pick(x, y), where: (i) => (view ? project(P[i]) : null), byId: (id) => cellOf.get(id) };
 stir();

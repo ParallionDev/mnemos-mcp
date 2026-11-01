@@ -39,6 +39,18 @@ a{color:inherit}
 .own{font-family:var(--own)}
 .label{font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 
+/* ── its regions, named over the mind (mind.js places them each frame; only the ones shown take a hand) ── */
+.regions{position:fixed;inset:0;z-index:2;pointer-events:none}
+.region{all:unset;position:absolute;left:0;top:0;display:flex;align-items:baseline;gap:7px;height:26px;padding:0 10px;border-radius:999px;cursor:pointer;
+  white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .5s var(--ease),background-color var(--quick);
+  font:450 13px/26px var(--display);letter-spacing:.005em;color:var(--ink-1);text-shadow:0 0 14px rgba(6,6,8,.95),0 0 4px rgba(6,6,8,.9)}
+.region.on{opacity:.86;pointer-events:auto}
+.region .ct{font:450 10.5px/1 var(--sans);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.region .wd{max-width:0;overflow:hidden;font:400 11.5px/1 var(--sans);color:var(--ink-3);transition:max-width .45s var(--sheet-ease)}
+.region.on:hover,.region.on:focus-visible{opacity:1;background:rgba(8,8,11,.62)}
+.region:hover .wd,.region:focus-visible .wd{max-width:340px}
+.region:focus-visible{box-shadow:inset 0 0 0 1px var(--focus)}
+
 /* ── the mind: fixed behind everything; the hero is a window onto it ── */
 canvas#mind{position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:pan-y}
 canvas#mind.dragging{cursor:grabbing}
@@ -227,6 +239,8 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
 <body>
 <canvas id="mind" aria-label="The mind's memory: every cell a memory, every fibre a real link; lit only where its last quiet hour went"></canvas>
 <div id="loading">gathering its memories…</div>
+
+<nav class="regions" id="regions" aria-label="Its regions"></nav>
 
 <section class="hero" id="hero" aria-label="The mind, still warm">
   <div class="ui top">

@@ -179,7 +179,7 @@ function forces(P, groups, links, iters, { k = 1, home = null, pullHome = null, 
   return P;
 }
 
-function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0, lobes = 1 } = {}) {
+function layout(cells, links, comm, { seed = 7, together = 0.15, gap = 1.2 } = {}) {
   const rnd = random(seed), normal = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
   const n = cells.length, K = Math.max(0, ...comm) + 1;
   // the lobes, placed by how much their memories share
@@ -198,30 +198,49 @@ function layout(cells, links, comm, { seed = 7, together = 0.15, core = 0, lobes
   }
   const Q = new Float64Array(K * 3).map(() => normal() * 2);
   forces(Q, [Array.from({ length: K }, (_, i) => i)], lobeLinks, 600, { k: 2.6, gravity: 0.01, rnd });
-  // wider than tall, like the frame it lives in; and the lobes drawn in toward one another, so they read as one mind
-  for (let a = 0; a < K; a++) { Q[a * 3] *= 1.35 * lobes; Q[a * 3 + 1] *= 0.8 * lobes; Q[a * 3 + 2] *= lobes; }
-  // the memories, each in its lobe
+  // the memories, each concern laid out on its own first, so it keeps a shape of its own: its links pulling, its
+  // memories pushing one another apart, a light pull holding it round
   let wMax = 0;
   const memLinks = links.map((l) => {
-    const w = l.w * (l.rel === 'distilled_into' ? 3 : 1) * (comm[l.s] === comm[l.t] ? 1 : 0.12);
+    const w = l.w * (l.rel === 'distilled_into' ? 3 : 1);
     wMax = Math.max(wMax, w);
     return [l.s, l.t, w];
   });
   for (const l of memLinks) l[2] /= wMax || 1;
-  const home = new Float64Array(n * 3), P = new Float64Array(n * 3), pullHome = new Float64Array(n), heart = new Float64Array(n);
-  const rMax = Math.log1p(Math.max(1, ...cells.map((c) => c.recalls || 0)));
   const groups = Array.from({ length: K }, () => []);
-  cells.forEach((c, i) => {
-    const q = comm[i] * 3;
-    for (let d = 0; d < 3; d++) { home[i * 3 + d] = Q[q + d]; P[i * 3 + d] = Q[q + d] + normal() * 0.8; }
-    const often = Math.log1p(c.recalls || 0) / rMax;
-    pullHome[i] = 0.05 + 0.25 * often;
-    // the heart of the whole mind: what comes back most sits at its centre, what it rarely reaches drifts outward
-    heart[i] = core * (0.15 + 0.85 * Math.max(often, c.acc || 0));
-    groups[comm[i]].push(i);
+  cells.forEach((c, i) => groups[comm[i]].push(i));
+  const inside = Array.from({ length: K }, () => []), where = new Int32Array(n);
+  groups.forEach((g) => g.forEach((i, a) => { where[i] = a; }));
+  for (const [s, t, w] of memLinks) if (comm[s] === comm[t]) inside[comm[s]].push([where[s], where[t], w]);
+  const local = groups.map((g, a) => {
+    const m = g.length, L = new Float64Array(m * 3).map(() => normal() * 0.6 * Math.cbrt(m));
+    if (m > 1) forces(L, [], inside[a], m > 400 ? 260 : 360, { k: 0.55, gravity: 0.05, rnd, everyone: true });
+    const c = [0, 1, 2].map((d) => { let v = 0; for (let x = 0; x < m; x++) v += L[x * 3 + d]; return v / m; });
+    const r = [];
+    for (let x = 0; x < m; x++) { for (let d = 0; d < 3; d++) L[x * 3 + d] -= c[d]; r.push(Math.hypot(L[x * 3], L[x * 3 + 1], L[x * 3 + 2])); }
+    r.sort((p, q) => p - q);
+    return { L, r: Math.max(0.6, r[Math.floor(r.length * 0.9)] || 0) };
   });
-  // a larger mind settles in fewer passes: the shape is there long before the last of them, and the first visit waits
-  forces(P, groups, memLinks, Math.round(Math.max(400, Math.min(900, 900 * 2000 / Math.max(1, n)))), { k: 0.55, home, pullHome, gravity: heart, rnd, everyone: true });
+  // then the concerns set apart by their size, each where what it shares put it, with clear space between them
+  // (a place of its own, so a concern reads as one), drawn in together as far as that space allows
+  const R = local.map((o) => o.r), rMean = R.reduce((a, b) => a + b, 0) / (K || 1);
+  let qd = 0;
+  for (let a = 0; a < K; a++) qd = Math.max(qd, Math.hypot(Q[a * 3], Q[a * 3 + 1], Q[a * 3 + 2]));
+  for (let a = 0; a < K * 3; a++) Q[a] *= (rMean * Math.cbrt(K) * 2.2) / (qd || 1);
+  const GAP = 0.32 * gap;
+  for (let it = 0; it < 360; it++) {
+    for (let a = 0; a < K; a++) { Q[a * 3] *= 0.994; Q[a * 3 + 1] *= 0.985; Q[a * 3 + 2] *= 0.992; }     // wider than tall, like its frame
+    for (let a = 0; a < K; a++) for (let b = a + 1; b < K; b++) {
+      const dx = Q[b * 3] - Q[a * 3], dy = Q[b * 3 + 1] - Q[a * 3 + 1], dz = Q[b * 3 + 2] - Q[a * 3 + 2];
+      const d = Math.hypot(dx, dy, dz) + 1e-9, need = (R[a] + R[b]) * (1 + GAP);
+      if (d >= need) continue;
+      const push = (need - d) / d, wa = R[b] / (R[a] + R[b]), wb = 1 - wa;     // the smaller one gives way
+      Q[a * 3] -= dx * push * wa; Q[a * 3 + 1] -= dy * push * wa; Q[a * 3 + 2] -= dz * push * wa;
+      Q[b * 3] += dx * push * wb; Q[b * 3 + 1] += dy * push * wb; Q[b * 3 + 2] += dz * push * wb;
+    }
+  }
+  const P = new Float64Array(n * 3);
+  groups.forEach((g, a) => g.forEach((i, x) => { for (let d = 0; d < 3; d++) P[i * 3 + d] = Q[a * 3 + d] + local[a].L[x * 3 + d]; }));
   // centred, and scaled so nearest neighbours sit about 0.9 apart: room for an arbour
   const mid = [0, 1, 2].map((d) => { let s = 0; for (let i = 0; i < n; i++) s += P[i * 3 + d]; return s / n; });
   for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) P[i * 3 + d] -= mid[d];
