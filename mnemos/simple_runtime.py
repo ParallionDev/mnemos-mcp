@@ -702,19 +702,22 @@ class NothingChanged(ValueError):
 
 _ONBOARDING_HEAD = """\
 ONBOARDING - first session with a fresh memory
-This is the first time you and this human meet with durable memory attached."""
+This memory is new, but you and this human may not be: you may already know them from what you carry into this session (your instructions, notes or files)."""
 
 _RITUAL_INTRO = (
-    "run a short get-to-know-you ritual. Be warm, be brief, ask one question at a time:"
+    "run a short get-to-know-you ritual. Be warm, be brief, ask one question at a time. "
+    "If they are new to you, ask each question. If you already know them, don't ask what "
+    "you can already answer: capture what you know in its place, in your own words, and "
+    "ask only what you don't know:"
 )
 
 _RITUAL_STEPS = """\
 1. Ask what they would like you to call them. Capture the answer with mnemos_capture.
 2. Ask what they are working on right now. Capture the answer with mnemos_capture.
-3. Ask what they want you to always remember. Capture the answer with mnemos_capture.
+3. Ask what they want you to always remember. Capture the answer with mnemos_capture and standing=true, so it never fades.
 4. Ask them for one small, true fact about themselves or their world - something they would smile to hear you recall later. Capture it with mnemos_capture. It becomes part of their first proof that your memory is real.
 5. Call mnemos_introduce with agent_model set to your own model id. You know what model you are - do not ask the human. Add agent_name if you go by a name.
-6. Finish by telling them, in plain words, what you will now remember, and that they can see all of it, and answer your notes, on a page you'll open for them whenever they ask.
+6. Finish by telling them, in plain words, what you will now remember, and that they can see all of it, and answer your notes, on a page you'll open for them whenever they ask. If you knew them before, say plainly that from now on you remember across sessions too.
 When you talk to the human, never mention tools, databases, scopes, or model ids. Just talk like someone who intends to remember."""
 
 _ONBOARDING_RITUAL = f"{_ONBOARDING_HEAD} Before other work, {_RITUAL_INTRO}\n{_RITUAL_STEPS}"
@@ -2875,7 +2878,8 @@ class MnemosRuntime:
         if not captured:
             lines.append(
                 "- Ask the human for one small, true fact about themselves and "
-                "capture it with mnemos_capture."
+                "capture it with mnemos_capture. If you already know one, capture "
+                "it instead of asking."
             )
         lines.append(
             "Then tell the human what you will remember, and that they can see all of "

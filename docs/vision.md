@@ -488,8 +488,9 @@ every session start and then report a healthy, permanently empty packet forever.
 
 A fresh scope's very first packet does not dump an empty database on the agent. It hands
 it a short ritual to run — warm, brief, one question at a time. Ask what they'd like to
-be called. Ask what they're working on. Ask what they want you to always remember. And
-then this instruction, which is the one worth reading twice:
+be called. Ask what they're working on. Ask what they want you to always remember, and
+keep that answer standing, so it never fades. And then this instruction, which is the
+one worth reading twice:
 
 > *Ask them for one small, true fact about themselves or their world — something they
 > would smile to hear you recall later. It becomes part of their first proof that your
@@ -498,7 +499,10 @@ then this instruction, which is the one worth reading twice:
 The ritual ends by having the agent say, in plain words, what it will now remember.
 Stores that predate onboarding are grandfathered and never see it, because running a
 get-to-know-you script at someone you have known for months is worse than not running
-one at all.
+one at all. For the same reason, a new memory isn't taken for a new person: an agent
+that already knows them from what it carries into the session (its instructions, notes,
+files) asks only what it doesn't know, keeps what it does in its own words, and tells
+them plainly that from now on it remembers across sessions too.
 
 And then there is the moment the whole system exists for. The first time continuity
 crosses a real restart, the wake's opening ends with one more sentence — once, ever —

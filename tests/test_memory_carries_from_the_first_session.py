@@ -201,6 +201,22 @@ def test_outside_claude_code_the_ritual_is_as_it_was(launchd, claude):
     assert _packet() == _ONBOARDING_RITUAL
 
 
+def test_an_agent_that_already_knows_its_person_is_not_told_they_are_strangers(launchd, claude):
+    """0.6.0: an empty store is a new memory, not a new person. An agent that
+    knows its person from what it carries in (instructions, notes, files) asks
+    only what it doesn't know, still introduces itself and closes, and says
+    it now remembers across sessions too. What the person asks to be always
+    remembered is kept standing, so it never fades."""
+    packet = _packet()
+    assert "This is the first time you and this human meet" not in packet
+    assert "you may already know them from what you carry into this session" in packet
+    assert "don't ask what you can already answer" in packet
+    assert "If they are new to you, ask each question." in packet
+    assert "standing=true, so it never fades" in packet.split("3. ", 1)[1].split("\n", 1)[0]
+    assert "from now on you remember across sessions too" in packet.split("6. ", 1)[1]
+    assert "5. Call mnemos_introduce" in packet
+
+
 def test_the_setup_part_never_costs_the_packet(claude_code, launchd, claude, monkeypatch):
     def broken(db_path):
         raise RuntimeError("settings unreadable")
