@@ -956,9 +956,9 @@ def test_a_v15_store_gains_the_journal_tables_after_one_verified_backup(tmp_path
 
     tables = {row["name"] for row in _rows(db, "SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"journal_entries", "notes"} <= tables
-    assert _rows(db, "SELECT value FROM meta WHERE key = 'schema_version'") == [{"value": "18"}]
-    assert SCHEMA_VERSION == 18
-    [backup] = list((tmp_path / "backups").glob("memory.pre-v18-*.db"))
+    assert _rows(db, "SELECT value FROM meta WHERE key = 'schema_version'") == [{"value": "19"}]
+    assert SCHEMA_VERSION == 19
+    [backup] = list((tmp_path / "backups").glob("memory.pre-v19-*.db"))
     assert check_database(backup)["schema_version"] == "15"
     assert {row["name"] for row in _rows(backup, "SELECT name FROM sqlite_master WHERE type = 'table'")
             } >= {"engrams"} and "journal_entries" not in {
@@ -969,7 +969,7 @@ def test_a_v15_store_gains_the_journal_tables_after_one_verified_backup(tmp_path
 
     # A store this code made is not backed up again for being opened.
     EngramStore(str(db)).close()
-    assert len(list((tmp_path / "backups").glob("memory.pre-v18-*.db"))) == 1
+    assert len(list((tmp_path / "backups").glob("memory.pre-v19-*.db"))) == 1
 
 
 def test_the_code_version_is_raised_so_older_servers_stand_down(tmp_path):

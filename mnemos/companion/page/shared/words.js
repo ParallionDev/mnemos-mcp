@@ -93,10 +93,11 @@ export const ASK = {
   impact: ['What did it change?', 'Memories kept without saying what they changed.'],
   belief: ['A belief?', 'Asked from how often a word recurs. Kept out of its hours until they are grounded in meaning.'],
   reaffirm: ['Still true?', 'Beliefs it holds, asked again each month.'],
+  fact: ['Is it still true?', 'Facts fading, asked whether they still hold before they go.'],
   // no longer asked; named only where an answered one stays in the history
   contradiction: ['A contradiction?', 'Two memories that may disagree. No longer asked.'],
 };
-export const ASK_ORDER = { lesson: 0, impact: 1, belief: 2, reaffirm: 3 };
+export const ASK_ORDER = { lesson: 0, fact: 1, impact: 2, belief: 3, reaffirm: 4 };
 export const RELATION = { co_activated: 'came back together', distilled_into: 'a lesson distilled from it', supports: 'supports it', contradicts: 'may contradict it' };
 
 /* what an hour did, in a sentence, from its own record */

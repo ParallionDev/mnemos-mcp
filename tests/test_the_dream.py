@@ -164,7 +164,7 @@ def test_a_dream_is_given_what_needs_a_mind(db, tmp_path):
             f"(held at 40%) Still true? [{held}]") in prompt
     assert "- With Riley, the felt thing comes before the literal picture. (held at 55%)\n" in prompt
     assert f"New since the last dream\n- Today the page learned to mark a note read once it was seen. [{new}]" in prompt
-    assert record["waiting"] == {"fading": 1, "returning": 1, "reaffirm": 1, "new": 1, "rhymes": 0, "questions": 4}
+    assert record["waiting"] == {"fading": 1, "facts": 0, "returning": 1, "reaffirm": 1, "new": 1, "rhymes": 0, "questions": 4}
     assert len(record["said"]) == 4
 
 

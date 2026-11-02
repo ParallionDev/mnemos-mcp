@@ -473,7 +473,7 @@ def _idle_evidence(
                   AND NOT EXISTS (
                     SELECT 1 FROM reflection_queue q
                     WHERE q.target_id = e.id
-                      AND (q.kind = 'lesson' OR (q.kind = 'impact' AND q.answered_at IS NOT NULL))
+                      AND (q.kind IN ('lesson', 'fact') OR (q.kind = 'impact' AND q.answered_at IS NOT NULL))
                       AND q.agent_id = ? AND q.person_id = ? AND q.project_scope = ?
                   )
             """, (*chunk, *_scope_tuple(scope), *_scope_tuple(scope)))}
@@ -491,7 +491,7 @@ def _lesson_questions(store: EngramStore, scope: dict[str, str], now: datetime, 
         SELECT q.target_id, q.created_at, q.expires_at FROM reflection_queue q
         JOIN engrams e ON e.id = q.target_id
         WHERE q.agent_id = ? AND q.person_id = ? AND q.project_scope = ?
-          AND q.kind = 'lesson' AND q.answered_at IS NULL AND q.surfaced_count < ?
+          AND q.kind IN ('lesson', 'fact') AND q.answered_at IS NULL AND q.surfaced_count < ?
           AND e.state != 'archived'
         ORDER BY q.created_at ASC
     """, (*_scope_tuple(scope), EngramStore.MAX_SURFACINGS))

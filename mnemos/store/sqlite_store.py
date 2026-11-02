@@ -40,7 +40,7 @@ from ..core.identity import AgentIdentity
 # and notes, the agent's journal and the notes between the agent and the
 # person (see JOURNAL_WRITTEN and NOTE_KINDS). v18: lived_days, the days the
 # agent lived (see consolidation/lived.py).
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # The lowest maintenance code version still allowed to maintain this store,
 # raised by each newer version that opens it (see mnemos/code_version.py).
@@ -411,8 +411,10 @@ _RECONCILABLE_COLUMNS: dict[str, list[tuple[str, str]]] = {
 # What the reflection queue can ask. 'reaffirm' (schema v11) asks whether a
 # belief the agent holds is still true; before it, a reaffirmation was filed as
 # 'belief' and the unique index below, which counts answered asks, blocked it
-# for good behind the answered ask that formed the belief.
-REFLECTION_KINDS = ("impact", "lesson", "belief", "reaffirm")
+# for good behind the answered ask that formed the belief. 'fact' (schema v19)
+# asks whether a fading fact is still true, where 'lesson' asks a fading
+# experience what it taught.
+REFLECTION_KINDS = ("impact", "lesson", "belief", "reaffirm", "fact")
 
 # What the queue once asked and never asks again. A store keeps the ones it
 # holds: answered, they are the agent's words and stay as history; waiting,
@@ -425,7 +427,7 @@ RETIRED_REFLECTION_KINDS = ("contradiction",)
 
 # The reflection queue's table, kept apart from the schema script so that a
 # queue from before v11 can be rebuilt from it: SQLite cannot widen a CHECK in
-# place (see EngramStore._allow_reaffirm_asks). Must allow REFLECTION_KINDS and
+# place (see EngramStore._allow_new_ask_kinds). Must allow REFLECTION_KINDS and
 # RETIRED_REFLECTION_KINDS: a store holds the questions it was once asked.
 _REFLECTION_QUEUE_TABLE = """CREATE TABLE IF NOT EXISTS reflection_queue (
     id TEXT PRIMARY KEY,
@@ -433,7 +435,7 @@ _REFLECTION_QUEUE_TABLE = """CREATE TABLE IF NOT EXISTS reflection_queue (
     person_id TEXT NOT NULL DEFAULT 'user',
     project_scope TEXT NOT NULL DEFAULT 'global',
     kind TEXT NOT NULL
-        CHECK (kind IN ('impact', 'lesson', 'belief', 'contradiction', 'reaffirm')),
+        CHECK (kind IN ('impact', 'lesson', 'belief', 'contradiction', 'reaffirm', 'fact')),
     target_id TEXT NOT NULL,
     prompt TEXT NOT NULL,
     excerpt TEXT NOT NULL DEFAULT '',
@@ -1097,7 +1099,7 @@ class EngramStore:
             self._backup_before_migration(conn)
             self._reconcile_columns(conn)
             self._rebuild_handoff_index(conn)
-            self._allow_reaffirm_asks(conn)
+            self._allow_new_ask_kinds(conn)
             had_lived_days = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'lived_days'"
             ).fetchone() is not None
@@ -1231,11 +1233,12 @@ class EngramStore:
             conn.execute("DROP INDEX IF EXISTS idx_hypomnema_one_active_handoff")
 
     @staticmethod
-    def _allow_reaffirm_asks(conn: sqlite3.Connection) -> None:
-        """Let the reflection queue hold reaffirmation asks (schema v11).
+    def _allow_new_ask_kinds(conn: sqlite3.Connection) -> None:
+        """Let the reflection queue hold every kind in ``REFLECTION_KINDS``:
+        reaffirmation asks (schema v11) and fading facts (v19).
 
-        Up to v10 the queue's CHECK allowed four kinds, and SQLite cannot widen
-        a CHECK in place, so the table is rebuilt from
+        Up to v10 the queue's CHECK allowed four kinds, and up to v18 five, and
+        SQLite cannot widen a CHECK in place, so the table is rebuilt from
         ``_REFLECTION_QUEUE_TABLE`` with every row kept. The old table goes
         with its indexes, and they are made again under their old names in
         the same transaction, the unique one now counting only a waiting
@@ -1244,8 +1247,8 @@ class EngramStore:
         Nothing references the queue (no foreign key, trigger or view), so
         renaming the old table first rewrites nothing else.
 
-        An older Mnemos opening a v11 store finds the table and the indexes by
-        name and leaves them alone. A unique index still in the old shape
+        An older Mnemos opening a newer store finds the table and the indexes
+        by name and leaves them alone. A unique index still in the old shape
         (dropped and remade by hand, say) is rebuilt the same way; that shape
         allows no duplicate the new one would refuse.
         """
@@ -1260,7 +1263,9 @@ class EngramStore:
                 "WHERE type = 'index' AND name = 'idx_reflection_unique'"
             ).fetchone()
             return (
-                table is not None and "'reaffirm'" not in (table[0] or ""),
+                table is not None and any(
+                    f"'{kind}'" not in (table[0] or "") for kind in REFLECTION_KINDS
+                ),
                 index is not None and "reaffirm" not in (index[0] or ""),
             )
 
@@ -1273,13 +1278,18 @@ class EngramStore:
             # Another process may have rebuilt it while this one waited.
             table_is_old, index_is_old = outdated()
             if table_is_old:
-                conn.execute("ALTER TABLE reflection_queue RENAME TO reflection_queue_v10")
+                conn.execute("ALTER TABLE reflection_queue RENAME TO reflection_queue_old")
                 conn.execute(_REFLECTION_QUEUE_TABLE)
+                columns = _REFLECTION_QUEUE_COLUMNS
+                if "for_model" in {
+                    row[1] for row in conn.execute("PRAGMA table_info(reflection_queue_old)")
+                }:
+                    columns += ", for_model"
                 conn.execute(
-                    f"INSERT INTO reflection_queue ({_REFLECTION_QUEUE_COLUMNS}) "
-                    f"SELECT {_REFLECTION_QUEUE_COLUMNS} FROM reflection_queue_v10"
+                    f"INSERT INTO reflection_queue ({columns}) "
+                    f"SELECT {columns} FROM reflection_queue_old"
                 )
-                conn.execute("DROP TABLE reflection_queue_v10")
+                conn.execute("DROP TABLE reflection_queue_old")
             if table_is_old or index_is_old:
                 conn.execute("DROP INDEX IF EXISTS idx_reflection_unique")
                 for statement in _REFLECTION_QUEUE_INDEXES:

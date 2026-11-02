@@ -489,7 +489,7 @@ def test_the_runtimes_own_write_that_meets_a_lock_leaves_the_connection_ready(ru
 # them, commits any open transaction first, so this setup cannot be one
 # transaction().
 _SCHEMA_SETUP = {
-    "_allow_reaffirm_asks",
+    "_allow_new_ask_kinds",
     "_label_engram_authors",
     "_label_hermes_auto_writes",
     "_link_older_capture_pairs",

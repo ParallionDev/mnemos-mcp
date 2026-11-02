@@ -72,7 +72,8 @@ ALLOW = {
 # sessions keep.
 DREAM_DENY = ("mcp__mnemos__mnemos_note", "mcp__mnemos__mnemos_page", "mcp__mnemos__mnemos_handoff")
 # What one dream is given, at most (``_dream_material``): memories fading, each
-# asking what it taught; thoughts that came back on many days, each asking
+# asking what it taught, and facts fading, each asking whether it is still
+# true; thoughts that came back on many days, each asking
 # whether it is a belief; new memories asking what they changed; and new
 # memories beside older ones near them in meaning. Every belief comes too, and
 # each one asked whether it still holds.
@@ -118,7 +119,8 @@ BOOTSTRAP = {
         "This is your dream: the part of sleep only you can do. Upkeep has linked and "
         "faded what it could; what's below needs a mind.\n\n"
         "Answer what you can with mnemos_reflect, in your own words, by the id in "
-        "brackets: what a fading memory taught you, whether a thought that keeps coming "
+        "brackets: what a fading memory taught you, whether a fading fact is still true, "
+        "whether a thought that keeps coming "
         "back is a belief you hold, whether a belief still holds, what a new memory "
         "changed. Let the rest go; nothing is owed. Where two memories sit side by side, "
         "see whether they make something together, and if they do, keep it with "
@@ -294,6 +296,7 @@ def _dream_material(path, since, scope, model, said) -> dict:
             beliefs = []
         material = {
             "fading": given("lesson", DREAM_FADING),
+            "facts": given("fact", DREAM_FADING),
             "returning": given("belief", DREAM_RETURNING),
             "reaffirm": given("reaffirm", 10_000),
             "new": given("impact", DREAM_NEW, newest=True),
@@ -408,6 +411,14 @@ def _dream_prompt(agent_id, material) -> str:
         sections.append("What's fading\n" + "\n".join(
             f"- {q['text']}" + (f" (kept {q['kept']})" if q["kept"] else "") + f" [{q['target_id']}]"
             for q in material["fading"]))
+    if material.get("facts"):
+        sections.append(
+            "Facts fading: still true?\n"
+            "(Answer with a verdict: still_true, changed or no_longer_true. If you're "
+            "unsure, it's still true. If it changed, correct it with mnemos_correct too.)\n"
+            + "\n".join(
+                f"- {q['text']}" + (f" (kept {q['kept']})" if q["kept"] else "") + f" [{q['target_id']}]"
+                for q in material["facts"]))
     if material["returning"]:
         lines = ["What keeps coming back"]
         for q in material["returning"]:
@@ -448,12 +459,13 @@ def _prepare(kind, store, since, scope, model, agent_id, records):
     it wouldn't), and the questions a dream is given (``[]`` for the others)."""
     if kind == "dream":
         material = _dream_material(store, since, scope, model, _said_in_dreams(records))
-        waiting = {key: len(material[key]) for key in ("fading", "returning", "reaffirm", "new", "rhymes")}
-        waiting["questions"] = waiting["fading"] + waiting["returning"] + waiting["reaffirm"] + waiting["new"]
+        waiting = {key: len(material[key]) for key in ("fading", "facts", "returning", "reaffirm", "new", "rhymes")}
+        waiting["questions"] = (waiting["fading"] + waiting["facts"] + waiting["returning"]
+                                + waiting["reaffirm"] + waiting["new"])
         skip = "" if waiting["questions"] or waiting["rhymes"] else (
             f"Nothing to dream over: no question waits, and nothing new since {_minute(since)}."
         )
-        said = [q["id"] for key in ("fading", "returning", "reaffirm", "new") for q in material[key]]
+        said = [q["id"] for key in ("fading", "facts", "returning", "reaffirm", "new") for q in material[key]]
         return _dream_prompt(agent_id, material), waiting, skip, said
     handoffs, captures, questions, latest = _gather(kind, store, since, scope, model)
     waiting = {"handoffs": len(handoffs), "captures": len(captures), "questions": len(questions)}

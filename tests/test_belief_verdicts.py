@@ -887,7 +887,7 @@ def test_the_rebuilt_queue_is_never_without_its_indexes(tmp_path):
     db = _v10_store(tmp_path)
     conn = sqlite3.connect(str(db))
     try:
-        EngramStore._allow_reaffirm_asks(conn)
+        EngramStore._allow_new_ask_kinds(conn)
     finally:
         conn.close()
     indexes = dict(_all(db, "SELECT name, sql FROM sqlite_master WHERE tbl_name = 'reflection_queue' AND sql IS NOT NULL"))

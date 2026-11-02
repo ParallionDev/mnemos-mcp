@@ -798,6 +798,13 @@ _FADING_RULE_VERSION = 13
 # early-lessons` removes only asks in exactly these words.
 _FADING_QUESTION = "This is fading. What did it teach you? The lesson outlives the details."
 
+# What the lesson pass asks about a fact that has faded, in place of what it
+# taught: a fact teaches nothing, it is true or it isn't. Unsure, it stays.
+_STILL_TRUE_QUESTION = (
+    "This fact is fading. Is it still true? If it changed, correct it; "
+    "if you're unsure, it's still true."
+)
+
 
 def _early_window_hours(consolidation: Mapping[str, Any]) -> float:
     """How soon after a memory was written a lesson or a fading question about
@@ -919,6 +926,7 @@ _VERDICTS: dict[str, tuple[str, ...]] = {
     "reaffirm": ("hold", "decline", "retire", "not_now"),
     "impact": ("answer", "skip"),
     "lesson": ("answer", "skip"),
+    "fact": ("still_true", "changed", "no_longer_true"),
 }
 VERDICTS = frozenset(v for verdicts in _VERDICTS.values() for v in verdicts)
 
@@ -951,10 +959,15 @@ _VERDICT_HELP = {
     ),
     "impact": "answer (your words become what it meant) or skip (nothing true comes)",
     "lesson": "answer (your words become what it taught) or skip (nothing true comes)",
+    "fact": (
+        "still_true (it stays; when unsure, this), changed (correct it with "
+        "mnemos_correct) or no_longer_true (it's let go)"
+    ),
 }
 _VERDICT_GUIDE = (
     "Is it a belief you hold: hold, decline or not_now. Still true: hold, "
-    "retire, decline or not_now. A lesson or what a memory changed: answer or skip."
+    "retire, decline or not_now. A fading fact: still_true, changed or "
+    "no_longer_true. A lesson or what a memory changed: answer or skip."
 )
 
 
@@ -3002,7 +3015,7 @@ class MnemosRuntime:
                 """
                 SELECT target_id FROM reflection_queue
                 WHERE agent_id = ? AND person_id = ? AND project_scope = ?
-                  AND (answered_at IS NULL OR kind IN ('impact', 'lesson'))
+                  AND (answered_at IS NULL OR kind IN ('impact', 'lesson', 'fact'))
                 """,
                 (self.scope.agent_id, self.scope.person_id, self.scope.project_scope),
             ).fetchall()
@@ -3063,7 +3076,7 @@ class MnemosRuntime:
             row[0] for row in self._store._get_conn().execute(
                 """
                 SELECT target_id FROM reflection_queue
-                WHERE (kind = 'lesson' OR (kind = 'impact' AND answered_at IS NOT NULL))
+                WHERE (kind IN ('lesson', 'fact') OR (kind = 'impact' AND answered_at IS NOT NULL))
                   AND agent_id = ? AND person_id = ? AND project_scope = ?
                 UNION
                 SELECT id FROM engrams
@@ -3106,10 +3119,13 @@ class MnemosRuntime:
                     (engram_id, self.scope.agent_id, self.scope.person_id,
                      self.scope.project_scope),
                 )
+            # A fact is asked whether it is still true; an experience, what
+            # it taught.
+            fact = engram.kind == "semantic"
             if self._store.enqueue_reflection(
-                "lesson",
+                "fact" if fact else "lesson",
                 engram_id,
-                _FADING_QUESTION,
+                _STILL_TRUE_QUESTION if fact else _FADING_QUESTION,
                 agent_id=self.scope.agent_id,
                 person_id=self.scope.person_id,
                 project_scope=self.scope.project_scope,
@@ -3564,6 +3580,8 @@ class MnemosRuntime:
             return self._apply_belief_reflection(item, answer, decided, author=author)
         if kind == "reaffirm":
             return self._apply_reaffirmation(item, answer, decided, author=author)
+        if kind == "fact":
+            return self._apply_still_true(item, decided, author=author)
 
         if decided == "skip":
             return (
@@ -3637,6 +3655,43 @@ class MnemosRuntime:
             )
 
         return f"Reflection recorded for {item['target_id']} ({item['kind']})."
+
+    def _apply_still_true(self, item: dict[str, Any], verdict: str, *, author: str = "") -> str:
+        """What the agent decided about a fading fact, the question already
+        closed with its words on it.
+
+        still_true wakes it as a return does (``_reinforce_returned``).
+        changed leaves the memory for mnemos_correct, which writes the new
+        words and retires these. no_longer_true lets it go as a forget does
+        (``_forget_pair``): archived with its note, never deleted.
+        """
+        assert self._store is not None
+        engram = self._store.get_engram(item["target_id"])
+        if engram is None or engram.state == "archived":
+            return f"Recorded, but the memory {item['target_id']} is no longer there."
+        words = " ".join((engram.content or "").split())[:80]
+        if verdict == "still_true":
+            from .retrieval.reactive import RetrievalResult
+
+            self._reinforce_returned("still true", [RetrievalResult(engram=engram)])
+            return f"Kept: still true.\n  Memory: {words}"
+        if verdict == "changed":
+            return (
+                "Closed: it changed.\n"
+                f"  Memory: {words}\n"
+                "If you haven't yet, correct it with "
+                f'mnemos_correct(target_id="{engram.id}", correction="…"), in its new words.'
+            )
+        try:
+            note, named = self._memory_named(engram.id)
+        except NothingChanged as why:
+            return f"Recorded, but nothing was let go: {why}"
+        _notes, memories = self._forget_pair(
+            note, named, action="forget", corrector=author, session=harness_session(), reason="",
+        )
+        for memory_id in memories:
+            self._traced_write(memory_id)
+        return f"Let go: no longer true. It's archived, never deleted.\n  Memory: {words}"
 
     def _keep_on_question(self, ask: dict[str, Any], answer: str) -> None:
         """Keep the agent's words on a question that stays open.

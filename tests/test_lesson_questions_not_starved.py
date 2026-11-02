@@ -62,9 +62,11 @@ def _fading(db: Path) -> list[str]:
     conn = sqlite3.connect(str(db))
     try:
         for memory, (_, accessibility) in zip(ids, HARBOUR):
+            # Experiences: a fading one is asked what it taught (a fading
+            # fact, whether it is still true).
             conn.execute(
-                "UPDATE engrams SET created_at = ?, last_accessed = ?, accessibility = ? "
-                "WHERE id = ?",
+                "UPDATE engrams SET created_at = ?, last_accessed = ?, accessibility = ?, "
+                "kind = 'episodic' WHERE id = ?",
                 (LONG_AGO, LONG_AGO, accessibility, memory),
             )
         conn.commit()

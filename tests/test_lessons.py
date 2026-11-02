@@ -45,14 +45,14 @@ def _fade(runtime, content):
 class TestForgettingTeaches:
     def test_softening_runs_without_a_model(self, runtime):
         """Compression is deterministic; it never needed a provider."""
-        _fade(runtime, "Spent three hours on a misplaced guard clause in the handler")
+        _fade(runtime, "Debugged a misplaced guard clause in the handler for three hours")
 
         result = runtime.maintain()
 
         assert "softening" in result
 
     def test_a_fading_memory_asks_what_it_taught(self, runtime):
-        _fade(runtime, "Spent three hours on a misplaced guard clause in the handler")
+        _fade(runtime, "Debugged a misplaced guard clause in the handler for three hours")
         runtime.maintain()
 
         pending = runtime.pending_reflections()
@@ -64,7 +64,7 @@ class TestForgettingTeaches:
         Without it the distillate is an orphan and resonance can never
         travel from a fading memory to what it taught.
         """
-        source_id = _fade(runtime, "Spent three hours on a misplaced guard clause")
+        source_id = _fade(runtime, "Debugged a misplaced guard clause for three hours")
         runtime.maintain()
         target = runtime.pending_reflections()[0]["target_id"]
 
@@ -83,7 +83,7 @@ class TestForgettingTeaches:
 
     def test_the_server_never_writes_the_lesson_itself(self, runtime):
         """A lesson assembled from keywords is a summary wearing wisdom."""
-        _fade(runtime, "Spent three hours on a misplaced guard clause")
+        _fade(runtime, "Debugged a misplaced guard clause for three hours")
         runtime.maintain()
 
         engram_id = runtime.pending_reflections()[0]["target_id"]
@@ -95,7 +95,7 @@ class TestForgettingTeaches:
 class TestRestraint:
     def test_one_memory_is_not_asked_about_twice(self, runtime):
         """A fading memory also lacks an impact; that is still one question."""
-        _fade(runtime, "Spent three hours on a misplaced guard clause")
+        _fade(runtime, "Debugged a misplaced guard clause for three hours")
         runtime.maintain()
 
         kinds = [p["kind"] for p in runtime.pending_reflections(limit=10)]

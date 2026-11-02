@@ -131,8 +131,10 @@ this and the code disagree, the code is right: fix this section.
 - **A capture writes a note and a memory, together** (`capture_pair` in
   `mnemos/store/sqlite_store.py`). The note (`hypomnema_entries`) keeps the
   agent's words. The memory (`engrams`) lives in the graph, where it fades
-  unless it's used, links to what it relates to, and is asked what it taught
-  as it fades. A correction reaches both. Only a memory marked standing never
+  unless it's used, links to what it relates to, and is asked as it fades
+  what it taught (an experience) or whether it's still true (a fact,
+  `_STILL_TRUE_QUESTION` in `mnemos/simple_runtime.py`). A correction reaches
+  both. Only a memory marked standing never
   fades (`mnemos/consolidation/decay.py`).
 - **Promotion is rare.** Upkeep makes a memory of a note the agent revised and
   recalled in more than one session (`_promote_candidates` in

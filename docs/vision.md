@@ -344,9 +344,9 @@ about you* should be easy to correct and hard to lose.
 
 The default no longer climbs that ladder. Since September 2026 one capture writes two
 records together: a note, which keeps the agent's words, and a memory in the graph,
-which fades unless it is used, links to what it relates to, and is asked what it taught
-as it fades. A correction reaches both. Upkeep still makes a memory of the rare note the
-agent revised and recalled in more than one session, and the default keeps no working
+which fades unless it is used, links to what it relates to, and is asked as it fades
+what it taught, or, for a fact, whether it is still true. A correction reaches both.
+Upkeep still makes a memory of the rare note the agent revised and recalled in more than one session, and the default keeps no working
 set. The advanced tools still hold all three layers, as an operator console.
 
 ### Scope
