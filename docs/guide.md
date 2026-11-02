@@ -275,6 +275,11 @@ settings you already have, replaces its own entry rather than stacking on
 reinstall, and refuses to overwrite a settings file it cannot parse. After a
 Codex install, open `/hooks` and complete Codex's normal trust review.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/wake-dark.png">
+  <img alt="Fig. 1, what an agent wakes with: a real wake, built by Mnemos from a sample memory and set as the document the agent reads, each part named beside it: the opening; what it believes; where it was, with its last handoff whole; what has been changing in it; how the person wants it to work; a question its memory is waiting on; what happened while it was away; and the ids its tools need, never shown to the person. Below, its length: 2,430 characters against a budget of 8,000, beside a 214-character handoff that is never cut." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/wake.png">
+</picture>
+
 The hook is written to fail silent: if memory is empty, unreadable, or absent,
 it contributes nothing and the session starts normally. It never creates a
 database just because something read from it.
@@ -300,6 +305,11 @@ mnemos hooks install claude-code --no-prompt --write
 ```
 
 `--prompt`, which once asked for it, is still accepted and changes nothing.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/session-dark.png">
+  <img alt="Fig. 2, a Claude Code session as a sequence diagram between you, the agent, Mnemos and its memory. At the start the hook brings the agent its wake. With each message, the cue looks up the ten nearest memories by words and meaning and returns up to three, or none, before the agent answers. When the agent chooses, it keeps something or recalls something, and what returns grows stronger. After compaction the wake is read back in, and its handoff is kept exactly as written." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/session.png">
+</picture>
 
 With `--write`, the hooks install also schedules upkeep between sessions
 (`--no-upkeep` leaves it out) and, for Claude Code, asks once about quiet

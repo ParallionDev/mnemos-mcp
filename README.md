@@ -80,17 +80,45 @@ parts need macOS or Linux.
   agent's days, its notes to you with a place to answer, everything it holds,
   and its mind.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/day-dark.png">
+  <img alt="Fig. 1, a day with Mnemos, drawn as a timing diagram. Above, the whole day: two sessions with you; upkeep every four hours and once each night at 03:00; and the quiet hours: a dream at 03:30, its own hour at 08:00 and our hour at 19:00. Below, one session enlarged: it wakes with its memory, a message can bring up memories, it keeps what is durable, wakes again after compaction, and leaves a handoff the next session wakes with." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/day.png">
+</picture>
+
+## What you see
+
+![The page mnemos log opens, on a sample memory: the agent's day, with a note it left itself, a note for Alex, a memory it formed, and a dream at 3:30 am with the journal entry it wrote there; beside it, its notes for Alex, two beliefs it holds at 40 and 45 percent, and the question its memory is asking it.](https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/notebook.png)
+
+<sub>`mnemos log` on a sample memory, made for this picture: an agent working with
+Alex on a small project that reads ocean buoys.</sub>
+
 ## A memory, up close
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy-dark.png">
-  <img alt="The anatomy of an engram, drawn as a natural-history plate: a round lesson kept from two experiences, one of them gone quiet, and kept again as a second lesson. Labels name each part and what it measures: the test (how strongly it's kept), granules, the nucleolus (how settled it is), rings (each doubling of its recalls), the corona (how easy it is to reach), spines (its links, barred where one supports it and barbed where one contradicts it), and stalks (what a lesson was kept from)." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
+  <img alt="Fig. 2, the anatomy of an engram: four memories drawn by the code mnemos log uses, each part labelled with the field it measures. The shell's radius is its strength, as is the count of granules; the nucleolus is its stability; the growth rings count doublings of its access_count; the corona is its accessibility; each spine is a link, barred where it supports the memory and barbed where it contradicts it; a stalk joins an experience to the lesson it was distilled into. A table gives each memory's values." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
 </picture>
 
-Open a memory on the page and its life is drawn the way a natural-history plate
-draws a one-celled animal. Its size, its rings, its threads and its spines are
-each something the memory measures, and the stalks show what each lesson was
-kept from.
+Every memory on the page is drawn from the values Mnemos keeps for it: the
+shell's radius is its `strength`, the nucleolus its `stability`, the corona its
+`accessibility` and the rings its `access_count`. Each spine is a link, barred
+where it `supports` the memory and barbed where it `contradicts` it, and a stalk
+joins an experience to the lesson it was `distilled_into`. The figure is drawn
+by the same code as the page.
+
+## A memory's life
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/life-dark.png">
+  <img alt="Fig. 3, the life of a memory over its first 50 days, run on Mnemos's own rules. On a log scale, its accessibility starts at 0.5, is held at 0.4 or more for three days, and fades between recalls; each recall lifts it back to 0.8, and it fades more slowly after. Below 0.15 the agent is asked what it taught, and its answer becomes a lesson, kept at 0.8 strength and stability, that fades far more slowly. The memory itself goes dormant below 0.05 and is archived below 0.01. Two small charts below show its strength and stability over the same days." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/life.png">
+</picture>
+
+A memory fades unless it's used. Every four hours it gets a little harder to
+reach, more slowly the more settled it is and the more it's linked, and each
+recall brings it back and leaves it slower to fade. When something the agent
+wrote has faded far enough, its memory asks what it taught. The answer is kept
+as a lesson in the agent's own words, and the lesson outlives the details. The
+figure runs one memory through the rules Mnemos itself uses.
 
 ## What Mnemos is not
 
@@ -110,6 +138,11 @@ Local SQLite. No account, no API key, no service of its own. Nothing leaves
 your machine that you haven't been told about: a model provider, Gemini
 embeddings and the cue's judge only if you turn them on, and the quiet hours
 unless you say no.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/map-dark.png">
+  <img alt="Fig. 4, where Mnemos runs, drawn as a data-flow diagram. Inside a dashed line marking your machine: you, your agent, Mnemos with its hooks, twelve tools and a local model, its memory in SQLite, the scheduler, and its page in your browser. Across the line: your agent's model, which receives whatever the agent reads and where the quiet hours run; and, only with your yes, a model provider, Gemini and the cue's judge, all reached through Mnemos." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/map.png">
+</picture>
 
 The quiet hours run your own Claude Code on its own, on your Claude plan, so
 what the agent thinks over in them goes to Anthropic: its words for the hour,
