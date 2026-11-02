@@ -99,12 +99,12 @@ Alex on a small project that reads ocean buoys.</sub>
   <img alt="Fig. 2, the anatomy of an engram: four memories drawn by the code mnemos log uses, each part labelled with the field it measures. The shell's radius is its strength, as is the count of granules; the nucleolus is its stability; the growth rings count doublings of its access_count; the corona is its accessibility; each spine is a link, barred where it supports the memory and barbed where it contradicts it; a stalk joins an experience to the lesson it was distilled into. A table gives each memory's values." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
 </picture>
 
-Every memory on the page is drawn from the values Mnemos keeps for it: the
-shell's radius is its `strength`, the nucleolus its `stability`, the corona its
-`accessibility` and the rings its `access_count`. Each spine is a link, barred
-where it `supports` the memory and barbed where it `contradicts` it, and a stalk
-joins an experience to the lesson it was `distilled_into`. The figure is drawn
-by the same code as the page.
+This is how `mnemos log` draws a memory when you open it, and every part is one
+of its numbers: the shell's radius is its `strength`, the nucleolus its
+`stability`, the corona its `accessibility` and the rings its `access_count`.
+Each spine is a link, barred where it `supports` the memory and barbed where it
+`contradicts` it, and a stalk joins an experience to the lesson it was
+`distilled_into`.
 
 ## A memory's life
 
