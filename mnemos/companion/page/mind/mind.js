@@ -18,7 +18,7 @@
  * It draws only while something moves: the slow turn stops a while after you last touched it, and a still mind costs
  * nothing until a touch, a new memory or an hour wakes it. Where each memory sits is remembered in this browser. */
 
-import { context, lookAt, perspective, add, sub, scale, dot, length, normalize, cross, mix, mixv, clamp } from '../engine/gl.js';
+import { context, prepare, lookAt, perspective, add, sub, scale, dot, length, normalize, cross, mix, mixv, clamp } from '../engine/gl.js';
 import { glyphAtlas, DOT, STROKE, LINE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
@@ -65,10 +65,20 @@ let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1
 
 document.fonts.add(await new FontFace('Mono', 'url(../fonts/jetbrains-mono-nl.woff)', { weight: '400' }).load());
 const canvas = $('mind');
-const gl = context(canvas);
+const gl = (() => {
+  try { return context(canvas); } catch (e) {
+    // the log reads the same memory without a GPU: the way there, rather than a mind that never comes (and none of
+    // the mind's own controls, which would do nothing)
+    const log = esc(withAgent('../log/'));
+    $('loading').innerHTML = `<span>This browser can’t draw the mind. Everything in it is in <a class="textlink" href="${log}">the log</a>.</span>`;
+    $('ask').remove(); $('open-room').remove(); $('to-log').href = withAgent('../log/');
+    throw e;
+  }
+})();
 // the mind is drawn in three shapes of light and no letters, so only those three are set (each at every blur level):
 // the whole alphabet took most of the page's start, about eight seconds of it on a busy machine
-const atlas = await glyphAtlas(gl, { sets: [{ name: 'mono', glyphs: DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] }, { cell: 112 });
+const ATLAS = { sets: [{ name: 'mono', glyphs: DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] };
+let atlas = await glyphAtlas(gl, ATLAS, { cell: 112 });
 const GLYPHS = Object.fromEntries([DOT, STROKE, LINE].map((ch) => [ch, atlas.index[`mono:${ch}`]]));
 
 /* ---------- the memory, read, and drawn (again when it grows) ---------- */
@@ -158,11 +168,12 @@ async function focusNear(i) {
   const cells = list.map((g) => ({ key: g, p: P[g], kind: D.cells[g].lesson ? 'procedural' : 'episodic', strength: D.cells[g].strength,
     stability: D.cells[g].stability, apex0: v3(SH.apex, g), hillock0: v3(SH.hillock, g), incoming: SH.incoming[g], degree: SH.degree[g] }));
   let out;
+  const mine = era;
   nearPending = true;
   try { out = await inWorker({ kind: 'local', cells, links, glyphs: GLYPHS, metrics: atlas.metrics }); }
   catch { nearFailed = performance.now(); return; }              // asked again in a few seconds, never every frame
   finally { nearPending = false; }
-  if (nearAsked !== i || !tissue) return;
+  if (nearAsked !== i || !tissue || mine !== era || lost) return;
   dropNear(true);
   near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds, at: reduce ? -1e9 : performance.now() };
   wake();
@@ -170,11 +181,13 @@ async function focusNear(i) {
 
 let building = null, built = null;
 async function build(data) {
-  const t0 = performance.now();
+  const t0 = performance.now(), mine = era;
   const out = await drawIn(data);
+  if (mine !== era || lost) return;              // the GPU let go of the context meanwhile; its return draws afresh
   const worker = Math.round(performance.now() - t0), t1 = performance.now();
   // a drawing replacing one on screen arrives a slice at a time, while the old one goes on; the first is sent at once
   const ready = tissue ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length, blocks: out.blocks }) : null;
+  if (mine !== era) return;
   apply(data, out, { worker, ...(ready ? { sent: Math.round(performance.now() - t1) } : {}) }, ready);
   keepDrawing(data, out);
 }
@@ -285,6 +298,15 @@ function fromKept(k) {
   const now = new Map(mems.map((m) => [m.id, m]));
   const cells = k.cells.map((c) => { const m = now.get(c.id); return m ? { ...c, accessibility: m.acc, state: m.state, recalls: m.recalls } : c; });
   return { cells, links: k.links };
+}
+/* the drawing put on the screen, when the page opens and when the GPU gives back a lost context: the kept one at once if
+ * there is one (and a fresh one made behind it when the memory has changed since), else one made now */
+async function drawMind(took = {}) {
+  const mine = era, tRead = performance.now(), k = params.has('fresh') ? null : await keptDrawing();
+  if (mine !== era || lost) return;
+  if (!k) return build(shape(mems));
+  apply(fromKept(k), k.out, { kept: true, read: Math.round(performance.now() - tRead), start: Math.round(tRead), ...took });
+  if (k.version !== memVersion) { grown = true; lastRedraw = -Infinity; setTimeout(() => look(true), 2500); }
 }
 
 async function readMemories() {
@@ -701,6 +723,7 @@ function homeOf() {
 function resize() {
   // a page opened where it can't be seen (a hidden pane) has no size yet; it starts on the resize that gives it one
   if (!innerWidth || !innerHeight) return;
+  if (lost) return;                              // nothing can be made on a lost context; its return sizes everything
   // seen whole, it's seen whole again when the window changes shape; a view you chose stays yours
   const was = HOME; HOME = homeOf();
   if (cam && !wandered && selected < 0 && cam.goal.dist === was) cam.goal.dist = HOME;
@@ -710,7 +733,7 @@ function resize() {
   if (canvas.width === w && canvas.height === h && post) return;
   canvas.width = w; canvas.height = h;
   if (post) post.dispose();
-  post = new Post(gl, w, h, 7, { accum: params.get('accum') === '16' ? 'RGBA16F' : 'RGBA32F' });
+  post = new Post(gl, w, h, 7, { accum: params.get('accum') === '16' ? 'RGBA16F' : gl.accum });
   wake();
 }
 new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) wake(); }, { threshold: 0.02 }).observe($('hero'));
@@ -725,10 +748,42 @@ function wake() { if (!looping && tissue && cam && post) { looping = true; last 
 async function lighten() {
   if (building || halvings >= 2 || budget <= 400_000) return;
   halvings++; budget = Math.max(400_000, Math.round(budget / 2)); store.set(BUDGET_KEY, budget);
-  building = build(D); await building; building = null; warm(); wake();
+  try { building = build(D); await building; } catch { /* the drawing on screen stays */ } finally { building = null; }
+  warm(); wake();
 }
+
+/* ---------- when the GPU takes the drawing back ----------
+ * A sleep, a driver's reset or too many pages drawing at once can lose the context, and everything made on it goes
+ * with it. The page asks for it back, and when it comes, makes it all again: the kept drawing reopens it in a moment
+ * (else a fresh one is made), and the view carries on where it was, an opened memory still open. Should the browser
+ * never give it back, the page says so. `era` counts losses and returns, so work begun on a context that's gone is let
+ * go rather than drawn. */
+let lost = false, era = 0, lostNote = 0;
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();                            // without this, the context is never given back
+  lost = true; era++; looping = false;
+  lostNote = setTimeout(() => {
+    // said where the page says how it is, under its name: never under the drawer
+    const note = document.createElement('small');
+    note.id = 'lost'; note.setAttribute('role', 'status');
+    note.textContent = 'The graphics card let the mind go. Reload the page to bring it back.';
+    document.querySelector('.who').append(note);
+  }, 6000);
+});
+canvas.addEventListener('webglcontextrestored', async () => {
+  clearTimeout(lostNote); $('lost')?.remove();
+  const mine = ++era;
+  prepare(gl); lost = false;
+  tissue = null; near = null; leaving = null; post = null; nearAsked = -1;   // theirs went with the context
+  atlas = await glyphAtlas(gl, ATLAS, { cell: 112 });
+  if (mine !== era) return;                      // lost again meanwhile: its next return starts over
+  resize();
+  try { building = drawMind({ regained: true }); await building; } catch { /* the next look draws it */ } finally { building = null; }
+  warm(); wake();
+});
+
 function frame(now) {
-  if (!heroSeen) { looping = false; return; }
+  if (!heroSeen || lost) { looping = false; return; }
   const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
@@ -1092,9 +1147,12 @@ async function look(now = false) {
       if (performance.now() - lastRedraw < REDRAW_EVERY || document.hidden) grown = true;
       else {
         grown = false; lastRedraw = performance.now();
-        building = build(shaped); await building; building = null;
-        for (const c of D.cells) if (!before.has(c.fullId)) arrived.set(c.fullId, performance.now());
-        wake();
+        // a redraw that fails leaves the drawing on screen, and is tried again: left marked busy, it was never again
+        try {
+          building = build(shaped); await building;
+          for (const c of D.cells) if (!before.has(c.fullId)) arrived.set(c.fullId, performance.now());
+          wake();
+        } catch { grown = true; } finally { building = null; }
       }
     } else {
       // the same memories: what each is now (how easy to reach, gone quiet) is taken up; the links stay the ones drawn
@@ -1240,16 +1298,9 @@ setInterval(() => { if (!document.hidden) keepVisit(); }, 30_000);
 await readMemories();
 $('loading').textContent = store.get(LAYOUT_KEY()) ? `gathering ${plural(mems.length, 'memory', 'memories')}…`
   : `finding the shape of ${plural(mems.length, 'memory', 'memories')}, the first time · a few seconds`;
-const tRead = performance.now(), keptOne = params.has('fresh') ? null : await keptDrawing(), readMs = Math.round(performance.now() - tRead);
-if (keptOne) {
-  apply(fromKept(keptOne), keptOne.out, { kept: true, read: readMs, start: Math.round(tRead) });
-  // the memory changed since it was kept: a fresh drawing is made behind this one, and takes its place
-  if (keptOne.version !== memVersion) { grown = true; lastRedraw = -Infinity; setTimeout(() => look(true), 2500); }
-} else {
-  try { await build(shape(mems)); } catch (e) {
-    $('loading').textContent = 'The mind couldn’t be drawn just now. Reload the page to try again.';
-    throw e;
-  }
+try { await drawMind(); if (!D) throw new Error('the GPU let go of the mind as it opened'); } catch (e) {
+  $('loading').textContent = 'The mind couldn’t be drawn just now. Reload the page to try again.';
+  throw e;
 }
 warm();
 cam = { yaw: 0.35, pitch: 0.18, dist: HOME, target: centre.slice() };

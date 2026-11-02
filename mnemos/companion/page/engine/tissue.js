@@ -164,8 +164,15 @@ void main() {
 }`;
 
 // one program for every tissue on a context: compiling it is tens of milliseconds, and a tissue is made per redraw
+// (made again when a lost context is given back, which takes its programs with it)
 const programs = new WeakMap();
-const programFor = (gl) => programs.get(gl) || programs.set(gl, program(gl, VS, FS)).get(gl);
+const programFor = (gl) => {
+  const p = programs.get(gl);
+  if (p && gl.isProgram(p.p)) return p;
+  const made = program(gl, VS, FS);
+  programs.set(gl, made);
+  return made;
+};
 const SLICE = 3 * 1024 * 1024 / 4;       // floats sent to the GPU a frame when a tissue is sent without a pause
 
 export class Tissue {

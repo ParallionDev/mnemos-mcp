@@ -54,8 +54,7 @@ a{color:inherit}
 /* ── the mind: fixed behind everything; the hero is a window onto it ── */
 canvas#mind{position:fixed;inset:0;width:100vw;height:100vh;display:block;cursor:grab;touch-action:pan-y}
 canvas#mind.dragging{cursor:grabbing}
-#loading{position:fixed;inset:0;display:grid;place-items:center;color:var(--ink-4);font-size:var(--t-small);letter-spacing:.06em;z-index:1}
-.hero{position:relative;height:100vh;pointer-events:none;z-index:2}
+#loading{position:fixed;inset:0;display:grid;place-items:center;color:var(--ink-4);font-size:var(--t-small);letter-spacing:.06em;z-index:1}.hero{position:relative;height:100vh;pointer-events:none;z-index:2}
 .hero .ui{position:absolute;pointer-events:auto;text-shadow:0 0 14px rgba(6,6,8,.95),0 0 3px rgba(6,6,8,.9)}
 .top{top:26px;left:var(--edge)}
 .house{font:400 10px/1 var(--house);letter-spacing:.18em;color:var(--ink-4)}
@@ -118,7 +117,8 @@ canvas#mind.dragging{cursor:grabbing}
 /* one thing you can verify, kept small: it ran, as itself, and nothing reached past the fence */
 .verify{margin-top:var(--s4);display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s1) var(--s3);color:var(--ink-4);font-size:var(--t-micro)}
 .verify .flag{color:var(--ink-1)}
-.verify .textlink{padding:0;font-size:inherit}
+.verify .textlink,#loading .textlink{padding:0;font-size:inherit}
+#loading .textlink{color:var(--ink-2);border-bottom-color:var(--ink-4)}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
 .left-cue{right:var(--edge);bottom:30px;text-align:right}
 /* back to the whole mind: there only once you've moved away from it */

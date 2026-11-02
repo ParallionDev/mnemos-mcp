@@ -1,15 +1,25 @@
 /* WebGL2 plumbing for the darkroom: programs, float render targets, a
  * fullscreen pass, and the little camera math the shots need. */
 
+/* Light is added up in 32-bit floats where the GPU can blend and filter them, and in 16-bit ones where it can't (a
+ * little less headroom where it's brightest, the same picture): `gl.accum` says which. It throws only when the GPU
+ * can't draw into floats at all. */
 export function context(canvas) {
   const gl = canvas.getContext('webgl2', {
     antialias: false, alpha: false, depth: false, stencil: false,
     premultipliedAlpha: false, preserveDrawingBuffer: true,
   });
   if (!gl) throw new Error('no webgl2');
-  for (const e of ['EXT_color_buffer_float', 'EXT_float_blend', 'OES_texture_float_linear']) {
-    if (!gl.getExtension(e)) throw new Error(`the GPU is missing ${e}`);
-  }
+  return prepare(gl);
+}
+
+/* what a context needs before drawing: at first, and again when a lost one is given back (its extensions and
+ * everything made on it went with it) */
+export function prepare(gl) {
+  const has = (e) => !!gl.getExtension(e);
+  const floats = has('EXT_color_buffer_float');
+  if (!floats && !has('EXT_color_buffer_half_float')) throw new Error('the GPU can’t draw into float targets');
+  gl.accum = floats && has('EXT_float_blend') && has('OES_texture_float_linear') ? 'RGBA32F' : 'RGBA16F';
   gl.fullscreen = gl.createVertexArray();   // an empty VAO; the pass builds its triangle from gl_VertexID
   return gl;
 }
