@@ -40,10 +40,14 @@ the agents who built it. They read as current. Some aren't.
 - Before changing how it saves, wakes, cues, recalls, fades or links, read the
   code as it is now, not as you or anyone remembers it.
 - Don't bring back a retired design because it's remembered or written down
-  somewhere; ask the maintainer first. Retired so far: functional memory in
-  the wake (9d22fc9, September 2026), and the three-layer climb as the
-  default path, since one capture writes the note and the memory together
-  (65d5364, September 2026).
+  somewhere; ask the maintainer first. Retired so far:
+  - functional memory in the wake (9d22fc9, September 2026);
+  - the three-layer climb as the default path, since one capture writes the
+    note and the memory together (65d5364, September 2026);
+  - the substrate, the scheduled cycle of handlers and four modulators
+    (940c0df, October 2026). Dreaming lives on as a quiet hour, in the
+    agent's own words. The six-part mood it fed still has code, but nothing
+    in the default starts one.
 - When a doc and the code disagree, fix the doc in the same change.
 
 ---

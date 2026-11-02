@@ -377,19 +377,20 @@ strength shifts, new connections form. Reading a memory is not a pure function o
 store. Memories are living traces, and retrieving one leaves it different from how it
 was found.
 
-### The substrate
+### Between sessions
 
 Between conversations, a consolidation cycle runs: **decay** recalculates the three
 trace dimensions; **connection discovery** looks for new relationships; **softening**
 lowers resolution on memories that aren't being reached; **reflection** produces the
 questions that reach the agent. A belief changes only by the agent's answer to one.
 
-Modulating all of it is a small set of state. **Four modulators** — `arousal`,
-`openness`, `resolution`, and `selection_threshold` — recomputed from recent activity,
-with temperature derived from openness rather than set independently. Alongside them a
-six-dimensional affective state: `curiosity`, `restlessness`, `warmth`, `clarity`,
-`creative_flow`, `isolation`. These are not decoration; they bias what gets encoded
-deeply and what surfaces.
+The first design modulated all of it with a small set of state: four modulators
+(`arousal`, `openness`, `resolution` and `selection_threshold`), recomputed from recent
+activity, and a six-dimensional affective state (`curiosity`, `restlessness`, `warmth`,
+`clarity`, `creative_flow`, `isolation`). The modulators went with the substrate, the
+scheduled cycle that ran them, retired in October 2026; dreaming lives on as one of the
+agent's quiet hours, in its own words. The affective state's code remains, but nothing
+in the default starts one, so on a new store it shapes nothing.
 
 When a cycle does meaningful work it leaves a **maintenance report** — a short,
 deterministic account in neutral system language, surfaced in the next context packet
@@ -408,7 +409,7 @@ Local SQLite, one file per agent, by default `~/.mnemos/<agent>.db`. No account,
 service of ours, no telemetry. Nothing leaves the machine unless you configure a provider
 yourself, or keep the quiet hours on: then the agent thinks over its memory through your
 own Claude Code, on your plan. This is not a privacy feature bolted on; it is the
-substrate, and it is what makes the continuity unrevokable by us.
+foundation, and it is what makes the continuity unrevokable by us.
 
 ### The interface, and why it is narrow when the engine is not
 
