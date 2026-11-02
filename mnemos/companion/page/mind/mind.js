@@ -59,22 +59,31 @@ const store = {
  * has no width yet, so the screen's own is asked instead (else it'd be drawn for a phone, and miss the kept drawing) */
 const small = (innerWidth || screen.width) < 760 || (navigator.deviceMemory || 8) <= 4;
 const BUDGET_KEY = 'mnemos.mind.budget.v3';      // v3: the budget is counted truly (a fibre by its length)
+const PIXELS_KEY = 'mnemos.mind.pixels.v1';
 let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1_200_000 : 2_400_000);
+if (!params.has('pixels')) LENS.pixels = store.get(PIXELS_KEY) || LENS.pixels;
 
 /* ---------- the renderer ---------- */
+
+/* where the mind can't be drawn, it says so in one line where it would be, with the way to the log (which reads the
+ * same memory without a GPU), and takes away its own controls, which would do nothing */
+function cannotDraw(why) {
+  $('loading').innerHTML = `<span>${why} Everything in it is in <a class="textlink" href="${esc(withAgent('../log/'))}">the log</a>.</span>`;
+  $('ask').remove(); $('open-room').remove(); $('to-log').href = withAgent('../log/');
+}
 
 document.fonts.add(await new FontFace('Mono', 'url(../fonts/jetbrains-mono-nl.woff)', { weight: '400' }).load());
 const canvas = $('mind');
 const gl = (() => {
-  try { return context(canvas); } catch (e) {
-    // the log reads the same memory without a GPU: the way there, rather than a mind that never comes (and none of
-    // the mind's own controls, which would do nothing)
-    const log = esc(withAgent('../log/'));
-    $('loading').innerHTML = `<span>This browser can’t draw the mind. Everything in it is in <a class="textlink" href="${log}">the log</a>.</span>`;
-    $('ask').remove(); $('open-room').remove(); $('to-log').href = withAgent('../log/');
-    throw e;
-  }
+  try { return context(canvas); } catch (e) { cannotDraw('This browser can’t draw the mind.'); throw e; }
 })();
+// software graphics (no GPU: the processor works out every pixel) can't move even the lightest mind, under a frame a
+// second when it was tried, so it isn't
+const renderer = String(gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) || '');
+if (/swiftshader|llvmpipe|softpipe|lavapipe|software|basic render/i.test(renderer)) {
+  cannotDraw('This browser draws without a graphics card, too slowly to move the mind.');
+  throw new Error(`software graphics: ${renderer}`);
+}
 // the mind is drawn in three shapes of light and no letters, so only those three are set (each at every blur level):
 // the whole alphabet took most of the page's start, about eight seconds of it on a busy machine
 const ATLAS = { sets: [{ name: 'mono', glyphs: DOT + STROKE + LINE, font: (px) => `400 ${px}px Mono` }] };
@@ -173,21 +182,22 @@ async function focusNear(i) {
   try { out = await inWorker({ kind: 'local', cells, links, glyphs: GLYPHS, metrics: atlas.metrics }); }
   catch { nearFailed = performance.now(); return; }              // asked again in a few seconds, never every frame
   finally { nearPending = false; }
-  if (nearAsked !== i || !tissue || mine !== era || lost) return;
+  if (nearAsked !== i || !tissue || gone(mine)) return;
   dropNear(true);
   near = { of: i, tissue: new Tissue(gl, atlas, out.data, out.count, { cells: list.length, links: links.length }), cells: list, links: linkIds, at: reduce ? -1e9 : performance.now() };
   wake();
 }
 
 let building = null, built = null;
-async function build(data) {
+async function build(data, { atOnce = false } = {}) {
   const t0 = performance.now(), mine = era;
   const out = await drawIn(data);
-  if (mine !== era || lost) return;              // the GPU let go of the context meanwhile; its return draws afresh
+  if (gone(mine)) return;                        // the GPU let go of the context meanwhile (its return draws afresh)
   const worker = Math.round(performance.now() - t0), t1 = performance.now();
-  // a drawing replacing one on screen arrives a slice at a time, while the old one goes on; the first is sent at once
-  const ready = tissue ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length, blocks: out.blocks }) : null;
-  if (mine !== era) return;
+  // a drawing replacing one on screen arrives a slice at a time, while the old one goes on; the first is sent at once,
+  // and so is one made lighter for a machine that can't keep up (a slice a frame, its slow frames took half a minute)
+  const ready = tissue && !atOnce ? await Tissue.load(gl, atlas, out.data, out.count, { cells: data.cells.length, links: data.links.length, blocks: out.blocks }) : null;
+  if (gone(mine)) return;
   apply(data, out, { worker, ...(ready ? { sent: Math.round(performance.now() - t1) } : {}) }, ready);
   keepDrawing(data, out);
 }
@@ -303,7 +313,7 @@ function fromKept(k) {
  * there is one (and a fresh one made behind it when the memory has changed since), else one made now */
 async function drawMind(took = {}) {
   const mine = era, tRead = performance.now(), k = params.has('fresh') ? null : await keptDrawing();
-  if (mine !== era || lost) return;
+  if (gone(mine)) return;
   if (!k) return build(shape(mems));
   apply(fromKept(k), k.out, { kept: true, read: Math.round(performance.now() - tRead), start: Math.round(tRead), ...took });
   if (k.version !== memVersion) { grown = true; lastRedraw = -Infinity; setTimeout(() => look(true), 2500); }
@@ -723,12 +733,12 @@ function homeOf() {
 function resize() {
   // a page opened where it can't be seen (a hidden pane) has no size yet; it starts on the resize that gives it one
   if (!innerWidth || !innerHeight) return;
-  if (lost) return;                              // nothing can be made on a lost context; its return sizes everything
+  if (lost || aside) return;                     // nothing is made on a lost context (its return sizes everything), or set aside
   // seen whole, it's seen whole again when the window changes shape; a view you chose stays yours
   const was = HOME; HOME = homeOf();
   if (cam && !wandered && selected < 0 && cam.goal.dist === was) cam.goal.dist = HOME;
   const dpr = Math.min(devicePixelRatio || 1, 2);
-  const renderScale = clamp(Math.sqrt(LENS.pixels / (innerWidth * innerHeight * dpr ** 2)), 0.4, 1);
+  const renderScale = clamp(Math.sqrt(LENS.pixels / (innerWidth * innerHeight * dpr ** 2)), 0.25, 1);
   const w = Math.round(innerWidth * dpr * renderScale), h = Math.round(innerHeight * dpr * renderScale);
   if (canvas.width === w && canvas.height === h && post) return;
   canvas.width = w; canvas.height = h;
@@ -741,15 +751,39 @@ new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) w
 /* The loop runs only while something moves: light travelling, a memory arriving, a hand on it, the camera settling.
  * The slow turn goes on for 30 seconds after you last touched it, at 15 frames a second, then eases to a stop, and
  * the loop sleeps until something wakes it. Under the paper the mind isn't seen, so it doesn't draw. While it runs
- * it watches its own frames: if they come slowly the drawing is remade at half the points (twice at most), and the
- * budget that worked is remembered for this screen. */
-let last = performance.now(), frames = 0, looping = false, slow = [], halvings = 0, spin = 1;
-function wake() { if (!looping && tissue && cam && post) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
-async function lighten() {
-  if (building || halvings >= 2 || budget <= 400_000) return;
-  halvings++; budget = Math.max(400_000, Math.round(budget / 2)); store.set(BUDGET_KEY, budget);
-  try { building = build(D); await building; } catch { /* the drawing on screen stays */ } finally { building = null; }
-  warm(); wake();
+ * it watches its own frames, and a machine that can't keep up is asked for less (see lighten). */
+let last = performance.now(), frames = 0, looping = false, slow = [], slowFor = 0, shownAt = 0, spin = 1;
+document.addEventListener('visibilitychange', () => { shownAt = performance.now(); });   // the frame after a hidden page isn't slow
+function wake() { if (!looping && !aside && tissue && cam && post) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
+
+/* A machine that can't keep up is asked for less, a step at a time, each step kept for this screen: first fewer points
+ * (a single step: asked for fewer than LIGHTEST, the drawing hardly shrinks, as its lines are always drawn whole), then
+ * a quarter of the pixels. When even that is well behind, the mind stands aside rather than freeze its page; the next
+ * visit tries again, from the lightest. */
+const LIGHTEST = 1_200_000, FEWEST_PIXELS = 1.3e6;
+let aside = false;
+const gone = (mine) => mine !== era || lost || aside;   // work begun for a drawing that's no longer wanted
+async function lighten(late) {
+  if (building || aside) return;
+  if (budget > LIGHTEST) {
+    budget = LIGHTEST; store.set(BUDGET_KEY, budget);
+    try { building = build(D, { atOnce: true }); await building; } catch { /* the drawing on screen stays */ } finally { building = null; }
+    warm(); wake();
+  } else if (LENS.pixels > FEWEST_PIXELS) {
+    LENS.pixels = FEWEST_PIXELS; store.set(PIXELS_KEY, LENS.pixels); resize();
+  } else if (late > 2.5) standAside();
+}
+/* the mind set aside: its drawing given back to the GPU, and said so where it was; the rest of the page (the reading
+ * room, the search, the hours below) goes on without it */
+function standAside() {
+  aside = true; looping = false;
+  dropNear(); if (leaving) { leaving.tissue.dispose(); leaving = null; }
+  tissue?.dispose(); tissue = null; post?.dispose(); post = null;
+  document.body.classList.add('set-aside');      // and what belongs to it: its region names, the way back to centre
+  const note = document.createElement('div');
+  note.className = 'aside'; note.setAttribute('role', 'status');
+  note.innerHTML = `<span>This computer’s graphics can’t move the mind smoothly. Everything in it is in <a class="textlink" href="${esc(withAgent('../log/'))}">the log</a>.</span>`;
+  $('hero').append(note);
 }
 
 /* ---------- when the GPU takes the drawing back ----------
@@ -773,6 +807,7 @@ canvas.addEventListener('webglcontextlost', (e) => {
 canvas.addEventListener('webglcontextrestored', async () => {
   clearTimeout(lostNote); $('lost')?.remove();
   const mine = ++era;
+  if (aside) { lost = false; return; }           // set aside, it stays aside
   prepare(gl); lost = false;
   tissue = null; near = null; leaving = null; post = null; nearAsked = -1;   // theirs went with the context
   atlas = await glyphAtlas(gl, ATLAS, { cell: 112 });
@@ -783,7 +818,7 @@ canvas.addEventListener('webglcontextrestored', async () => {
 });
 
 function frame(now) {
-  if (!heroSeen || lost) { looping = false; return; }
+  if (!heroSeen || lost || aside) { looping = false; return; }
   const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
@@ -795,9 +830,18 @@ function frame(now) {
   const gap = !animating && !dragging && now - lastInput > 1500 ? 66 : 1000 / 60;
   if (now - last < gap - 1.5) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
-  if (gap < 40 && now - last < 250 && now - built.at > 1500) {
-    slow.push(now - last);
-    if (slow.length >= 90) { slow.sort((a, b) => a - b); if (slow[45] > 24) lighten(); slow = []; }
+  // each frame against the pace it asked for, slow ones too (counted only below a quarter second, a machine far too
+  // slow never saw itself as slow): a second and a half of them on a quick machine, three seconds on a slow one, tell
+  // whether it keeps up. Not while a drawing arrives, nor just after one, nor as the page comes back into view
+  if (!building && now - built.at > 1500 && now - shownAt > 1000) {
+    slow.push((now - last) / gap); slowFor += now - last;
+    if (slow.length >= 90 || (slowFor > 3000 && slow.length >= 2)) {
+      slow.sort((a, b) => a - b);
+      const late = slow[slow.length >> 1];
+      slow = []; slowFor = 0;
+      if (late > 1.45) lighten(late);
+      if (aside) return;                         // set aside just now: nothing more is drawn
+    }
   }
   last = now;
   if (meet) {

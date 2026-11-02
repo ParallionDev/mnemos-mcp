@@ -117,8 +117,11 @@ canvas#mind.dragging{cursor:grabbing}
 /* one thing you can verify, kept small: it ran, as itself, and nothing reached past the fence */
 .verify{margin-top:var(--s4);display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s1) var(--s3);color:var(--ink-4);font-size:var(--t-micro)}
 .verify .flag{color:var(--ink-1)}
-.verify .textlink,#loading .textlink{padding:0;font-size:inherit}
-#loading .textlink{color:var(--ink-2);border-bottom-color:var(--ink-4)}
+.verify .textlink,#loading .textlink,.aside .textlink{padding:0;font-size:inherit}
+#loading .textlink,.aside .textlink{color:var(--ink-2);border-bottom-color:var(--ink-4)}
+.aside{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-4);font-size:var(--t-small);letter-spacing:.06em}
+.aside a{pointer-events:auto}
+.set-aside #mind,.set-aside #regions,.set-aside .recenter{display:none}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
 .left-cue{right:var(--edge);bottom:30px;text-align:right}
 /* back to the whole mind: there only once you've moved away from it */
