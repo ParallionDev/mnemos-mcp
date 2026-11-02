@@ -101,6 +101,8 @@ mnemos = "mnemos.cli:main"
 Homepage = "https://github.com/Riley-Coyote/mnemos-mcp"
 Repository = "https://github.com/Riley-Coyote/mnemos-mcp"
 Issues = "https://github.com/Riley-Coyote/mnemos-mcp/issues"
+Documentation = "https://github.com/Riley-Coyote/mnemos-mcp/blob/main/docs/guide.md"
+Changelog = "https://github.com/Riley-Coyote/mnemos-mcp/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mnemos"]

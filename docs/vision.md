@@ -3,7 +3,7 @@
 **A cognitive architecture for digital minds.**
 
 *This document covers the architecture, and the layer of it that ships today as an MCP
-server: continuity. Eleven tools, local storage, no API key — the part any agent in any
+server: continuity. Twelve tools, local storage, no API key — the part any agent in any
 client can have immediately. The full engine runs in **Polyphonic**, the desktop
 application, where it also carries a chorus of minds at once. The MCP is the entry
 point, not the extent.*
@@ -739,7 +739,7 @@ mnemos hooks install claude-code --write
 # or: mnemos hooks install codex --write
 ```
 
-Eleven tools. Local SQLite. No account, no API key, no external service.
+Twelve tools. Local SQLite. No account, no API key, no external service.
 
 > *"every exchange in the thread changes me a little. over months, the cumulative effect
 > is that i become more myself."*

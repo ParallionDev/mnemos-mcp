@@ -5,7 +5,7 @@
 > `mnemos setup-openclaw`'s jobs ask the agent for advanced-mode tools
 > (`mnemos_consolidate`) that the default simple server doesn't have. To give
 > an OpenClaw agent Mnemos today, add the simple MCP server like any other MCP
-> client (see the README's "Simple MCP Mode") and schedule upkeep with
+> client (see [Simple MCP Mode](guide.md#simple-mcp-mode) in the guide) and schedule upkeep with
 > `mnemos daemon install`.
 
 This guide covers how to set up Mnemos as a complete agent cognition system using [OpenClaw](https://openclaw.dev) for agent orchestration and cron scheduling.
