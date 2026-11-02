@@ -46,8 +46,15 @@ function head() {
     v.push(refused.length ? `<span class="flag">${plural(refused.length, 'tool')} refused</span>` : '<span>nothing refused</span>');
     if (h.status !== 'done' || h.reason) v.push(`<span class="flag">${esc(h.reason || h.status)}</span>`);
   }
-  const plan = life.schedule || [];
-  v.push(plan.length ? `<span>next hour ${plan[0].when && !Array.isArray(plan[0].when) ? `at ${String(plan[0].when.Hour ?? 0).padStart(2, '0')}:${String(plan[0].when.Minute ?? 0).padStart(2, '0')}` : 'scheduled'}${plan[0].loaded ? '' : ', but not loaded'}</span>` : '<span>hours not scheduled</span>');
+  // the next hour is the soonest by the clock, a loaded one before any that won't run, not the first job the schedule lists
+  const soon = (p) => {
+    if (!p.when || Array.isArray(p.when)) return Infinity;
+    const d = new Date(); d.setHours(p.when.Hour ?? 0, p.when.Minute ?? 0, 0, 0);
+    if (d <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  };
+  const next = [...(life.schedule || [])].sort((a, b) => b.loaded - a.loaded || soon(a) - soon(b))[0];
+  v.push(next ? `<span>next hour ${Number.isFinite(soon(next)) ? `at ${clock(new Date(soon(next)))}` : 'scheduled'}${next.loaded ? '' : ', but not loaded'}</span>` : '<span>hours not scheduled</span>');
   const made = at(life.made), stale = Date.now() - made.getTime() > STALE_AFTER;
   v.push(`<span class="fresh">${stale ? `stopped updating ${ago(Date.now() - made.getTime())}` : `read ${ago(Date.now() - made.getTime())}`}</span>`);
   const el = $('verify'); el.innerHTML = v.join(''); el.classList.toggle('stale', stale);
