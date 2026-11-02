@@ -21,13 +21,22 @@
   --p-hair:rgba(20,22,26,.1);--p-hair-2:rgba(20,22,26,.18);--p-focus:rgba(20,22,26,.6);
   --signal:#6d93c9;
   --display:"Inter Tight",system-ui,sans-serif;--sans:"Inter",system-ui,sans-serif;--own:"Newsreader",Georgia,serif;--house:"Silkscreen",monospace;
-  --t-temp:72px;--t-h2:40px;--t-name:24px;--t-own-xl:22px;--t-own:19px;--t-own-s:16.5px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11px;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --t-temp:46px;--t-h2:40px;--t-name:24px;--t-own-xl:22px;--t-own:19px;--t-own-s:16.5px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11px;
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;--s9:112px;
   --edge:30px;--sheet:560px;--r:14px;--r-s:8px;
   --quick:.18s;--calm:.45s;--slow:.9s;--ease:cubic-bezier(.2,.7,.2,1);--sheet-ease:cubic-bezier(.32,.72,0,1);
-  /* the glass (../shared/glass.js): Dark glass as our web glass measures it, 0.13 of the mind's light, softened, with
-     a whisper of white over it; a hairline lit from above; the rim bends what's behind (--bend, Chromium only) */
-  --glass-see:blur(10px) brightness(.13) saturate(1.5);--glass-lift:rgba(255,255,255,.033);
+  /* the glass (../shared/glass.js): our web glass, Smoked as we measured it, so the mind reads through it. Its light is
+     brought down to about a third and softened by only a couple of pixels, so its lines stay lines; a little white
+     over it; a hairline lit from above, and that light falling a little way down its face. The reading room and the
+     list of what's found are deeper, for long reading over a mind that may be bright behind them. The words on the
+     small pieces sit on a soft darkness of their own, which only shows where the mind behind is bright. The rim bends
+     what's behind (--bend, Chromium only) */
+  --glass-see:blur(2px) brightness(.34) saturate(1.3);--glass-lift:rgba(255,255,255,.05);
+  --glass-deep:blur(3px) brightness(.19) saturate(1.3);--glass-deep-lift:rgba(255,255,255,.045);
+  --sheen:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0) 60%);
+  --sheen-deep:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,0) 22%);
+  --halo:0 0 10px rgba(6,6,8,.9),0 0 2px rgba(6,6,8,.8);
   --rim-top:rgba(255,255,255,.16);--rim-side:rgba(255,255,255,.055);--rim-foot:rgba(255,255,255,.075);--hl:1px;
 }
 @media (min-resolution:2dppx){:root{--hl:.5px}}
@@ -72,10 +81,10 @@ canvas#mind.dragging{cursor:grabbing}
 @keyframes breathe{50%{opacity:.45}}
 /* ask its memory: one field, the results lit where they live in the mind, and a short list to open them */
 .ask{position:relative;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;border-radius:999px;
-  color:var(--ink-3);text-shadow:none;transition:width var(--calm) var(--ease);width:220px}
+  color:var(--ink-3);text-shadow:var(--halo);transition:width var(--calm) var(--ease);width:220px}
 /* its glass is a layer of its own, so the list that opens under it can be glass too (a glass element can't see
    past its own glass to what's behind) */
-.ask::before{content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;background:var(--glass-lift);
+.ask::before{content:"";position:absolute;inset:0;z-index:0;border-radius:inherit;background:var(--sheen),var(--glass-lift);
   -webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);transition:box-shadow var(--quick)}
 .ask > *{position:relative;z-index:1}
 .ask:focus-within{width:320px;color:var(--ink-2)}
@@ -86,7 +95,7 @@ canvas#mind.dragging{cursor:grabbing}
 .ask kbd{font:500 10.5px/1 var(--sans);color:var(--ink-4);padding:3px 6px;border-radius:5px;background:rgba(255,255,255,.06)}
 .ask:focus-within kbd{display:none}
 .ask-list{position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 32px));max-height:min(60vh,520px);overflow-y:auto;padding:6px;border-radius:16px;
-  background:var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+  background:var(--sheen-deep),var(--glass-deep-lift);-webkit-backdrop-filter:var(--glass-deep);backdrop-filter:var(--glass-deep);
   box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top),0 24px 60px rgba(0,0,0,.4)}
 .ask-list[hidden]{display:none}
 .ask-list .hit{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;padding:10px 12px;border-radius:9px;border:1px solid transparent}
@@ -96,10 +105,12 @@ canvas#mind.dragging{cursor:grabbing}
 .ask-list .hit .m{margin-top:4px;color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums}
 .ask-list .say{padding:10px 12px;color:var(--ink-3);font-size:var(--t-small)}
 @media (max-width:860px){.ask{width:150px}.ask:focus-within{width:min(260px,calc(100vw - 32px))}.ask kbd{display:none}}
-.actions{top:26px;right:var(--edge);display:flex;gap:var(--s2);align-items:center}
-.pill{all:unset;cursor:pointer;padding:8px 15px;border-radius:999px;background:var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+.actions{top:26px;right:var(--edge);display:flex;gap:var(--s2);align-items:center;transition:opacity var(--calm) var(--ease)}
+/* under the open reading room they'd show through its glass, and can't be reached there anyway */
+body:has(.room.open) .hero .actions{opacity:0;pointer-events:none}
+.pill{all:unset;cursor:pointer;padding:8px 15px;border-radius:999px;background:var(--sheen),var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
   box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);
-  font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;transition:color var(--quick),box-shadow var(--quick),background-color var(--quick)}
+  font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:var(--halo);transition:color var(--quick),box-shadow var(--quick),background-color var(--quick)}
 .pill:hover{color:var(--ink-1);background-color:rgba(255,255,255,.06)}
 .pill:focus-visible{color:var(--ink-1);box-shadow:inset 0 0 0 1px var(--focus)}
 .pill:active{background-color:rgba(255,255,255,.09)}
@@ -108,12 +119,33 @@ canvas#mind.dragging{cursor:grabbing}
 .textlink:hover{color:var(--ink-1)}
 .textlink:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
 
-/* the one large thing: how warm the mind still is */
+/* what the frame reads off the mind, under it: how warm it still is, its last hour, and its recall in time. The mind is
+   the large thing here; this is the instrument's reading of it */
 .foot{left:var(--edge);bottom:30px;max-width:560px}
-.temp{font:200 var(--t-temp)/.95 var(--display);letter-spacing:-.035em}
+.temp{font:200 var(--t-temp)/1 var(--display);letter-spacing:-.028em}
 .temp.cold{color:var(--ink-2)}
 .hour-line{margin-top:var(--s3);color:var(--ink-2);font-size:var(--t-small);font-variant-numeric:tabular-nums}
 .trail-line{margin-top:var(--s1);color:var(--ink-3);font-size:var(--t-small);max-width:52ch}
+/* when recall gathered several memories at once: every such moment the memory's log holds, a mark in time as tall as
+   how many came back, the months under the line in the mind's own face; one chosen is shown again in the mind */
+.recall{margin-top:var(--s5)}
+.recall[hidden]{display:none}
+.r-label{color:var(--ink-4);font-size:var(--t-micro)}
+.r-track{position:relative;margin-top:var(--s2);width:340px;max-width:calc(100vw - 2 * var(--edge));height:38px;cursor:pointer;touch-action:pan-y;border-radius:3px}
+.r-track:focus-visible{outline:1px solid var(--focus);outline-offset:5px}
+.r-ticks{position:absolute;left:0;right:0;top:0;height:24px;border-bottom:1px solid var(--hair-2)}
+.r-ticks i{position:absolute;bottom:0;width:1px;background:rgba(236,239,244,.42)}
+.r-ticks i.on{background:var(--ink-1);box-shadow:0 0 6px rgba(236,239,244,.55)}
+/* one that came back while you were here arrives white, and settles */
+.r-ticks i.new{animation:arrive 9s var(--ease) both}
+@keyframes arrive{from{background:#fff;box-shadow:0 0 9px rgba(255,255,255,.9)}}
+.r-axis{position:absolute;left:0;right:0;top:25px;height:13px;font:400 9.5px/1 var(--mono);letter-spacing:.03em;color:var(--ink-4)}
+.r-axis b{position:absolute;top:0;width:1px;height:2px;background:var(--hair-2)}
+.r-axis b.month{height:4px;background:var(--ink-4)}
+.r-axis span{position:absolute;top:7px;translate:-50% 0;white-space:nowrap}
+.r-axis span.start{translate:none}
+.r-axis span.now{translate:none;left:auto;right:0}
+.r-cap{margin-top:var(--s1);color:var(--ink-3);font-size:var(--t-micro);font-variant-numeric:tabular-nums;min-height:1.5em}
 /* one thing you can verify, kept small: it ran, as itself, and nothing reached past the fence */
 .verify{margin-top:var(--s4);display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s1) var(--s3);color:var(--ink-4);font-size:var(--t-micro)}
 .verify .flag{color:var(--ink-1)}
@@ -121,16 +153,18 @@ canvas#mind.dragging{cursor:grabbing}
 #loading .textlink,.aside .textlink{color:var(--ink-2);border-bottom-color:var(--ink-4)}
 .aside{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-4);font-size:var(--t-small);letter-spacing:.06em}
 .aside a{pointer-events:auto}
-.set-aside #mind,.set-aside #regions,.set-aside .recenter{display:none}
+.set-aside #mind,.set-aside #regions,.set-aside .recenter,.set-aside .recall{display:none}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
 .left-cue{right:var(--edge);bottom:30px;text-align:right}
 /* back to the whole mind: there only once you've moved away from it */
 .recenter{all:unset;left:50%;bottom:30px;translate:-50% 8px;opacity:0;pointer-events:none;cursor:pointer;padding:8px 15px;border-radius:999px;
-  background:var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
-  box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:none;
+  background:var(--sheen),var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--glass-see);
+  box-shadow:inset 0 0 0 var(--hl) var(--rim-side),inset 0 var(--hl) 0 var(--rim-top);font:450 var(--t-small)/1 var(--sans);color:var(--ink-2);text-shadow:var(--halo);
   transition:opacity var(--calm) var(--ease),translate var(--calm) var(--sheet-ease),color var(--quick),background-color var(--quick)}
 .hero .recenter{position:absolute;pointer-events:none}
 .hero .recenter.on{opacity:1;translate:-50% 0;pointer-events:auto}
+/* how close you've come, against the whole mind seen from home */
+.recenter .mag{margin-right:9px;font:400 10.5px/1 var(--mono);letter-spacing:.02em;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .recenter:hover{color:var(--ink-1);background-color:rgba(255,255,255,.06)}
 .recenter:focus-visible{color:var(--ink-1);box-shadow:inset 0 0 0 1px var(--focus)}
 .recenter:active{background-color:rgba(255,255,255,.09)}
@@ -195,7 +229,7 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .room[hidden]{display:none}
 .room::before{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:0 30px 70px rgba(0,0,0,.32),0 2px 10px rgba(0,0,0,.18);pointer-events:none}
 .room > .glass{position:absolute;inset:calc(-1 * var(--g-pad));clip-path:inset(var(--g-pad) round var(--g-r));pointer-events:none;
-  background:var(--glass-lift);-webkit-backdrop-filter:var(--glass-see);backdrop-filter:var(--bend,) var(--glass-see)}
+  background:var(--sheen-deep),var(--glass-deep-lift);-webkit-backdrop-filter:var(--glass-deep);backdrop-filter:var(--bend,) var(--glass-deep)}
 /* the rim: a hairline, brightest along the top where the light falls, quiet down the sides, a little back at the foot */
 .room::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;padding:var(--hl);pointer-events:none;
   background:linear-gradient(180deg,var(--rim-top),var(--rim-side) 18%,var(--rim-side) 82%,var(--rim-foot));
@@ -216,7 +250,7 @@ dialog img{display:block;max-width:min(92vw,1100px);max-height:calc(92vh - 46px)
 dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);color:var(--ink-3);font-size:var(--t-small);background:var(--surface-2)}
 
 @media (max-width:860px){
-  :root{--edge:16px;--t-temp:52px;--t-h2:30px}
+  :root{--edge:16px;--t-temp:36px;--t-h2:30px}
   .actions{top:auto;bottom:auto;right:var(--edge);top:20px}
   .top{top:20px}
   .left-cue{display:none}
@@ -231,6 +265,17 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
 @media (max-width:520px){
   .actions .textlink{display:none}
   .who small{max-width:60vw}
+}
+@media (max-width:600px){
+  /* on a phone the search is a glass circle until it's tapped: then it opens across the top, and what else is up there
+     steps aside for it (the name, seen through its glass, would ghost). Its words are 16px there, so the phone doesn't
+     zoom in to read them */
+  .ask{width:34px;padding:0 0 0 10px;transition:none}
+  .ask input{position:absolute;inset:0;opacity:0;font-size:16px}
+  .ask:focus-within{width:calc(100vw - 2 * var(--edge));padding:0 10px 0 12px}
+  .ask:focus-within input{position:relative;inset:auto;opacity:1}
+  .actions:has(.ask:focus-within) > :not(.ask){display:none}
+  .hero:has(.ask:focus-within) .top{visibility:hidden}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 @media (max-width:600px){.room{--g-r:18px;top:8px;right:8px;bottom:8px;width:calc(100vw - 16px)}.room-head{padding:18px 18px 0}.room-body{padding:var(--s4) 18px var(--s8)}}
@@ -268,9 +313,17 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
     <div class="temp" id="temp">&nbsp;</div>
     <div class="hour-line" id="hour-line"></div>
     <div class="trail-line" id="trail-line"></div>
+    <div class="recall" id="recall" hidden>
+      <div class="r-label" id="r-label">When recall gathered several memories at once</div>
+      <div class="r-track" id="r-track" role="slider" tabindex="0" aria-labelledby="r-label" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1">
+        <div class="r-ticks" id="r-ticks" aria-hidden="true"></div>
+        <div class="r-axis" id="r-axis" aria-hidden="true"></div>
+      </div>
+      <div class="r-cap" id="r-cap" aria-hidden="true"></div>
+    </div>
     <div class="verify" id="verify"></div>
   </div>
-  <button class="ui recenter" id="recenter" type="button" tabindex="-1">Recenter</button>
+  <button class="ui recenter" id="recenter" type="button" tabindex="-1"><span class="mag" id="mag" aria-hidden="true"></span>Recenter</button>
   <div class="ui left-cue" id="left-cue" hidden>
     <button id="to-paper">What it left ↓</button>
     <small id="left-sum"></small>

@@ -321,7 +321,7 @@ async function drawMind(took = {}) {
 
 async function readMemories() {
   if (L.memory?.version === memVersion && mems.length) return false;
-  try { const m = await json('../data/memories.json'); mems = m.memories; memVersion = m.version; memAt = new Map(mems.map((x, i) => [x.id, i])); return true; }
+  try { const m = await json('../data/memories.json'); mems = m.memories; memVersion = m.version; recallLog = m.recalled || []; memAt = new Map(mems.map((x, i) => [x.id, i])); return true; }
   catch { return false; }                      // the next look will try again
 }
 
@@ -471,14 +471,27 @@ function aimAt(i) {
  * (dimNow), so moving from one memory to the next never flashes the whole mind back up between them. */
 const QUIET = 0.74, QUIET_OPEN = 0.88, LIT_G = 0.5, LIT_F = 0.95, LIT_L = 0.8;
 // what's lit: the memory open, and with none open, the one under the hand
-// (a region's name under the hand lights the region: its key is -10 - k)
-const lit = () => (selected >= 0 ? selected : hoverCell >= 0 ? hoverCell : regionLit >= 0 ? -10 - regionLit : -1);
+// (a region's name under the hand lights the region: its key is -10 - k; a moment of recall chosen under the hour, its
+// memories: MOMENT - k)
+const MOMENT = -100000;
+const lit = () => (selected >= 0 ? selected : hoverCell >= 0 ? hoverCell : regionLit >= 0 ? -10 - regionLit : tracePicked >= 0 ? MOMENT - tracePicked : -1);
 let pointed = -1;
 let dimNow = 0, aimed = [], aimedLinks = [];
 function pointAt(i) {
   for (const j of aimed) fAim[j] = 0;
   for (const li of aimedLinks) lAim[li] = 0;
   aimed = []; aimedLinks = [];
+  if (i <= MOMENT) {
+    // a moment of recall seen again: what came back together, and the links among them, and nothing else
+    const m = moments[MOMENT - i];
+    if (!m) return;
+    const among = new Set(m.ids.map((id) => cellOf.get(id)).filter((c) => c !== undefined));
+    for (const c of among) {
+      fAim[c] = 1; aimed.push(c);
+      for (const [j, w, li] of nbrs[c]) if (among.has(j)) { lAim[li] = 0.6 + 0.4 * w; aimedLinks.push(li); }
+    }
+    return;
+  }
   if (i <= -10) {
     // a region: its memories, the links among them, and brighter, the links that leave it: where it reaches
     const k = -10 - i, g = regions.find((r) => r.k === k);
@@ -547,6 +560,16 @@ function turn(dx, dy) {
 }
 function recenter() {
   cam.goal.target = centre.slice(); cam.goal.dist = HOME; fling = null; lastNav = -1e9; moved(false); stir();
+  letGo();                                       // the moment you went to see is let go with the view
+}
+// a moment of recall shown is let go (with the view, Escape, or a click in the dark): its light, and its mark
+function letGo() { if (tracePicked >= 0) { tracePicked = -1; showTrace(-1); wake(); } }
+// how close you've come, read beside the way back: the whole mind from home is ×1
+let magShown = '';
+function readMag() {
+  if (!wandered) return;
+  const k = HOME / cam.dist, s = k >= 9.95 ? String(Math.round(k)) : k.toFixed(1);
+  if (s !== magShown) { magShown = s; $('mag').textContent = `×${s}`; }
 }
 
 function bindPointer() {
@@ -589,6 +612,7 @@ function bindPointer() {
     if (dragging && e?.type === 'pointerup' && Math.hypot(e.clientX - dragging.x0, e.clientY - dragging.y0) < 6 && performance.now() - dragging.t0 < 450) {
       const c = pick(e.clientX, e.clientY);
       if (c >= 0 && memAt.has(D.cells[c].fullId)) openRoom({ tab: 'memories', memory: D.cells[c].fullId });
+      else if (c < 0) letGo();
     } else if (dragging && performance.now() - dragging.at < 80 && !reduce) {
       // let go while moving: it carries on, slowing as if through something thick
       fling = { vx: dragging.vx * 1000, vy: (e.pointerType === 'mouse' || dragging.sliding ? dragging.vy : 0) * 1000, sliding: dragging.sliding };
@@ -641,8 +665,9 @@ function nearWanted(now) {
 /* ---------- its regions, named ----------
  * The layout gives each concern a place of its own (./build.js); here each is named in its own words
  * (../shared/regions.js) and the names are set over the mind like a chart's names for its constellations: the
- * biggest from across the room, more of them as you come closer, none where one would cover another, none with a
- * memory open. A name under the hand lights its region and where it reaches; a name clicked goes there. */
+ * biggest from across the room, more of them as you come closer, none where one would cover another or the frame's own
+ * words, none with a memory open or a moment of recall shown. A name under the hand lights its region and where it
+ * reaches; a name clicked goes there. */
 let regions = [], regionOf = new Int32Array(0), regionLit = -1, regionsNamed = '';
 function mapRegions(places) {
   regionOf = Int32Array.from(places, (p) => (p[3] ?? -1));
@@ -692,19 +717,34 @@ function flyTo(g) {
   cam.goal.target = g.c.slice(); cam.goal.dist = clamp((g.r / tanH) * 1.5, ZMIN, HOME * ZOUT);
   lastNav = -1e9; moved(true); stir();
 }
+// the frame's own words over the mind, where they sit on the page with a little room around them: no name is set over
+// them. They're measured when they change size and when the window does, not every frame
+let clear = [];
+function measureClear() {
+  const y = scrollY;
+  clear = [...document.querySelectorAll('.hero > .ui')].map((el) => el.getBoundingClientRect())
+    .filter((r) => r.width && r.height).map((r) => [r.left - 16, r.top + y - 12, r.right + 16, r.bottom + y + 12]);
+  wake();
+}
+function keepClear() {
+  const watch = new ResizeObserver(measureClear);
+  document.querySelectorAll('.hero > .ui').forEach((el) => watch.observe(el));
+  addEventListener('resize', measureClear);
+}
 function placeRegions() {
   if (!regions.length) return;
-  const W = innerWidth, H = innerHeight, covered = sheetOpen && W > 860 ? Math.min(SHEET, W) + 20 : 0, placed = [];
+  const W = innerWidth, H = innerHeight, y0 = scrollY, covered = sheetOpen && W > 860 ? Math.min(SHEET, W) + 20 : 0, placed = [];
   // from across the room only the big regions are named; coming closer, smaller ones are
   const fewest = Math.max(6, Math.round(44 * (cam.dist / HOME) ** 2));
   for (const g of regions) {
     let on = false;
-    if (g.el && selected < 0 && g.n >= fewest) {
+    if (g.el && selected < 0 && tracePicked < 0 && g.n >= fewest) {
       const s = project(g.c);
       if (s) {
         if (!g.w) g.w = g.el.offsetWidth || g.name.length * 8 + 40;
         const rs = (g.r / (s.z * tanH)) * (H / 2), x = s.x, y = s.y, w = g.w;
-        on = rs > 34 && rs < H * 0.8 && x - w / 2 > 12 && x + w / 2 < W - covered - 12 && y > 110 && y < H - 170;
+        on = rs > 34 && rs < H * 0.8 && x - w / 2 > 12 && x + w / 2 < W - covered - 12 && y > 110 && y < H - 90
+          && !clear.some(([l, t, r, b]) => x + w / 2 > l && x - w / 2 < r && y + 13 > t - y0 && y - 13 < b - y0);
         for (let b = 0; on && b < placed.length; b++) if (Math.abs(placed[b][0] - x) < (placed[b][2] + w) / 2 + 12 && Math.abs(placed[b][1] - y) < 34) on = false;
         if (on) {
           placed.push([x, y, w]);
@@ -880,7 +920,7 @@ function frame(now) {
   const eye = eyeOf(cam), fwd = normalize(sub(cam.target, eye)), right = normalize(cross(fwd, [0, 1, 0])), up = cross(right, fwd);
   view = { eye, fwd, right, up };
   if ((frames & 3) === 0) pointing();
-  placeRegions();
+  placeRegions(); readMag();
   const close = clamp((HOME * 0.8 - cam.dist) / (HOME * 0.8 - 0.6));
   paint(now);
   // a memory open is always drawn finely: whatever dropped its fine version (a redraw, a lighter budget, a page that
@@ -1003,7 +1043,11 @@ function updateFrame() {
     $('trail-line').textContent = stale ? `No hour has run since ${longDay(end)}, ${clock(end)}. If one was meant to, the hours may have stopped.` : trailSentence(h);
     $('verify').innerHTML = verifyHTML(h) + `<a class="textlink" href="${esc(withAgent('../log/'))}">the log →</a>`;
   }
-  $('who-sub').textContent = `${plural(L.memory?.states?.active ?? N, 'memory', 'memories')} awake · its hours between conversations`;
+  // what's there, counted: the memories awake, the links drawn between them, and how long it's been keeping them
+  const since = sinceDay();
+  $('who-sub').textContent = [`${plural(L.memory?.states?.active ?? N, 'memory', 'memories')} awake`, NL ? plural(NL, 'link') : null,
+    since ? `since ${since}` : null].filter(Boolean).join(' · ');
+  renderTrace();
   const left = [];
   if (h) {
     if (h.journal.length) left.push(h.journal.length === 1 ? 'a journal entry' : `${words(h.journal.length)} journal entries`);
@@ -1013,6 +1057,144 @@ function updateFrame() {
   }
   $('left-cue').hidden = !h;
   $('left-sum').textContent = left.length ? left.join(' · ') : 'it left nothing this time';
+}
+
+// the day its oldest memory was kept
+let firstKept = { of: null, day: null };
+function sinceDay() {
+  if (firstKept.of !== memVersion) {
+    let t = Infinity;
+    for (const m of mems) { const b = Date.parse(m.born); if (b < t) t = b; }
+    firstKept = { of: memVersion, day: Number.isFinite(t) ? new Date(t) : null };
+  }
+  const d = firstKept.day;
+  return d && d.toLocaleString('en-US', { month: 'long', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+}
+
+/* ---------- when recall gathered several memories at once ----------
+ * The memory keeps a log of recall: every time a memory came back, and when (../data/memories.json, `recalled`). What
+ * came back within a few seconds of the one before came back with it, so the log reads as moments, and each moment of
+ * two or more is a mark under the hour, in time, as tall as how many came back. Choosing one shows it again: the camera
+ * comes to where they are and the memories light in the order they came back, the light running out along their links.
+ * It's a person looking, not the mind remembering, so nothing is written. One that happens while you're here arrives
+ * at the right, at now. */
+const TOGETHER = 5000;
+let recallLog = [], moments = [], traceBuilt = { len: -1, span: 0, newest: 0 }, traceShown = -1, tracePicked = -1;
+function momentsOf(log) {
+  const out = [];
+  for (const [id, iso] of log) {
+    const t = Date.parse(iso), m = out[out.length - 1];
+    if (!Number.isFinite(t)) continue;
+    if (m && t - m.last <= TOGETHER) { if (!m.ids.includes(id)) m.ids.push(id); m.last = t; }
+    else out.push({ t, last: t, ids: [id] });
+  }
+  return out.filter((m) => m.ids.length >= 2);
+}
+const traceSpan = () => [moments[0].t, Math.max(Date.now(), moments[moments.length - 1].last)];
+function renderTrace() {
+  if (recallLog.length !== traceBuilt.len) {
+    moments = momentsOf(recallLog);
+    if (tracePicked >= moments.length) tracePicked = -1;
+  }
+  $('recall').hidden = !moments.length;
+  if (!moments.length) return;
+  const [t0, t1] = traceSpan(), span = t1 - t0 || 1;
+  if (recallLog.length === traceBuilt.len && span <= traceBuilt.span * 1.005) return;   // nothing new to place
+  const fresh = traceBuilt.newest, x = (t) => (((t - t0) / span) * 100).toFixed(3);
+  $('r-ticks').innerHTML = moments.map((m) => `<i style="left:${x(m.t)}%;height:${(6 + Math.min(17, m.ids.length * 1.25)).toFixed(1)}px"${fresh && m.t > fresh ? ' class="new"' : ''}></i>`).join('');
+  traceBuilt = { len: recallLog.length, span, newest: moments[moments.length - 1].t };
+  // the days it spans, under the line: a mark at each week while there are few enough to read, a longer one at each
+  // month, named where there's room between the first day and now
+  const first = new Date(t0), marks = [`<span class="start">${esc(shortDay(first))}</span>`, '<span class="now">now</span>'];
+  if (span < 120 * 864e5) {
+    for (let d = new Date(first.getFullYear(), first.getMonth(), first.getDate() + ((8 - first.getDay()) % 7 || 7)); d.getTime() < t1; d.setDate(d.getDate() + 7)) marks.push(`<b style="left:${x(d.getTime())}%"></b>`);
+  }
+  for (let d = new Date(first.getFullYear(), first.getMonth() + 1, 1); d.getTime() < t1; d.setMonth(d.getMonth() + 1)) {
+    const p = x(d.getTime());
+    marks.push(`<b class="month" style="left:${p}%"></b>`);
+    if (p > 17 && p < 86) marks.push(`<span style="left:${p}%">${d.toLocaleString('en-US', { month: 'short' })}</span>`);
+  }
+  $('r-axis').innerHTML = marks.join('');
+  traceShown = -1; showTrace(tracePicked);
+}
+// how many links recall itself made among them while it happened (the engine ties what comes back together)
+function madeBetween(m) {
+  const among = new Set(m.ids), seen = new Set();
+  for (const id of m.ids) {
+    for (const [to, , , formed, by] of mems[memAt.get(id)]?.ties || []) {
+      if (by !== 'retrieval' || !among.has(to)) continue;
+      const t = Date.parse(formed);
+      if (t >= m.t - 6000 && t <= m.last + 6000) seen.add(id < to ? `${id} ${to}` : `${to} ${id}`);
+    }
+  }
+  return seen.size;
+}
+function momentLine(m) {
+  const d = new Date(m.t), made = madeBetween(m);
+  return `${shortDay(d)}, ${clock(d)} · ${words(m.ids.length)} memories came back together${made ? ` · ${plural(made, 'link')} made between them` : ''}`;
+}
+function showTrace(k) {
+  const ticks = $('r-ticks').children;
+  ticks[traceShown]?.classList.remove('on');
+  traceShown = k;
+  ticks[k]?.classList.add('on');
+  const text = k >= 0 ? momentLine(moments[k])
+    : `${plural(moments.length, 'time')} · choose one to see it again`;
+  $('r-cap').textContent = text;
+  const el = $('r-track');
+  el.setAttribute('aria-valuemax', String(moments.length)); el.setAttribute('aria-valuenow', String(Math.max(1, k + 1))); el.setAttribute('aria-valuetext', text);
+}
+// the moment nearest in time to a point along the line
+function traceAt(clientX) {
+  const r = $('r-track').getBoundingClientRect(), [t0, t1] = traceSpan(), t = t0 + clamp((clientX - r.left) / r.width) * (t1 - t0);
+  let lo = 0, hi = moments.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (moments[mid].t < t) lo = mid + 1; else hi = mid; }
+  return lo > 0 && t - moments[lo - 1].t < moments[lo].t - t ? lo - 1 : lo;
+}
+function seeAgain(k) {
+  const m = moments[k];
+  if (!m || aside || !tissue) return;
+  tracePicked = k; showTrace(k);
+  const cells = m.ids.map((id) => cellOf.get(id)).filter((i) => i !== undefined);
+  if (!cells.length) return;
+  // a memory open would keep everything else quiet: what's chosen now is the moment
+  if (selected >= 0) { selected = -1; focusNear(-1); if (sheetOpen) room.go({ tab: room.s.tab, memory: null }); }
+  hover(-1); fling = null; meet = null;
+  // they light in the order they came back, and each link between two of them as the second arrives; the rest of the
+  // mind goes quiet around them (they're what's lit: see pointing)
+  const now = performance.now(), when = new Map(cells.map((c, j) => [c, now + 500 + j * 170]));
+  for (const [c, t] of when) {
+    fireAt[c] = t; fireLevel[c] = 1;
+    for (const [j, , li] of nbrs[c]) if (when.has(j)) { linkAt[li] = Math.max(t, when.get(j)) - 60; linkLevel[li] = 1; }
+  }
+  wake();
+  // the middle of what came back, with room around it (they fill about the middle two fifths of the view, never
+  // closer than five times home), beside the reading room when it's open
+  const c = scale(cells.map((i) => P[i]).reduce(add, [0, 0, 0]), 1 / cells.length);
+  const dist = clamp((Math.max(0.25, ...cells.map((i) => length(sub(P[i], c)))) / tanH) * 2.5, HOME / 5, HOME / 1.2);
+  const sheet = sheetOpen && innerWidth > 860 ? Math.min(SHEET, innerWidth) : 0;
+  cam.goal.target = add(c, scale(view ? view.right : [1, 0, 0], (sheet / 2) * ((2 * dist * tanH) / innerHeight)));
+  cam.goal.dist = dist;
+  lastInput = now; lastNav = -1e9; moved(true); stir();
+}
+function bindTrace() {
+  const el = $('r-track');
+  el.addEventListener('pointermove', (e) => { if (moments.length && e.pointerType === 'mouse') showTrace(traceAt(e.clientX)); });
+  el.addEventListener('pointerleave', () => { if (moments.length && document.activeElement !== el) showTrace(tracePicked); });
+  el.addEventListener('click', (e) => { if (moments.length) seeAgain(traceAt(e.clientX)); });
+  // one stop for the keyboard: the arrows step through the moments, Enter shows the one you're on; the mind's own
+  // arrow keys wait while you're here
+  el.addEventListener('keydown', (e) => {
+    if (!moments.length) return;
+    const k = traceShown >= 0 ? traceShown : moments.length - 1, last = moments.length - 1;
+    const to = { ArrowLeft: k - 1, ArrowDown: k - 1, ArrowRight: k + 1, ArrowUp: k + 1, PageDown: k - 10, PageUp: k + 10, Home: 0, End: last }[e.key];
+    if (to !== undefined) showTrace(Math.max(0, Math.min(last, to)));
+    else if (e.key === 'Enter' || e.key === ' ') seeAgain(k);
+    else return;
+    e.preventDefault(); e.stopPropagation();
+  });
+  el.addEventListener('focus', () => { if (moments.length && traceShown < 0) showTrace(tracePicked >= 0 ? tracePicked : moments.length - 1); });
+  el.addEventListener('blur', () => { if (moments.length) showTrace(tracePicked); });
 }
 
 /* ---------- since you were last here ---------- */
@@ -1163,7 +1345,7 @@ function bindPage() {
   $('to-paper').addEventListener('click', () => $('paper').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' }));
   $('to-log').href = withAgent('../log/');
   addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); return; }
+    if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); else letGo(); return; }
     if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) { e.preventDefault(); $('ask-q').focus(); }
   });
   addEventListener('hashchange', fromHash);
@@ -1371,7 +1553,7 @@ if (lastVisit) {
 }
 sayNew();
 resize(); addEventListener('resize', resize);
-bindPointer(); bindPage(); bindAsk();
+bindPointer(); bindPage(); bindAsk(); bindTrace(); keepClear();
 renderPaper(); updateFrame();
 $('loading').remove();
 walk(lastHour);
