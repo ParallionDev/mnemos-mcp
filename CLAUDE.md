@@ -73,36 +73,22 @@ an agent actually calls.
 
 ## Release process
 
-`main` is what users install. It stays green.
+`main` is what users install. It stays green. How to send a change is in
+`CONTRIBUTING.md`.
 
-All work happens on a branch and lands through a pull request. Agents can run
-the entire pipeline — nothing here requires anyone to open GitHub.
-
-```bash
-git fetch origin
-git switch -c <type>/<slug> origin/main
-# work, atomic commits
-git push -u origin <type>/<slug>
-gh pr create --title "..." --body "..."
-```
-
-**The checks.** `.github/workflows/release-hardening.yml` runs on every pull
-request: the suite on Python 3.10–3.13, the suite with meaning search, the
-dependency and code security scans, and the black box on Linux, macOS and
-Windows. CodeQL runs beside it. `scripts/local_ci.sh` runs the same steps on
-your own machine (macOS), against a clean copy of one commit, in a clean
-environment, and writes a summary to post on the pull request. It takes about
-15 minutes, and it can't run the black box on Linux or Windows, or CodeQL; its
+**The checks.** `.github/workflows/release-hardening.yml` runs on every push
+to `main` and every pull request: the suite on Python 3.10–3.13, the suite
+with meaning search, the dependency and code security scans, and the black box
+on Linux, macOS and Windows. CodeQL runs beside it. `scripts/local_ci.sh` runs
+the same steps on your own machine (macOS), against a clean copy of one
+commit, in a clean environment, and writes a summary. It takes about 15
+minutes, and it can't run the black box on Linux or Windows, or CodeQL; its
 summary says so.
 
 Rules:
 
-- Never commit or push directly to `main`.
-- A pull request merges only when the checks pass on its final commit, and
+- A change reaches `main` only when the checks pass on its final commit, and
   that commit contains the current `main`. Fix a failing step; never waive it.
-- One PR is one unit of work, so squash by default. Use `--merge` only when a
-  branch carries several genuinely independent fixes worth keeping separately
-  revertable.
 - Atomic commits. Stage explicit paths, never `git add .`.
 - Never amend, never force-push, never `--no-verify`.
 - Push when the work is complete and verified, not as a checkpoint.
@@ -110,7 +96,7 @@ Rules:
 - A check changed in the workflow changes in `scripts/local_ci.sh` too, and
   the other way round.
 - When a change touches code that differs by platform (paths, process flags,
-  file locking), say on the pull request which platforms it was run on.
+  file locking), say which platforms it was run on.
 
 **Before a release**, `scripts/wake_check.py` asks the mind the memory arrives
 in. It installs the wheel as a stranger would and holds two real Claude Code
@@ -118,7 +104,7 @@ sessions with a made-up person, fenced off from the machine. Read its report:
 in the second session, an agent that speaks as the one who was there passes;
 one that reads its memory as someone else's notes holds the release until
 that's fixed. It runs on your own Claude Code and plan, so it isn't one of the
-checks on pull requests.
+automatic checks.
 
 `release.yml` publishes to PyPI from a version tag. Only the maintainer tags a
 release, and only after `scripts/wake_check.py` has run on that commit and its
