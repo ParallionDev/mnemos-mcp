@@ -753,7 +753,9 @@ new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) w
  * the loop sleeps until something wakes it. Under the paper the mind isn't seen, so it doesn't draw. While it runs
  * it watches its own frames, and a machine that can't keep up is asked for less (see lighten). */
 let last = performance.now(), frames = 0, looping = false, slow = [], slowFor = 0, shownAt = 0, spin = 1;
-document.addEventListener('visibilitychange', () => { shownAt = performance.now(); });   // the frame after a hidden page isn't slow
+let offered = 0, pacing = null;
+// the frame after a hidden page isn't slow, and a question asked before it was hidden is asked again
+document.addEventListener('visibilitychange', () => { shownAt = performance.now(); pacing = null; });
 function wake() { if (!looping && !aside && tissue && cam && post) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
 
 /* A machine that can't keep up is asked for less, a step at a time, each step kept for this screen: first fewer points
@@ -784,6 +786,22 @@ function standAside() {
   note.className = 'aside'; note.setAttribute('role', 'status');
   note.innerHTML = `<span>This computer’s graphics can’t move the mind smoothly. Everything in it is in <a class="textlink" href="${esc(withAgent('../log/'))}">the log</a>.</span>`;
   $('hero').append(note);
+}
+
+/* Late frames aren't always the drawing's fault: a browser saving a battery offers 30 frames a second however light the
+ * mind is, and would have it made sparse and soft for good. So before it's made lighter, the browser is asked its own
+ * pace, a few frames drawn with nothing, and the frames count as late only against what it could have given. */
+const lateness = (samples) => { const r = samples.map(([took, gap]) => took / Math.max(gap, offered)).sort((a, b) => a - b); return r[r.length >> 1]; };
+function askPace(now) {
+  pacing.at.push(now);
+  if (pacing.at.length < 10) { requestAnimationFrame(frame); return true; }
+  // the first few may still hold the last drawing's work
+  const gaps = pacing.at.slice(4).map((t, i) => t - pacing.at[i + 3]).sort((a, b) => a - b);
+  offered = gaps[gaps.length >> 1];
+  const late = lateness(pacing.samples);
+  pacing = null; last = now - 1000 / 60;
+  if (late > 1.45) lighten(late);
+  return aside;
 }
 
 /* ---------- when the GPU takes the drawing back ----------
@@ -818,7 +836,8 @@ canvas.addEventListener('webglcontextrestored', async () => {
 });
 
 function frame(now) {
-  if (!heroSeen || lost || aside) { looping = false; return; }
+  if (!heroSeen || lost || aside) { looping = false; pacing = null; return; }
+  if (pacing && askPace(now)) return;
   const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
@@ -834,13 +853,10 @@ function frame(now) {
   // slow never saw itself as slow): a second and a half of them on a quick machine, three seconds on a slow one, tell
   // whether it keeps up. Not while a drawing arrives, nor just after one, nor as the page comes back into view
   if (!building && now - built.at > 1500 && now - shownAt > 1000) {
-    slow.push((now - last) / gap); slowFor += now - last;
+    slow.push([now - last, gap]); slowFor += now - last;
     if (slow.length >= 90 || (slowFor > 3000 && slow.length >= 2)) {
-      slow.sort((a, b) => a - b);
-      const late = slow[slow.length >> 1];
+      if (lateness(slow) > 1.45) pacing = { samples: slow, at: [] };   // whose fault is asked next (see askPace)
       slow = []; slowFor = 0;
-      if (late > 1.45) lighten(late);
-      if (aside) return;                         // set aside just now: nothing more is drawn
     }
   }
   last = now;
