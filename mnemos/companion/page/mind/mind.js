@@ -55,8 +55,9 @@ const store = {
 };
 
 /* how many points this screen draws smoothly: a phone or a small machine far fewer than a desk; once a screen has
- * shown what it can do, the page remembers (a convenience: without it the guess is used again) */
-const small = innerWidth < 760 || (navigator.deviceMemory || 8) <= 4;
+ * shown what it can do, the page remembers (a convenience: without it the guess is used again). A page opened hidden
+ * has no width yet, so the screen's own is asked instead (else it'd be drawn for a phone, and miss the kept drawing) */
+const small = (innerWidth || screen.width) < 760 || (navigator.deviceMemory || 8) <= 4;
 const BUDGET_KEY = 'mnemos.mind.budget.v3';      // v3: the budget is counted truly (a fibre by its length)
 let budget = Number(params.get('budget')) || store.get(BUDGET_KEY) || (small ? 1_200_000 : 2_400_000);
 
@@ -201,7 +202,7 @@ function apply(data, out, took = {}, ready = null) {
   dropNear(); if (leaving) { leaving.tissue.dispose(); leaving = null; } nearAsked = -1;
   centre = scale(P.reduce(add, [0, 0, 0]), 1 / (N || 1));
   extent = Math.max(0.5, ...P.map((p) => length(sub(p, centre))));
-  HOME = extent * 3.35 * Math.min(1.8, Math.max(1, 0.85 / (innerWidth / innerHeight)));
+  HOME = homeOf();
   cellOf = new Map(D.cells.map((c, i) => [c.fullId, i]));
   born = D.cells.map((c) => Date.parse(c.born));
   acc = D.cells.map((c) => c.accessibility);
@@ -691,9 +692,20 @@ function placeRegions() {
 /* ---------- resolution and the loop ---------- */
 
 let post = null, heroSeen = true;
-const renderScale = clamp(Math.sqrt(LENS.pixels / (innerWidth * innerHeight * Math.min(devicePixelRatio || 1, 2) ** 2)), 0.4, 1);
+/* how far back the whole mind is seen: further for a tall window, so it fits across (a window with no size yet is
+ * framed for its screen until it has one) */
+function homeOf() {
+  const aspect = innerWidth && innerHeight ? innerWidth / innerHeight : screen.width / screen.height;
+  return extent * 3.35 * Math.min(1.8, Math.max(1, 0.85 / aspect));
+}
 function resize() {
+  // a page opened where it can't be seen (a hidden pane) has no size yet; it starts on the resize that gives it one
+  if (!innerWidth || !innerHeight) return;
+  // seen whole, it's seen whole again when the window changes shape; a view you chose stays yours
+  const was = HOME; HOME = homeOf();
+  if (cam && !wandered && selected < 0 && cam.goal.dist === was) cam.goal.dist = HOME;
   const dpr = Math.min(devicePixelRatio || 1, 2);
+  const renderScale = clamp(Math.sqrt(LENS.pixels / (innerWidth * innerHeight * dpr ** 2)), 0.4, 1);
   const w = Math.round(innerWidth * dpr * renderScale), h = Math.round(innerHeight * dpr * renderScale);
   if (canvas.width === w && canvas.height === h && post) return;
   canvas.width = w; canvas.height = h;
@@ -704,12 +716,12 @@ function resize() {
 new IntersectionObserver(([e]) => { heroSeen = e.isIntersecting; if (heroSeen) wake(); }, { threshold: 0.02 }).observe($('hero'));
 
 /* The loop runs only while something moves: light travelling, a memory arriving, a hand on it, the camera settling.
- * The slow turn goes on for 45 seconds after you last touched it, at 24 frames a second, then eases to a stop, and
+ * The slow turn goes on for 30 seconds after you last touched it, at 15 frames a second, then eases to a stop, and
  * the loop sleeps until something wakes it. Under the paper the mind isn't seen, so it doesn't draw. While it runs
  * it watches its own frames: if they come slowly the drawing is remade at half the points (twice at most), and the
  * budget that worked is remembered for this screen. */
 let last = performance.now(), frames = 0, looping = false, slow = [], halvings = 0, spin = 1;
-function wake() { if (!looping && tissue && cam) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
+function wake() { if (!looping && tissue && cam && post) { looping = true; last = performance.now(); requestAnimationFrame(frame); } }
 async function lighten() {
   if (building || halvings >= 2 || budget <= 400_000) return;
   halvings++; budget = Math.max(400_000, Math.round(budget / 2)); store.set(BUDGET_KEY, budget);
@@ -1258,7 +1270,7 @@ setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you w
 listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
-  get looping() { return looping; }, get frames() { return frames; }, gpu: () => { const o = {}; for (const [k, v] of Object.entries(gpuMs)) { v.sort((a, b) => a - b); o[k] = { n: v.length, p50: +v[v.length >> 1].toFixed(2), p90: +v[Math.floor(v.length * 0.9)].toFixed(2) }; } gpuMs = {}; return o; }, get drawn() { return tissue ? [tissue.drawn, tissue.count] : null; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get looping() { return looping; }, get frames() { return frames; }, get view() { return { dist: cam.dist, goal: cam.goal.dist, home: HOME, wandered, meet: !!meet }; }, gpu: () => { const o = {}; for (const [k, v] of Object.entries(gpuMs)) { v.sort((a, b) => a - b); o[k] = { n: v.length, p50: +v[v.length >> 1].toFixed(2), p90: +v[Math.floor(v.length * 0.9)].toFixed(2) }; } gpuMs = {}; return o; }, get drawn() { return tissue ? [tissue.drawn, tissue.count] : null; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
   // what's lit right now, brightest first: for checking the light against what should be lit
   get lit() { const o = []; for (let i = 0; i < N; i++) if (shownG[i] + shownF[i] > 0.12) o.push({ i, g: +shownG[i].toFixed(2), f: +shownF[i].toFixed(2), fc: +fc[i].toFixed(2), heat: +heat[i].toFixed(2), arrived: arrived.has(D.cells[i].fullId), fire: fireAt[i] >= 0, sel: i === selected, tie: nbrs[selected]?.some(([j]) => j === i) || false }); return o.sort((a, b) => b.g + b.f - a.g - a.f); },
   get litLinks() { const o = []; for (let li = 0; li < NL; li++) { const a = Math.max(LA[li], 0); if (a > 0.05 || lc[li] > 0.05) o.push({ li, s: D.links[li].s, t: D.links[li].t, LA: +LA[li].toFixed(2), LF: +LF[li].toFixed(2), lc: +lc[li].toFixed(2), heat: +linkHeat[li].toFixed(2), at: linkAt[li] >= 0 }); } return o; },
