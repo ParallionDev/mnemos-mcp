@@ -23,7 +23,6 @@ import { glyphAtlas, DOT, STROKE, LINE } from '../engine/glyphs.js';
 import { Post } from '../engine/post.js';
 import { Tissue } from '../engine/tissue.js';
 import { Room, parseRoute } from '../shared/room.js';
-import { bendRim } from '../shared/glass.js';
 import { nameRegions } from '../shared/regions.js';
 import { esc, at, clock, longDay, shortDay, ago, plural, words, firstLine, titleOf, temperature, tempWord, KIND, KIND_LONG, trailSentence,
   forPerson, sameModel, modelName, AGENT, withAgent, visit, sinceThen, waiting } from '../shared/words.js';
@@ -1313,7 +1312,6 @@ function renderPaper() {
 
 /* ---------- the reading room, as a drawer beside the mind ---------- */
 
-bendRim(document.querySelector('#room > .glass'), { pad: 16, radius: matchMedia('(max-width:600px)').matches ? 18 : 22 });
 let sheetOpen = false;
 const room = new Room({
   tabsEl: $('tabs'), bodyEl: $('room-body'), tabs: TABS, sticky: true,
