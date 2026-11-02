@@ -868,6 +868,7 @@ canvas.addEventListener('webglcontextrestored', async () => {
   if (aside) { lost = false; return; }           // set aside, it stays aside
   prepare(gl); lost = false;
   tissue = null; near = null; leaving = null; post = null; nearAsked = -1;   // theirs went with the context
+  meterOk = undefined; meterBuf = null; meterSync = null; meterOf = null;
   atlas = await glyphAtlas(gl, ATLAS, { cell: 112 });
   if (mine !== era) return;                      // lost again meanwhile: its next return starts over
   resize();
@@ -982,10 +983,60 @@ function frame(now) {
   if (leaving) leaving.tissue.draw(post.accum, optics);
   if (near) near.tissue.draw(post.accum, optics);
   gpuEnd(q1, 'points'); gpuPoll();
-  const q2 = gpuBegin();
-  post.finish({ exposure: mix(1.0, 0.66, close), bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
+  const q2 = gpuBegin(), exposure = mix(1.0, 0.66, close);
+  post.finish({ exposure: exposure * iris, bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
   gpuEnd(q2, 'finish');
+  meter(exposure, dt);
   requestAnimationFrame(frame);
+}
+
+/* ---------- the iris: the mind's light, metered ----------
+ * Like an eye's, or a camera's: the picture's light is metered (its average, from the smallest level of the bloom,
+ * read back a frame or two late so the GPU is never waited on), and when the mind fills the view so brightly that the
+ * words over it would drown (come right up into a hot mind), the iris closes until it's back under IRIS_AT, over half
+ * a second; it opens again as the light goes, over a second, as an eye does. A mind seen whole, a moment of recall
+ * shown, a memory opened leave it open; the most-linked memories, lighting all their ties at once, close it a little
+ * while they burn. */
+const IRIS_AT = 0.07;
+let iris = 1, metered = 0, meterOk, meterBuf = null, meterSync = null, meterOf = null, meterPx = null;
+function meter(exposure, dt) {
+  meterOk ??= !!gl.getExtension('EXT_color_buffer_float');   // a GPU that can't read its light back stays wide open
+  if (!meterOk) return;
+  const t = post.down[post.down.length - 1];
+  if (meterSync) {
+    const s = gl.clientWaitSync(meterSync, 0, 0);
+    if (s !== gl.TIMEOUT_EXPIRED) {
+      gl.deleteSync(meterSync); meterSync = null;
+      if (s !== gl.WAIT_FAILED && meterOf === t) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, meterBuf);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, meterPx);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        let sum = 0;
+        for (let k = 0; k < meterPx.length; k += 4) sum += 0.2126 * meterPx[k] + 0.7152 * meterPx[k + 1] + 0.0722 * meterPx[k + 2];
+        metered = sum / (meterPx.length / 4);
+      }
+    }
+  }
+  if (!meterSync) {
+    // asked again: the smallest level into a buffer of the meter's own, and a mark for when the GPU has got there
+    const fresh = meterOf !== t;
+    if (fresh) {
+      meterOf = t; meterPx = new Float32Array(t.w * t.h * 4);
+      meterBuf ??= gl.createBuffer();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, meterBuf); gl.bufferData(gl.PIXEL_PACK_BUFFER, meterPx.byteLength, gl.STREAM_READ);
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, meterBuf);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.fbo);
+    gl.readPixels(0, 0, t.w, t.h, gl.RGBA, gl.FLOAT, 0);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    // a GPU that won't read this light back says so the first time, and the iris stays open rather than ask again
+    if (fresh && gl.getError() !== gl.NO_ERROR) { meterOk = false; iris = 1; return; }
+    meterSync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  }
+  const goal = Math.min(1, IRIS_AT / Math.max(1e-6, metered * exposure));
+  iris += (goal - iris) * (1 - Math.exp(-dt / (goal < iris ? 0.5 : 1)));
+  if (Math.abs(goal - iris) > 0.004) animating = true;
 }
 
 /* ---------- what the frame costs the GPU, for measuring (?gpu): milliseconds drawing the points, and finishing ---------- */
@@ -1563,7 +1614,7 @@ setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you w
 listen(); setInterval(listen, PULSE_EVERY);
 setInterval(sayNow, 5000);
 window.__mind = { get N() { return N; }, get heat() { return heat; }, get hover() { return hoverCell; }, get selected() { return selected; },
-  get looping() { return looping; }, get frames() { return frames; }, get view() { return { dist: cam.dist, goal: cam.goal.dist, home: HOME, wandered, meet: !!meet }; }, gpu: () => { const o = {}; for (const [k, v] of Object.entries(gpuMs)) { v.sort((a, b) => a - b); o[k] = { n: v.length, p50: +v[v.length >> 1].toFixed(2), p90: +v[Math.floor(v.length * 0.9)].toFixed(2) }; } gpuMs = {}; return o; }, get drawn() { return tissue ? [tissue.drawn, tissue.count] : null; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
+  get looping() { return looping; }, get frames() { return frames; }, get view() { return { dist: cam.dist, goal: cam.goal.dist, home: HOME, wandered, meet: !!meet }; }, get iris() { return { metered: +metered.toFixed(4), iris: +iris.toFixed(3) }; }, gpu: () => { const o = {}; for (const [k, v] of Object.entries(gpuMs)) { v.sort((a, b) => a - b); o[k] = { n: v.length, p50: +v[v.length >> 1].toFixed(2), p90: +v[Math.floor(v.length * 0.9)].toFixed(2) }; } gpuMs = {}; return o; }, get drawn() { return tissue ? [tissue.drawn, tissue.count] : null; }, get built() { return built; }, light, ask, redraw: async () => { building = build(D); await building; building = null; warm(); wake(); }, get near() { return near && { of: near.of, cells: near.cells.length, points: near.tissue.count }; }, level: (i) => flash[i], walk: () => walk(lastHour, 100),
   // what's lit right now, brightest first: for checking the light against what should be lit
   get lit() { const o = []; for (let i = 0; i < N; i++) if (shownG[i] + shownF[i] > 0.12) o.push({ i, g: +shownG[i].toFixed(2), f: +shownF[i].toFixed(2), fc: +fc[i].toFixed(2), heat: +heat[i].toFixed(2), arrived: arrived.has(D.cells[i].fullId), fire: fireAt[i] >= 0, sel: i === selected, tie: nbrs[selected]?.some(([j]) => j === i) || false }); return o.sort((a, b) => b.g + b.f - a.g - a.f); },
   get litLinks() { const o = []; for (let li = 0; li < NL; li++) { const a = Math.max(LA[li], 0); if (a > 0.05 || lc[li] > 0.05) o.push({ li, s: D.links[li].s, t: D.links[li].t, LA: +LA[li].toFixed(2), LF: +LF[li].toFixed(2), lc: +lc[li].toFixed(2), heat: +linkHeat[li].toFixed(2), at: linkAt[li] >= 0 }); } return o; },

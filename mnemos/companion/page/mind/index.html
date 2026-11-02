@@ -225,6 +225,9 @@ figure.plate + figure.plate{margin-top:var(--s5)}
    its lines bend as they pass under the rim. Its cards are tone on the glass, never panes of their own. */
 .room{--g-pad:16px;--g-r:22px;position:fixed;top:10px;right:10px;bottom:10px;width:min(var(--sheet),calc(100vw - 20px));z-index:6;border-radius:var(--g-r);
   display:flex;flex-direction:column;transform:translateX(calc(100% + 40px));transition:transform .55s var(--sheet-ease)}
+/* on the glass its two faintest greys step up a tone together, as its cards do: what shows through can be lighter
+   than any card, and the faintest words still read over it at 4.5 to 1 */
+.room{--ink-3:rgba(236,239,244,.62);--ink-4:rgba(236,239,244,.55)}
 .room.open{transform:none}
 .room[hidden]{display:none}
 .room::before{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:0 30px 70px rgba(0,0,0,.32),0 2px 10px rgba(0,0,0,.18);pointer-events:none}
