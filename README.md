@@ -120,17 +120,23 @@ wrote has faded far enough, its memory asks what it taught. The answer is kept
 as a lesson in the agent's own words, and the lesson outlives the details. The
 figure runs one memory through the rules Mnemos itself uses.
 
-## What Mnemos is not
+## What it is, and what it isn't
 
-**It is not your memory system.** It does not index your documents, search
-your codebase, or answer "what did we do last March." It is designed to sit
-*alongside* whatever memory or retrieval you already use, and to stay out of
-its way.
+Mnemos is built for continuity: an agent that carries you, your work and
+itself from one session to the next. It works as memory too.
 
-It holds the small number of durable things an agent should carry about *you
-and how you work together*: a preference, a correction, a decision, how you
-like to be spoken to. Point it at a firehose of general recall, and that
-continuity gets buried.
+In October 2026 we tested it on 64 questions about two years of one person's
+real work, sealed before any run and judged blind. Claude Code with Mnemos
+scored 45 of the 118 facts asked about (a partly right answer counts half),
+with 7 wrong answers, in about 2 minutes a question. Claude Code as it comes,
+with its own notes and its last month of sessions, scored 25.5, with 12 wrong,
+in about 5 minutes. The same two years of memories kept as plain files, with
+search, did about as well as Mnemos: 48.5, with 5 wrong.
+
+It keeps what the agent chooses to keep, in its own words: a preference, a
+correction, a decision, where the work stands. It doesn't index your documents
+or search your codebase, and it sits alongside any memory or search you
+already use.
 
 ## What leaves your machine
 

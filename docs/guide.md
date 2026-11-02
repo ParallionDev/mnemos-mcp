@@ -931,7 +931,7 @@ Mnemos operates in layered form:
 ```text
 Simple MCP Surface      context | handoff | capture | recall | correct
                         reflect | maintain | introduce | health
-                        journal | note
+                        journal | note | page
 Continuity Layer        scoped notes | revisions | supersession | promotion
 Mnemos Core             engrams | connections | beliefs | reconsolidation
 Upkeep                  decay | softening | reflection
@@ -939,14 +939,12 @@ Cross-Agent Layer       shared pool | cross-agent bridge
 Hermes Integration      sidecar MCP | provider shim | identity continuity
 ```
 
-The working ladder is:
-
-```text
-functional memory -> scoped continuity -> durable Mnemos graph
-```
-
-Simple mode uses the same architecture; it just keeps the ontology out of the
-agent's normal tool choices.
+Simple mode uses the same architecture and keeps the ontology out of the
+agent's tool choices. One capture writes a scoped note and a memory in the
+graph together, upkeep makes a memory of the rare note the agent revised and
+recalled in more than one session, and simple mode keeps no functional memory.
+The first design's ladder, `functional memory -> scoped continuity -> durable
+Mnemos graph`, is still in advanced mode's tools, for operators.
 
 See [docs/vision.md](vision.md) for the full architecture.
 See [docs/identity-model.md](identity-model.md) for the identity stance

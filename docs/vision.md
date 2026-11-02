@@ -333,24 +333,21 @@ authored itself. That is the safety floor of the whole inversion — if the agen
 its own beliefs, it must be able to correct them, or the system just accumulates
 confident mistakes in a voice it trusts.
 
-### Three layers of memory
+### Notes and memories
 
-Recognition is not one thing. Mnemos composes it from three scopes:
+Recognition is not one thing. The first design composed it from three layers: a live
+working set for the session (functional memory), scoped continuity durable enough to
+carry forward and still easy to revise (Hypomnema), and the long-term graph (engrams),
+with promotion between them deliberate. The middle layer was meant to be more durable
+than a session summary and more revisable than a permanent record, because *what I know
+about you* should be easy to correct and hard to lose.
 
-| Layer | What it is |
-|---|---|
-| **Functional memory** | The live working set for this session or task. |
-| **Hypomnema** | Scoped continuity — durable enough to carry forward, still easy to revise. |
-| **Engrams** | The long-term graph: decay, connections, beliefs, identity. |
-
-The middle layer is where recognition actually lives, and it is the one most systems
-don't have. It is more durable than a session summary and more revisable than a
-permanent record — which is the correct shape for *what I know about you*, because that
-knowledge should be easy to correct and hard to lose.
-
-The working ladder is `functional memory → scoped continuity → durable graph`, and
-promotion between layers is deliberate. Only stable, repeatedly useful continuity is
-promoted.
+The default no longer climbs that ladder. Since September 2026 one capture writes two
+records together: a note, which keeps the agent's words, and a memory in the graph,
+which fades unless it is used, links to what it relates to, and is asked what it taught
+as it fades. A correction reaches both. Upkeep still makes a memory of the rare note the
+agent revised and recalled in more than one session, and the default keeps no working
+set. The advanced tools still hold all three layers, as an operator console.
 
 ### Scope
 
@@ -438,7 +435,7 @@ because a narrow surface over a deep engine is the whole design.
 Note what an agent is never asked to do. It passes no tags, no memory kinds, no
 confidence scores, no source types, no scope identifiers. It says what happened in its
 own words and optionally what it changed. Every piece of ontology this document spends
-pages on — the sixteen relations, the dual trace, the three layers, the resolution
+pages on — the sixteen relations, the dual trace, notes and memories, the resolution
 ladder, the modulators — is resolved internally and never surfaced as a decision the
 agent has to make mid-conversation. The engine is as large as section V describes. The
 agent's share of it is a sentence in its own voice.
@@ -557,11 +554,11 @@ flawless cycle, and maintains nothing.
 
 This project's stated register is *nothing here is claimed before it is true.* So:
 
-A readiness pass was run against the **built wheel** — a fresh install, no extras, no API
-key — rather than against the development checkout. It passes **13 of 13** checks. The
-eleven simple tools list over real stdio from the installed package. A capture written in
-one process is read back in another. All five philosophical shifts are alive on a
-keyless store:
+A readiness pass in July 2026 ran against the **built wheel** — a fresh install, no
+extras, no API key — rather than against the development checkout. It passed **13 of 13**
+checks. The simple tools (twelve today) listed over real stdio from the installed package.
+A capture written in one process was read back in another. All five philosophical shifts
+were alive on a keyless store:
 
 | Shift | Signal | Result |
 |---|---|---|

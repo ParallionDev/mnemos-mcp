@@ -5,8 +5,9 @@ only opt into advanced infrastructure when you actually need it.
 
 Mnemos is a continuity and identity layer for the agent itself — it carries
 what the agent should know about *you and how you work together* across
-sessions. It is not a general memory or retrieval system, and it is designed to
-run alongside whatever you already use for that.
+sessions, and in testing it works as memory too (the README's "What it is, and
+what it isn't"). It doesn't index your documents or search your codebase, and
+it runs alongside whatever you already use for that.
 
 ---
 

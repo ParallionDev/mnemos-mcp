@@ -2,11 +2,12 @@
 
 Guidance for agents and contributors working in this repository.
 
-Mnemos is a memory system. Its failure mode is not a crash — it is a layer
-that silently reports success while carrying nothing. Most of the bugs found
-in this codebase have been of exactly that shape: a scope that did not match,
-a config that was never applied, a promotion that never fired. Everything
-below exists to make that failure mode visible.
+Mnemos gives an agent continuity, and it works as its memory. Its failure
+mode is not a crash — it is a layer that silently reports success while
+carrying nothing. Most of the bugs found in this codebase have been of exactly
+that shape: a scope that did not match, a config that was never applied, a
+promotion that never fired. Everything below exists to make that failure mode
+visible.
 
 ---
 
@@ -24,6 +25,26 @@ If a claim is checkable, check it before stating it.
 For this repo specifically, a change to the memory path is not done until a
 capture written in one process has been read back in another, by recall (the
 wake shows only what is in the agent's own words).
+
+---
+
+## Old designs read as current
+
+Mnemos has been redesigned more than once, and its older designs are still
+written down: in older docs, in wikis made from them, and in the memories of
+the agents who built it. They read as current. Some aren't.
+
+- The code decides how Mnemos works, and the newest measured result decides
+  how well (the side-by-side of October 2026, in the README's "What it is, and
+  what it isn't"). Memory, old docs and wikis only tell you where to look.
+- Before changing how it saves, wakes, cues, recalls, fades or links, read the
+  code as it is now, not as you or anyone remembers it.
+- Don't bring back a retired design because it's remembered or written down
+  somewhere; ask the maintainer first. Retired so far: functional memory in
+  the wake (9d22fc9, September 2026), and the three-layer climb as the
+  default path, since one capture writes the note and the memory together
+  (65d5364, September 2026).
+- When a doc and the code disagree, fix the doc in the same change.
 
 ---
 
@@ -114,15 +135,32 @@ tell whether a change was reasoned about or guessed at.
 
 ## Architecture notes
 
-Three memory layers, most durable last:
+What the default does today, checked against the code on 2026-11-02. When
+this and the code disagree, the code is right: fix this section.
 
-1. **Functional memory** — the live working set for a session or task.
-2. **Hypomnema** — scoped continuity that survives sessions and stays revisable.
-3. **Engrams** — the long-term graph, with decay, connections, and beliefs.
+- **A capture writes a note and a memory, together** (`capture_pair` in
+  `mnemos/store/sqlite_store.py`). The note (`hypomnema_entries`) keeps the
+  agent's words. The memory (`engrams`) lives in the graph, where it fades
+  unless it's used, links to what it relates to, and is asked what it taught
+  as it fades. A correction reaches both. Only a memory marked standing never
+  fades (`mnemos/consolidation/decay.py`).
+- **Promotion is rare.** Upkeep makes a memory of a note the agent revised and
+  recalled in more than one session (`_promote_candidates` in
+  `mnemos/simple_runtime.py`). Since 65d5364, a capture's note has its memory
+  from the start.
+- **No working set.** The default writes no functional memory, and the wake
+  doesn't read it (`max_functional` in `mnemos/interface/context_packet.py` is
+  accepted and unused).
 
-Two MCP tool surfaces on one server: the eleven **simple** tools are the
-product; the **advanced** tools are an operator console. New user-facing
-capability belongs in simple mode.
+The first design climbed three layers, functional memory → Hypomnema →
+engrams, by deliberate promotion. The default stopped climbing it in
+September 2026. The advanced tools still hold all three
+(`mnemos_functional_*`, `mnemos_hypomnema_*`).
+
+Two MCP tool surfaces on one server: the twelve **simple** tools
+(`SIMPLE_TOOL_NAMES` in `mnemos/simple_runtime.py`) are the product; the
+**advanced** tools are an operator console. New user-facing capability belongs
+in simple mode.
 
 **Scope is a three-tuple** — `agent_id / person_id / project_scope` — and there
 is exactly one resolver for it: `mnemos/simple_scope.py`. Both tool surfaces,
@@ -141,14 +179,17 @@ Hours").
 
 ## Continuity is the product
 
-Memory an agent must be asked to load is not continuity. Two mechanisms carry
-it automatically, and changes must not quietly break either:
+Memory an agent must be asked to load is not continuity. Three mechanisms
+carry it automatically, and changes must not quietly break any of them:
 
 - **Server instructions** (`SERVER_INSTRUCTIONS` in `mnemos/simple_mcp.py`) are
   passed to every MCP client and tell the agent to load context at session
   start and capture as it goes.
 - **The SessionStart hook** (`mnemos hooks install`) injects the packet before
-  the agent's first turn.
+  the agent's first turn, and again after compaction.
+- **The cue** (`mnemos hook prompt`, Claude Code's UserPromptSubmit hook;
+  `mnemos/cue.py`) checks each message the person sends and may add at most
+  three memories that bear on it.
 
 Anything that runs on the read path must fail silent and must never create a
 store as a side effect of reading it.
