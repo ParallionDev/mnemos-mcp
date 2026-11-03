@@ -1127,6 +1127,14 @@ def _traced(tool: str) -> Any:
     return decorate
 
 
+
+# A reflection's reply when the memory took the words and its note did not
+# (_carry_reflection_into_note).
+_NOTE_NOT_CARRIED_LINE = (
+    "  Its note could not be updated, so the next session's packet may not "
+    "show this yet. The memory holds it.\n"
+)
+
 class MnemosRuntime:
     """High-level continuity interface used by simple MCP mode and tests."""
 
@@ -3528,24 +3536,26 @@ class MnemosRuntime:
             # direct verdict has no question to keep the words on: nothing changes.
             if self._older_than_store() is not None:
                 return "Nothing was changed: this code is older than the memory, so it doesn't keep or retire beliefs."
-            if decided == "decline":
-                result = "Left as it is. The belief is unchanged."
-            else:
-                result = self._apply_reaffirmation(ask, answer, decided, author=author)
-            # The verdict answers the question that waits on this belief too:
-            # asking it again right after would be asking twice. Beliefs belong
-            # to the agent, not to a scope: it waits in every person's and project's.
-            for waiting in self._store._get_conn().execute(
-                "SELECT id, target_id, person_id, project_scope FROM reflection_queue "
-                "WHERE agent_id = ? AND kind = 'reaffirm' AND answered_at IS NULL "
-                "AND instr(prompt, ?) > 0",
-                (scope["agent_id"], f"[belief:{target}]"),
-            ).fetchall():
-                self._store.answer_reflection(
-                    waiting["target_id"], answer, reflection_id=waiting["id"],
-                    agent_id=scope["agent_id"], person_id=waiting["person_id"],
-                    project_scope=waiting["project_scope"],
-                )
+            # The verdict and the questions it answers, together or not at all.
+            with self._store.transaction():
+                if decided == "decline":
+                    result = "Left as it is. The belief is unchanged."
+                else:
+                    result = self._apply_reaffirmation(ask, answer, decided, author=author)
+                # The verdict answers the question that waits on this belief too:
+                # asking it again right after would be asking twice. Beliefs belong
+                # to the agent, not to a scope: it waits in every person's and project's.
+                for waiting in self._store._get_conn().execute(
+                    "SELECT id, target_id, person_id, project_scope FROM reflection_queue "
+                    "WHERE agent_id = ? AND kind = 'reaffirm' AND answered_at IS NULL "
+                    "AND instr(prompt, ?) > 0",
+                    (scope["agent_id"], f"[belief:{target}]"),
+                ).fetchall():
+                    self._store.answer_reflection(
+                        waiting["target_id"], answer, reflection_id=waiting["id"],
+                        agent_id=scope["agent_id"], person_id=waiting["person_id"],
+                        project_scope=waiting["project_scope"],
+                    )
             return result
 
         # Code older than the store keeps the agent's words and applies none
@@ -3568,6 +3578,22 @@ class MnemosRuntime:
                 f"To decide it, answer again with a verdict: {_VERDICT_HELP[kind]}."
             )
 
+        # The question is spent only with what answering it does: the impact,
+        # the lesson, the belief, together, or none of it. Spent first and
+        # saved after, a failed save closed the question without its effect,
+        # and asking again found nothing pending.
+        with self._store.transaction():
+            return self._answer_and_apply(
+                target_id, target, ask, kind, answer, decided, author, older, scope,
+            )
+
+    def _answer_and_apply(
+        self, target_id: str, target: str, ask: dict[str, Any], kind: str, answer: str,
+        decided: str, author: str, older: bool, scope: dict[str, str],
+    ) -> str:
+        """Spend the question and do what its answer does, inside reflect's
+        transaction."""
+        assert self._store is not None
         item = self._store.answer_reflection(
             target, answer, reflection_id=ask["id"], **scope
         )
@@ -3598,12 +3624,15 @@ class MnemosRuntime:
             engram.impact_source = "agent"
             self._store.save_engram(engram)
             self._traced_write(engram.id)
-            self._traced_write(self._carry_reflection_into_note(engram.id, answer, author=author))
+            carried = self._carry_reflection_into_note(engram.id, answer, author=author)
+            self._traced_write(carried or None)
+            unsaid = _NOTE_NOT_CARRIED_LINE if carried == "" else ""
             return (
                 "Reflection recorded.\n"
                 f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                 f"  Now carries: {answer}\n"
-                "This is what survives when the details fade."
+                + unsaid
+                + "This is what survives when the details fade."
             )
 
         if item["kind"] == "lesson":
@@ -3614,7 +3643,9 @@ class MnemosRuntime:
             engram.impact_source = "agent"
             self._store.save_engram(engram)
             self._traced_write(engram.id)
-            self._traced_write(self._carry_reflection_into_note(engram.id, answer, author=author))
+            carried = self._carry_reflection_into_note(engram.id, answer, author=author)
+            self._traced_write(carried or None)
+            unsaid = _NOTE_NOT_CARRIED_LINE if carried == "" else ""
             if older:
                 # Filing a lesson matches it against the lessons already held,
                 # by rules newer code may have replaced. The memory keeps the
@@ -3624,7 +3655,8 @@ class MnemosRuntime:
                     "Reflection recorded.\n"
                     f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                     f"  Now carries: {answer}\n"
-                    "Filing it as a lesson waits for current Mnemos."
+                    + unsaid
+                    + "Filing it as a lesson waits for current Mnemos."
                 )
 
             # Shift 2: the distilled insight becomes its own durable memory,
@@ -3644,7 +3676,8 @@ class MnemosRuntime:
                     "Reflection recorded.\n"
                     f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                     f"  Now carries: {answer}\n"
-                    "No lesson was drawn from it: you didn't write that memory, "
+                    + unsaid
+                    + "No lesson was drawn from it: you didn't write that memory, "
                     "and lessons come only from your own."
                 )
             return (
@@ -3652,6 +3685,7 @@ class MnemosRuntime:
                 f"  From: {' '.join((engram.content or '').split())[:70]}\n"
                 f"  Learned: {answer}\n"
                 + (f"  Kept as: {lesson_id}\n" if lesson_id else "")
+                + unsaid
                 + "The details can fade now. This is what stays."
             )
 
@@ -3689,6 +3723,7 @@ class MnemosRuntime:
             return f"Recorded, but nothing was let go: {why}"
         _notes, memories = self._forget_pair(
             note, named, action="forget", corrector=author, session=harness_session(), reason="",
+            lessons=False,
         )
         for memory_id in memories:
             self._traced_write(memory_id)
@@ -3861,10 +3896,20 @@ class MnemosRuntime:
 
         The note keeps its original content and gains the sentence. Revising
         preserves the prior version in the entry's revision trail, so nothing
-        the human said is overwritten. Returns the note id, or None when the
-        memory has no note, which is not an error.
+        the human said is overwritten. Returns the note id, None when the
+        memory has no note, which is not an error, and "" when it has one and
+        the note could not be revised: the reply says so (a reflection saved
+        on the memory, not yet in what the next session is shown), never the
+        plain success it gave before.
+
+        Inside a transaction the note is revised under a savepoint, so a
+        failure takes back only the note's half-written revision.
         """
         assert self._store is not None
+        conn = self._store._get_conn()
+        savepoint = bool(getattr(self._store, "_transaction_depth", 0)) and not self._host_mutation_active
+        if savepoint:
+            conn.execute("SAVEPOINT carry_reflection")
         try:
             note = self._store.get_hypomnema_entry_for_engram(
                 engram_id,
@@ -3894,13 +3939,25 @@ class MnemosRuntime:
                 project_scope=self.scope.project_scope,
                 revised_by=author,
             )
-        except Exception:
+        except Exception as exc:
             if self._host_mutation_active:
                 raise
-            # The impact write already succeeded. Losing the note update is
-            # worth reporting as a partial success, never as a failed
-            # reflection the agent might retype.
-            return None
+            if savepoint and not conn.in_transaction:
+                # The error ended the whole transaction (a full disk, an I/O
+                # error): the impact went with it, so the reflection failed.
+                raise
+            if savepoint:
+                conn.execute("ROLLBACK TO carry_reflection")
+            # The impact is saved. The note's revision failing is a partial
+            # success, said as one, never a failed reflection the agent
+            # might retype.
+            logging.getLogger(__name__).warning(
+                "Reflection on %s saved; its note was not revised: %s", engram_id, exc,
+            )
+            return ""
+        finally:
+            if savepoint and conn.in_transaction:
+                conn.execute("RELEASE carry_reflection")
 
     def _reflection_block(self, limit: int = PACKET_QUESTIONS) -> str | None:
         """The question section as the packet shows it, spending one showing
@@ -5670,16 +5727,81 @@ class MnemosRuntime:
         session: str,
         query: str = "",
         reason: str = "",
+        lessons: bool = True,
     ) -> tuple[list[str], list[str]]:
         """Forget acts on the pair: the note and its memory are archived
-        together, in one transaction, and nothing is written in their place."""
+        together, in one transaction, and nothing is written in their place.
+
+        ``lessons``: the lessons the pair alone taught go with it
+        (``_lessons_taught_only_by``), and are among the memories returned.
+        A lesson copies the words of the impact it was drawn from, so a
+        forgotten memory's words stayed in use, and in recall, through its
+        lesson. The agent's verdict that a memory is no longer true passes
+        False: what it taught may still hold after the fact has changed."""
         assert self._store is not None
         notes, memories = self._pair_members(note, engram)
         with self._store.transaction():
+            taught = self._lessons_taught_only_by(memories) if lessons else []
             return self._retire(
-                notes, memories, action=action, corrector=corrector, session=session,
+                notes, memories + taught, action=action, corrector=corrector, session=session,
                 query=query, reason=reason,
             )
+
+    def _lessons_taught_only_by(self, memories: list[Engram]) -> list[Engram]:
+        """The lessons in use that these memories were distilled into and no
+        other memory still held was. A lesson another memory also taught is
+        that memory's lesson too, and stays, whoever's words it is in: it
+        says what that memory taught, and archiving it would leave that
+        memory filed under a lesson out of use."""
+        assert self._store is not None
+        from .core.types import ConnectionRelation
+
+        scope = self._scope_args()
+        going = {memory.id for memory in memories}
+        taught: dict[str, Engram] = {}
+        for memory in memories:
+            for conn in memory.connections:
+                if conn.relation != ConnectionRelation.DISTILLED_INTO or conn.target_id in taught:
+                    continue
+                lesson = self._store.get_engram_in_scope(conn.target_id, **scope)
+                if lesson is None or lesson.id in going or not self._still_held(lesson):
+                    continue
+                others = [
+                    row[0] for row in self._store._get_conn().execute(
+                        "SELECT source_id FROM connections "
+                        "WHERE target_id = ? AND relation = 'distilled_into'",
+                        (lesson.id,),
+                    ).fetchall()
+                    if row[0] not in going
+                ]
+                held = (self._store.get_engram_in_scope(other, **scope) for other in others)
+                if any(other is not None and self._still_held(other) for other in held):
+                    continue
+                taught[lesson.id] = lesson
+        return list(taught.values())
+
+    def _without_lessons(
+        self, retired: list[str], named: Engram | None,
+    ) -> tuple[list[str], list[str]]:
+        """The memories a forget retired, apart from the lessons it took with
+        them, and those lessons: each is said on its own line. The memory the
+        forget ``named`` is never one of them, lesson or not: forgetting a
+        lesson by its id archives that lesson, said as the memory it is."""
+        assert self._store is not None
+        lessons = []
+        for engram_id in retired:
+            if named is not None and engram_id == named.id:
+                continue
+            engram = self._store.get_engram(engram_id)
+            if engram is not None and "lesson" in engram.tags:
+                lessons.append(engram_id)
+        return [i for i in retired if i not in lessons], lessons
+
+    @staticmethod
+    def _lessons_line(lessons: list[str]) -> list[str]:
+        if not lessons:
+            return []
+        return [f"The lesson it alone taught, {', '.join(lessons)}, was archived with it."]
 
     def _note_head(self, note: dict[str, Any] | None) -> str:
         """A note's own words, without a reflection added to them."""
@@ -6046,6 +6168,20 @@ class MnemosRuntime:
                 f'Nothing was changed: the belief "{shown}" is not one you '
                 "stated, so a correction cannot retire or rewrite it."
             )
+        # The rule reflect keeps: a belief is its own model's to keep, retire
+        # or rewrite. A correction let another kind of model replace one that
+        # reflect refused to let it retire.
+        author = self.author_model(signed_as)
+        if belief.author_model and not author:
+            return (
+                f"Nothing was changed: this belief is {display_name(belief.author_model)}'s, and your "
+                "correction isn't signed. Pass signed_as with your exact model id."
+            )
+        if belief.author_model and not same_mind(author, belief.author_model):
+            return (
+                f"This belief is {display_name(belief.author_model)}'s to keep, retire or rewrite, "
+                "not yours. Nothing was changed."
+            )
         text = correction.strip()
         left = f'The belief "{shown}" is left as it is: this session\'s code changes no belief.'
         if older:
@@ -6076,6 +6212,8 @@ class MnemosRuntime:
             domain=belief.domain,
             supporting_engram_ids=list(belief.supporting_engram_ids),
             source="agent",
+            author_model=author,
+            author_session=harness_session(),
         )
         belief.revise(0.0, f"corrected by the agent: {text}")
         belief.superseded_by = replacement.id
@@ -6187,6 +6325,7 @@ class MnemosRuntime:
                     retired_notes, retired_memories = self._forget_pair(
                         note, engram, action=action, **signing,
                     )
+                    retired_memories, lessons = self._without_lessons(retired_memories, engram)
                     if not retired_notes and not retired_memories:
                         lines = [f"Nothing was archived: {label.lower()} {current} was already archived."]
                     elif kind == "note":
@@ -6197,6 +6336,7 @@ class MnemosRuntime:
                         lines = [f"Archived memory {current}."]
                         if retired_notes:
                             lines.append(f"Its continuity note {', '.join(retired_notes)} was archived with it.")
+                    lines += self._lessons_line(lessons)
                     return "\n".join(lines + ([followed] if followed else []))
 
                 by_note = kind == "note"
@@ -6273,9 +6413,11 @@ class MnemosRuntime:
                         note, engram, action=action, query=query_text, **signing,
                     )
                     maintenance = self._maintain_after_saving(f"forget of note {match['id']}")
+                    retired_memories, lessons = self._without_lessons(retired_memories, engram)
                     lines = [f"Archived closest continuity note {match['id']}."]
                     if retired_memories:
                         lines.append(f"Its memory {', '.join(retired_memories)} was archived with it.")
+                    lines += self._lessons_line(lessons)
                     return "\n".join([*lines, "Maintenance:", _indent(maintenance)])
 
                 result = self._replace_pair(
@@ -6306,12 +6448,13 @@ class MnemosRuntime:
             )
             if matches:
                 engram = matches[0].engram
-                retired_notes, _retired_memories = self._forget_pair(
+                retired_notes, retired_memories = self._forget_pair(
                     None, engram, action=action, **signing,
                 )
                 lines = [f"Archived closest matching memory {engram.id}."]
                 if retired_notes:
                     lines.append(f"Its continuity note {', '.join(retired_notes)} was archived with it.")
+                lines += self._lessons_line(self._without_lessons(retired_memories, engram)[1])
                 return "\n".join(lines)
             # Forgetting acts only on what the words name, and never captures.
             if not search_text:

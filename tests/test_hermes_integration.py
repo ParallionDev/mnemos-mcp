@@ -617,3 +617,160 @@ def test_durable_memories_do_not_leak_between_people_sharing_an_agent(tmp_path, 
         )
     finally:
         other_project.close()
+
+
+def test_prefetch_never_serves_what_was_forgotten_since(tmp_path):
+    """prefetch cached by session and query, and nothing cleared it: after a
+    forget, the same query in the same session returned the forgotten words."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        assert "ZEBRA4471" in provider.prefetch("studio door code")
+        provider.handle_tool_call("mnemos_identity_correct",
+                                  {"query": "studio door code ZEBRA4471", "action": "forget"})
+        assert "ZEBRA4471" not in provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+
+def test_prefetch_sees_another_process_forget(tmp_path):
+    from mnemos.simple_runtime import MnemosRuntime
+
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        assert "ZEBRA4471" in provider.prefetch("studio door code")
+        scope = provider.scope
+        other = MnemosRuntime(db_path=str(tmp_path / "mnemos.db"), agent_id=scope.agent_id,
+                              person_id=scope.person_id, project_scope=scope.project_scope)
+        other.correct("", query="studio door code ZEBRA4471", action="forget")
+        other.close()
+        assert "ZEBRA4471" not in provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+
+def test_a_mirrored_replace_supersedes_what_it_replaced(tmp_path):
+    """Hermes's replace names the old entry by a piece of its text
+    (metadata old_text). It was captured beside the old one, both in use."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Fly.io.",
+                                 metadata={"old_text": "billing service deploys to Vercel"})
+        recalled = provider._runtime.recall("billing service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "Fly.io" in recalled
+    assert "Vercel" not in recalled
+
+
+def test_a_mirrored_replace_never_rewrites_an_unrelated_note(tmp_path):
+    """With nothing mirrored that holds the old words, replace matched
+    recall's closest note and rewrote the agent's own unrelated memory."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "Calibrate the studio monitor before colour grading."})
+        provider.on_memory_write("replace", "memory", "The studio monitor is a 27-inch panel.",
+                                 metadata={"old_text": "studio monitor"})
+        recalled = provider._runtime.recall("studio monitor")
+    finally:
+        provider.shutdown()
+
+    assert "Calibrate the studio monitor" in recalled
+    assert "27-inch" in recalled
+
+
+def test_a_second_replace_finds_the_first(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Render.",
+                                 metadata={"old_text": "deploys to Fly.io"})
+        recalled = provider._runtime.recall("billing service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "Render" in recalled
+    assert "Fly.io" not in recalled and "Vercel" not in recalled
+
+
+def test_prefetch_still_caches_when_nothing_was_written(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        calls = []
+        recall = provider._runtime.recall
+        provider._runtime.recall = lambda *a, **k: calls.append(1) or recall(*a, **k)
+        first = provider.prefetch("studio door code")
+        second = provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+    assert first == second and "ZEBRA4471" in first
+    assert len(calls) == 1, "the second prefetch recalled again"
+
+
+def test_a_mirrored_replace_respects_its_target(tmp_path):
+    """Two mirrored entries in different Hermes targets: the replace named the
+    newest substring match, archiving the other target's entry."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The image service deploys to Vercel.", metadata={})
+        provider.on_memory_write("add", "user", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The image service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        recalled = provider._runtime.recall("service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "The billing service deploys to Vercel." in recalled
+    assert "The image service deploys to Fly.io." in recalled
+    assert "The image service deploys to Vercel." not in recalled
+
+
+def test_an_ambiguous_replace_retires_nothing(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The image service deploys to Vercel.", metadata={})
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The image service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        recalled = provider._runtime.recall("service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "The billing service deploys to Vercel." in recalled
+    assert "The image service deploys to Vercel." in recalled
+    assert "Fly.io" in recalled
+
+
+def test_a_remove_with_no_content_is_mirrored(tmp_path):
+    """Hermes sends a remove with empty content and the entry in metadata;
+    it was dropped before the action was read."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The vault code is QUARTZ8812.", metadata={})
+        provider.on_memory_write("remove", "memory", "",
+                                 metadata={"previous_content": "The vault code is QUARTZ8812."})
+        recalled = provider._runtime.recall("vault code QUARTZ8812")
+    finally:
+        provider.shutdown()
+
+    assert "QUARTZ8812" not in recalled

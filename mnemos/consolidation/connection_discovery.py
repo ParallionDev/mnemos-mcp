@@ -198,6 +198,15 @@ def run_connection_discovery(
     for engram, existing_connections in underconnected[:max_per_pass]:
         stats["engrams_processed"] += 1
         existing_target_ids = {c.target_id for c in existing_connections}
+        # With a model, the memories already linked toward this one too: a
+        # reverse relation is saved from the existing memory, so without this
+        # the same pair was a candidate, and a model call, every pass.
+        if llm_client:
+            existing_target_ids |= {
+                row[0] for row in store._get_conn().execute(
+                    "SELECT source_id FROM connections WHERE target_id = ?", (engram.id,),
+                ).fetchall()
+            }
         candidates = []
 
         # 1. Candidates by meaning (if available, within the pass's time):
@@ -258,12 +267,22 @@ def run_connection_discovery(
 
                 strength = min(0.95, cls.confidence + 0.05 * tag_overlap)
 
-                engram.add_connection(
-                    target_id=cls.candidate_id,
-                    relation=cls.relation,
-                    strength=round(strength, 3),
-                    formed_by="consolidation",
-                )
+                if cls.direction == "reverse":
+                    # The existing memory is the source ("it caused this one"):
+                    # the edge is its own, not this memory's toward it.
+                    store.save_connection(cls.candidate_id, Connection(
+                        target_id=engram.id,
+                        relation=cls.relation,
+                        strength=round(strength, 3),
+                        formed_by="consolidation",
+                    ))
+                else:
+                    engram.add_connection(
+                        target_id=cls.candidate_id,
+                        relation=cls.relation,
+                        strength=round(strength, 3),
+                        formed_by="consolidation",
+                    )
                 stats["connections_created"] += 1
         else:
             # Fallback when no LLM client is available: FTS keyword overlap
@@ -387,11 +406,21 @@ def _reclassify_old_connections(
             # Find the existing connection to update
             for conn in raw_connections:
                 if conn.target_id == cls.candidate_id:
-                    # Update the connection type and strength
-                    conn.relation = cls.relation
-                    conn.strength = round(cls.confidence, 3)
-                    conn.formed_by = "consolidation_reclassified"
-                    store.save_connection(engram.id, conn)
+                    # The typed edge is saved from whichever memory the
+                    # classifier says is the source: a reverse verdict is the
+                    # other memory's edge toward this one, and was saved
+                    # pointing the wrong way. The mechanical row stays: a link
+                    # goes only by a verdict that says so (NONE, below).
+                    source, target = (
+                        (conn.target_id, engram.id) if cls.direction == "reverse"
+                        else (engram.id, conn.target_id)
+                    )
+                    store.save_connection(source, Connection(
+                        target_id=target,
+                        relation=cls.relation,
+                        strength=round(cls.confidence, 3),
+                        formed_by="consolidation_reclassified",
+                    ))
                     stats["connections_reclassified"] += 1
                     reclassified_count += 1
                     break

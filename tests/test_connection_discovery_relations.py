@@ -129,3 +129,77 @@ class TestEncodingTimeEdges:
             ).fetchall()
         }
         assert ConnectionRelation.SUPPORTS not in relations
+
+
+class TestAReverseRelationKeepsItsDirection:
+    """The classifier says "reverse" when the existing memory is the source
+    (it caused the new one). Both branches wrote new -> existing, so the
+    graph said the new memory caused the old."""
+
+    def _reverse(self, monkeypatch, module):
+        """A classifier that, asked about the effect, says each candidate
+        caused it, and finds nothing asked about anything else."""
+        from mnemos.encoding.llm_classifier import ConnectionClassification
+
+        def classify(_client, engram, candidates):
+            if not engram.content.startswith("Logins"):
+                return []
+            return [ConnectionClassification(candidate_id=c.id, relation=ConnectionRelation.CAUSES,
+                                             direction="reverse", confidence=0.8, reasoning="")
+                    for c in candidates]
+
+        monkeypatch.setattr(module, "classify_connections", classify)
+
+    def _causes(self, store):
+        return {(r["source_id"], r["target_id"]) for r in store._get_conn().execute(
+            "SELECT source_id, target_id FROM connections WHERE relation = ?", (ConnectionRelation.CAUSES,))}
+
+    def test_encoding_saves_it_from_the_existing_memory(self, store, encoder, monkeypatch):
+        import mnemos.encoding.encoder as module
+        from mnemos.encoding.encoder import Encoder
+
+        cause = _encode(encoder, "The migration dropped the sessions index", ["deploy"])
+        self._reverse(monkeypatch, module)
+        effect = _encode(Encoder(store, llm_client=object()),
+                         "Logins slowed after the migration dropped the sessions index", ["deploy"])
+
+        assert (cause.id, effect.id) in self._causes(store)
+        assert (effect.id, cause.id) not in self._causes(store)
+
+    def test_discovery_saves_it_from_the_existing_memory(self, store, encoder, monkeypatch):
+        import mnemos.consolidation.connection_discovery as module
+
+        # Saved unlinked, so discovery is the one to link them.
+        cause, effect = (
+            encoder.encode(content=text, impact="", kind="semantic", tags=["deploy"],
+                           source=SourceType.SESSION, agent_id="reltest",
+                           skip_surprise_detection=True, discover_connections=False)
+            for text in ("The migration dropped the sessions index",
+                         "Logins slowed after the migration dropped the sessions index")
+        )
+        self._reverse(monkeypatch, module)
+
+        run_connection_discovery(store, llm_client=object(), agent_id="reltest")
+
+        assert self._causes(store) == {(cause.id, effect.id)}
+
+    def test_a_pair_linked_in_reverse_is_not_asked_about_again(self, store, encoder, monkeypatch):
+        import mnemos.consolidation.connection_discovery as module
+
+        cause, effect = (
+            encoder.encode(content=text, impact="", kind="semantic", tags=["deploy"],
+                           source=SourceType.SESSION, agent_id="reltest",
+                           skip_surprise_detection=True, discover_connections=False)
+            for text in ("The migration dropped the sessions index",
+                         "Logins slowed after the migration dropped the sessions index")
+        )
+        self._reverse(monkeypatch, module)
+        asked = []
+        classify = module.classify_connections
+        monkeypatch.setattr(module, "classify_connections",
+                            lambda client, engram, candidates: asked.append(engram.id) or classify(client, engram, candidates))
+
+        for _ in range(3):
+            run_connection_discovery(store, llm_client=object(), agent_id="reltest")
+
+        assert asked.count(effect.id) == 1, "the same pair went to the model every pass"

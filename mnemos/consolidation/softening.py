@@ -30,6 +30,7 @@ import ulid as _ulid_mod
 from ..core.placeholders import is_templated
 from ..core.types import ConnectionRelation, EngramKind, SourceType
 from ..store.fts import distinctive_terms, fts_words, or_query, overlap
+from ..store.sqlite_store import RECALLABLE_ARCHIVE_REASONS
 from .lived import LivedClock
 
 if TYPE_CHECKING:
@@ -414,6 +415,78 @@ def _same_lesson(mine: set[str], theirs: set[str]) -> bool:
     return bool(mine) and mine == theirs
 
 
+# The words that turn a lesson around or pin it down, which distinctive_terms
+# leaves out as common or too short: "Always deploy on Friday." and "Never
+# deploy on Friday." have the same distinctive words, and were filed as one
+# lesson, the second strengthening the first. "don't" splits into "don" and
+# "t", so "t" is a negation here.
+_NEGATIONS = frozenset("""
+    not no never none nothing nobody nowhere neither nor without cannot t
+    dont doesnt didnt cant wont isnt arent wasnt werent shouldnt wouldnt couldnt
+    mustnt hasnt havent hadnt neednt
+""".split())
+_QUANTIFIERS = frozenset("always never only sometimes usually often rarely seldom".split())
+_CONDITIONS = frozenset("if unless except until".split())
+_WORD = re.compile(r"[^\W_]+")
+
+
+def _specifics(text: str) -> tuple[bool, frozenset[str], frozenset[str], frozenset[str], frozenset[str]]:
+    """What a lesson must agree on with another to be the same lesson: whether
+    it is negated, its quantifiers, its conditions, its numbers (versions and
+    dates among them) and the names in it (a capitalised word that does not
+    begin a sentence)."""
+    words = [w.lower() for w in _WORD.findall(text or "")]
+    names = set()
+    for found in _WORD.finditer(text or ""):
+        word = found.group()
+        before = (text[: found.start()].rstrip() or ".")[-1]
+        if len(word) > 1 and word[0].isupper() and before not in ".!?:;\"'(“‘*-•#>":
+            names.add(word.lower())
+    return (
+        any(w in _NEGATIONS for w in words),
+        frozenset(w for w in words if w in _QUANTIFIERS),
+        frozenset(w for w in words if w in _CONDITIONS),
+        frozenset(w for w in words if any(c.isdigit() for c in w)),
+        frozenset(names),
+    )
+
+
+def _says_the_same(mine: str, theirs: str) -> bool:
+    """Whether a link already filed between two texts holds up, for the lesson
+    repair: _same_lesson by their distinctive words, and agreeing on what can
+    turn a lesson around or pin it down (_specifics). Looser than _same_words,
+    which files new links: links filed under the old rule joined rewordings of
+    one lesson, and the repair keeps those. It finds the memories filed under
+    the opposite ("Always ..." under "Never ..."), not every pair that differs."""
+    if not _same_lesson(distinctive_terms(mine), distinctive_terms(theirs)):
+        return False
+    *rest_mine, names_mine = _specifics(mine)
+    *rest_theirs, names_theirs = _specifics(theirs)
+    if rest_mine != rest_theirs:
+        return False
+    # A name differs only when the other text lacks the word altogether:
+    # "Python" in one and "python" in the other, or a word capitalised
+    # after a bullet, names the same thing.
+    words_mine = {w.lower() for w in _WORD.findall(mine or "")}
+    words_theirs = {w.lower() for w in _WORD.findall(theirs or "")}
+    return names_mine <= words_theirs and names_theirs <= words_mine
+
+
+def _same_words(mine: str, theirs: str) -> bool:
+    """Whether two texts are the same lesson for filing one under the other
+    with no one asked: the same words in the same order and case, ignoring
+    only spacing and a closing full stop. Case can be the fact ("/srv/Prod"
+    and "/srv/prod" are different paths). Shared vocabulary, even with negation,
+    numbers and names checked (_says_the_same), still merged lessons that say
+    different things: "version 1.2" and "version 2.1", "Allow ..." and
+    "Block ...", "after review" and "before review", "Alice must ..." and
+    "Bob must ...". A near-duplicate lesson is the safe failure."""
+    def plain(text: str) -> str:
+        return " ".join((text or "").split()).rstrip(".!")
+
+    return bool(plain(mine)) and plain(mine) == plain(theirs)
+
+
 def _create_or_reinforce_lesson(
     engram: Any,
     store: EngramStore,
@@ -464,12 +537,16 @@ def _create_or_reinforce_lesson(
     # again every cycle; reinforcing its lesson each time grew the same lessons
     # without end (143 reinforcements a cycle on a real store) and kept them the
     # most-accessed memories in the graph.
+    # A lesson forgotten or replaced since is no home: the memory files
+    # its lesson afresh instead of answering with one out of use.
     for conn in engram.connections:
         if conn.relation == ConnectionRelation.DISTILLED_INTO:
             lesson = store.get_engram(conn.target_id)
             if (
                 lesson is not None and lesson.author_kind == "agent"
-                and _same_lesson(mine, distinctive_terms(lesson.content))
+                and (lesson.state != "archived"
+                     or store.archive_reason(lesson.id) in RECALLABLE_ARCHIVE_REASONS)
+                and _same_words(impact_text, lesson.content)
             ):
                 return lesson.id
 
@@ -495,8 +572,8 @@ def _create_or_reinforce_lesson(
             continue
         if candidate.author_kind != "agent":
             continue  # a tool's "lesson" is not strengthened by the agent's evidence
-        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _same_lesson(
-            mine, distinctive_terms(candidate.content)
+        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _same_words(
+            impact_text, candidate.content
         ):
             # Reinforce existing lesson. Not an access: maintenance reading its
             # own lessons is not the agent reading them, and counting it made
@@ -655,11 +732,17 @@ def find_misfiled_distillations(
     """distilled_into links from this scope's memories that do not hold what they claim.
 
     A link is misfiled when the memory's impact is a placeholder the server
-    wrote, or when the lesson says something else: not the same lesson by
-    _same_lesson, the bar _create_or_reinforce_lesson applies before filing
-    anything. Links made before that bar existed were filed on any shared
+    wrote, or when the lesson says something else by _says_the_same: too few
+    shared words, or said the other way round ("Never ..." filed under
+    "Always ..."). Links made before that bar existed were filed on any shared
     word, and those made after #75 on one, and still carry recall's light at
     the weight of real evidence.
+
+    A partial, conservative repair, and looser than the bar new links are
+    filed by (_same_words): links filed under the old rules joined rewordings
+    of one lesson, which this keeps. It misses some it should catch: a
+    different version, verb, condition or sentence-initial name ("Alice
+    must ..." under "Bob must ...") reads as the same lesson here.
     """
     rows = store._get_conn().execute(
         """
@@ -678,10 +761,7 @@ def find_misfiled_distillations(
     for row in rows:
         if is_templated(row["impact"], row["impact_source"]):
             reason = "placeholder"
-        elif not _same_lesson(
-            distinctive_terms(row["impact"] or row["source_content"] or ""),
-            distinctive_terms(row["lesson"] or ""),
-        ):
+        elif not _says_the_same(row["impact"] or row["source_content"] or "", row["lesson"] or ""):
             reason = "unrelated"
         else:
             continue

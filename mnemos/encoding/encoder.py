@@ -132,6 +132,9 @@ class Encoder:
         self._embedding_index = embedding_index
         self._llm_client = llm_client
         self._shared_pool = shared_pool
+        # Edges existing memories hold toward a memory being encoded, by its
+        # id, until finish() saves them with it stored.
+        self._incoming: dict[str, list[tuple[str, Connection]]] = {}
         # The "encoding" section of the config. keyword_overlap is how much of
         # what two memories are about they must share before saving one links it
         # to the other without a model (see _discover_connections).
@@ -350,6 +353,13 @@ class Encoder:
             except Exception:
                 pass  # Don't fail encoding if embedding fails
 
+        # The edges existing memories hold toward this one (a reverse
+        # direction from the classifier), now that it is stored. Kept until
+        # saved, so a finish() that failed here can be run again.
+        for source_id, edge in self._incoming.get(engram.id, []):
+            self._store.save_connection(source_id, edge)
+        self._incoming.pop(engram.id, None)
+
         # 9. Auto-publish to shared pool if applicable
         if self._shared_pool and should_auto_share(engram):
             engram.visibility = Visibility.SHARED
@@ -541,6 +551,7 @@ class Encoder:
         Returns at most max_connections connections, highest strength first.
         """
         connections: list[Connection] = []
+        incoming: list[tuple[str, Connection]] = []
 
         # 1. FTS search for content similarity — find candidates
         words = fts_words(engram.content)
@@ -589,15 +600,20 @@ class Encoder:
 
                 # Determine source/target based on direction
                 if cls.direction == "reverse":
-                    # Existing memory is the source (e.g., existing CAUSED new)
-                    connections.append(
+                    # Existing memory is the source (e.g., existing CAUSED new).
+                    # It was written as new -> existing, the same edge as
+                    # forward: "the new memory caused the old one". The edge
+                    # belongs to the existing memory, saved by finish() once
+                    # the new one is stored.
+                    incoming.append((
+                        cls.candidate_id,
                         Connection(
-                            target_id=cls.candidate_id,
+                            target_id=engram.id,
                             relation=cls.relation,
                             strength=round(strength, 3),
                             formed_by="encoding",
-                        )
-                    )
+                        ),
+                    ))
                 else:
                     # New memory is the source (default: forward)
                     connections.append(
@@ -676,9 +692,18 @@ class Encoder:
                             )
                         )
 
-        # 4. Sort by strength descending, cap at max_connections
-        connections.sort(key=lambda c: c.strength, reverse=True)
-        return connections[: self._max_connections]
+        # 4. Sort by strength descending, cap at max_connections, the edges
+        # the existing memories hold toward this one counted among them.
+        ranked = sorted(
+            [(None, c) for c in connections] + incoming,
+            key=lambda pair: pair[1].strength, reverse=True,
+        )[: self._max_connections]
+        # Only the memory being encoded waits for finish(): one prepared
+        # and never stored leaves nothing behind.
+        self._incoming = {engram.id: [(s, c) for s, c in ranked if s]} if any(
+            source for source, _ in ranked
+        ) else {}
+        return [c for source, c in ranked if source is None]
 
 
 # ── What the removed no-model check wrote ──

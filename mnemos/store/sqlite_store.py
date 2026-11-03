@@ -21,7 +21,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..authorship import AUTHOR_KINDS
 from ..code_version import MAINTENANCE_CODE_VERSION
@@ -1687,6 +1687,9 @@ class EngramStore:
         if self._transaction_depth == 0:
             self._get_conn().commit()
             self._mark_versions_written()
+            committed, self._on_commit = getattr(self, "_on_commit", None) or [], []
+            for then in committed:
+                then()
 
     def _rollback(self) -> None:
         """Roll back a method-local transaction, or let the outer owner do it."""
@@ -1694,6 +1697,19 @@ class EngramStore:
         if self._transaction_depth == 0:
             self._get_conn().rollback()
             self._versions_written = []
+            self._on_commit = []
+
+    def after_commit(self, then: Callable[[], None]) -> None:
+        """Run ``then`` once what has been written so far is committed: now,
+        outside a transaction; when the outermost one commits, inside one.
+        Never, if it rolls back. For state kept outside the database that
+        must say only what the database holds."""
+        if self._transaction_depth == 0:
+            then()
+            return
+        if getattr(self, "_on_commit", None) is None:
+            self._on_commit = []
+        self._on_commit.append(then)
 
     def _mark_versions_written(self) -> None:
         """Mark the versions this transaction wrote as held by this store,

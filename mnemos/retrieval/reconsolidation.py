@@ -167,5 +167,9 @@ def reconsolidate(
         store.record_return(engram, links)
 
     if not session:
-        _REINFORCED_IN_PROCESS.add(in_process)
+        # Once the reinforcement is committed: inside a caller's transaction
+        # (a reflection's), one that rolls back leaves this unclaimed, and a
+        # retry reinforces.
+        claim = lambda: _REINFORCED_IN_PROCESS.add(in_process)  # noqa: E731
+        getattr(store, "after_commit", lambda then: then())(claim)
     return engram

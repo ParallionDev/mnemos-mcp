@@ -58,10 +58,9 @@ def test_sharing_common_words_does_not_make_it_the_same_lesson(store):
 
 
 def test_the_same_lesson_said_again_is_reinforced(store):
-    rendered = _lesson(store, "Verify the rendered result, not the declaration: "
-                              "computed styles prove nothing.")
+    rendered = _lesson(store, "Verify the rendered result, not the declaration.")
     again = _fading(store, "fonts looked right in the inspector and wrong on screen",
-                    "Verify the rendered result, not the declaration.")
+                    "Verify the rendered  result, not the declaration")
 
     assert _create_or_reinforce_lesson(again, store, {}) == rendered.id
     assert store.get_engram(rendered.id).strength == pytest.approx(0.9)
@@ -112,3 +111,66 @@ def test_a_memory_reinforces_its_lesson_once_not_every_cycle(runtime):
     runtime.maintain()
 
     assert lesson_strength() == pytest.approx(first)
+
+
+@pytest.mark.parametrize("first, then", [
+    ("Always deploy production changes on Friday.", "Never deploy production changes on Friday."),
+    ("Deploy production changes on Friday.", "Don't deploy production changes on Friday."),
+    ("Pin the parser to version 2.1 before release.", "Pin the parser to version 3.0 before release."),
+    ("Ask Mara before changing the release checklist.", "Ask Theo before changing the release checklist."),
+    ("Squash the commits before merging the branch.", "Squash the commits before merging the branch unless review asked otherwise."),
+])
+def test_a_lesson_said_the_other_way_is_its_own(store, first, then):
+    """The same distinctive words, turned around or pinned to something else:
+    filing the second under the first made a memory strengthen the opposite of
+    what it taught, and recall offer it first."""
+    earlier = _lesson(store, first)
+    memory = _fading(store, "what happened this time", then)
+    stats: dict = {}
+
+    lesson_id = _create_or_reinforce_lesson(memory, store, stats)
+
+    assert lesson_id != earlier.id
+    assert store.get_engram(lesson_id).content == then
+    assert stats == {"lessons_created": 1}
+    assert store.get_engram(earlier.id).strength == pytest.approx(0.8)
+
+
+def test_a_memory_filed_under_the_opposite_is_found_for_repair(store):
+    from mnemos.consolidation.softening import find_misfiled_distillations
+    from mnemos.core.engram import Connection
+
+    always = _lesson(store, "Always deploy production changes on Friday.")
+    never = _fading(store, "friday deploy broke prod", "Never deploy production changes on Friday.")
+    never.connections.append(Connection(target_id=always.id, relation=ConnectionRelation.DISTILLED_INTO))
+    store.save_engram(never)
+
+    misfiled = find_misfiled_distillations(store, "default", "user", "global")
+
+    assert {"source_id": never.id, "target_id": always.id, "reason": "unrelated"} in misfiled
+
+
+def test_a_lesson_in_other_words_is_its_own(store):
+    """Filed with no one asked, only the same words are the same lesson:
+    shared vocabulary merged lessons that say different things. A rewording
+    leaves a near-duplicate, the safe failure."""
+    rendered = _lesson(store, "Verify the rendered result, not the declaration: "
+                              "computed styles prove nothing.")
+    again = _fading(store, "fonts looked right in the inspector and wrong on screen",
+                    "Verify the rendered result, not the declaration.")
+
+    assert _create_or_reinforce_lesson(again, store, {}) != rendered.id
+    assert store.get_engram(rendered.id).strength == pytest.approx(0.8)
+
+
+@pytest.mark.parametrize("first, then", [
+    ("Pin the parser to version 1.2 before release.", "Pin the parser to version 2.1 before release."),
+    ("Allow production deployments during outages.", "Block production deployments during outages."),
+    ("Deploy only after review passes.", "Deploy only before review passes."),
+    ("Alice must approve production releases.", "Bob must approve production releases."),
+])
+def test_lessons_that_share_words_but_not_meaning_stay_apart(store, first, then):
+    earlier = _lesson(store, first)
+    memory = _fading(store, "what happened this time", then)
+
+    assert _create_or_reinforce_lesson(memory, store, {}) != earlier.id

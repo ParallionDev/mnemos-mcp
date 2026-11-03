@@ -89,13 +89,28 @@ def test_one_shared_word_does_not_make_it_the_same_lesson(store, first, then):
     )
 
 
-def test_the_same_lesson_in_other_words_is_still_reinforced(store):
+def test_the_same_lesson_in_other_words_is_its_own(store):
+    """Rewordings were merged by shared words. Filed with no one asked, only
+    the same words are the same lesson now: shared words also merged lessons
+    that say different things."""
     _fade(store, "her pacing notes on part one", CHAPTERS)
     _soften(store)
     (lesson,) = _lessons(store)
 
     again = _fade(store, "the chapter nine draft ran to forty pages",
                   "Keep her chapters short and flag the long ones.")
+    _soften(store)
+
+    assert len(_lessons(store)) == 2
+    assert lesson.id not in _filed_under(store, again)
+
+
+def test_the_same_lesson_in_the_same_words_is_reinforced(store):
+    _fade(store, "her pacing notes on part one", CHAPTERS)
+    _soften(store)
+    (lesson,) = _lessons(store)
+
+    again = _fade(store, "the chapter nine draft ran to forty pages", "  " + CHAPTERS.rstrip("."))
     _soften(store)
 
     (after,) = _lessons(store)

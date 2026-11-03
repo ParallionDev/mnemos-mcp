@@ -186,6 +186,10 @@ def _tags_for(text: str, *extra: str) -> list[str]:
     return sorted(tags)
 
 
+
+# How a memory mirrored from Hermes's built-in memory begins its context.
+_MIRROR_MARK = "Mirrored from Hermes built-in"
+
 class MnemosMemoryProviderCore:
     """Hermes-compatible provider implementation without importing Hermes."""
 
@@ -194,7 +198,10 @@ class MnemosMemoryProviderCore:
         self._scope: HermesScope | None = None
         self._runtime: MnemosRuntime | None = None
         self._session_id = ""
-        self._prefetch_cache: dict[str, tuple[str, str]] = {}
+        # What prefetch last recalled for each session: the query, the store's
+        # revision then (_store_revision), and the context. Any write, here
+        # or by another process, changes the revision.
+        self._prefetch_cache: dict[str, tuple[str, tuple[int, int] | None, str]] = {}
         self._writes_enabled = True
         self._turn_count = 0
 
@@ -266,21 +273,42 @@ class MnemosMemoryProviderCore:
             return ""
         cache_key = session_id or self._session_id or self.scope.session_id
         cached = self._prefetch_cache.get(cache_key)
-        if cached and cached[0] == clean:
-            return cached[1]
+        revision = self._store_revision()
+        if cached and cached[0] == clean and revision is not None and cached[1] == revision:
+            return cached[2]
         recalled = self._runtime.recall(clean, max_results=self._config.max_recall_results)
         if "No relevant continuity found" in recalled:
             return ""
         context = _truncate("# Mnemos Recall\n" + recalled, self._config.max_context_chars)
-        self._prefetch_cache[cache_key] = (clean, context)
+        after = self._store_revision()
+        # Cached only when no other connection committed during the recall:
+        # what it read may be older than that commit (a forget, a correction),
+        # and would be served again under the newer revision. This connection's
+        # own writes, the recall's bookkeeping, are read after it, so they
+        # count as no change.
+        if revision is not None and after is not None and after[0] == revision[0]:
+            self._prefetch_cache[cache_key] = (clean, after, context)
+        else:
+            self._prefetch_cache.pop(cache_key, None)
         return context
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
-        context = self.prefetch(query, session_id=session_id)
-        if not context:
-            return
-        cache_key = session_id or self._session_id or self.scope.session_id
-        self._prefetch_cache[cache_key] = (_clean_text(query), context)
+        self.prefetch(query, session_id=session_id)
+
+    def _store_revision(self) -> tuple[int, int] | None:
+        """The store's revision as this provider's connection sees it: SQLite's
+        data_version, which moves when another connection commits, and the
+        connection's own total_changes, which moves with every write made
+        through it (a review note, upkeep, a correction), so no write path
+        has to remember to clear the cache. A cached recall from an older
+        revision may hold what was since forgotten or corrected. None when it
+        can't be read: then nothing cached is trusted."""
+        try:
+            self._runtime._ensure_init()
+            conn = self._runtime._store._get_conn()
+            return int(conn.execute("PRAGMA data_version").fetchone()[0]), conn.total_changes
+        except Exception:
+            return None
 
     def sync_turn(
         self,
@@ -326,6 +354,7 @@ class MnemosMemoryProviderCore:
         interval = self._config.maintenance_interval
         if interval and self._turn_count > 0 and self._turn_count % interval == 0:
             self._runtime.maintain(auto=True)
+            self._prefetch_cache.clear()  # upkeep can archive what was recalled
 
     def on_session_end(self, messages: list[dict[str, Any]]) -> None:
         """The memory's upkeep, and nothing written from the session."""
@@ -334,6 +363,7 @@ class MnemosMemoryProviderCore:
         self._ensure_runtime()
         assert self._runtime is not None
         self._runtime.maintain(auto=True)
+        self._prefetch_cache.clear()  # upkeep can archive what was recalled
 
     def on_session_switch(
         self,
@@ -369,18 +399,38 @@ class MnemosMemoryProviderCore:
         assert self._runtime is not None
         if not self._writes_enabled or not self._config.mirror_builtin_memory:
             return
-        clean = _clean_text(content)
-        if not clean:
-            return
         action = (action or "").lower()
+        clean = _clean_text(content)
+        meta = metadata or {}
         context = (
-            f"Mirrored from Hermes built-in {target} memory. "
-            f"Metadata: {json.dumps(metadata or {}, sort_keys=True, default=str)}"
+            f"{_MIRROR_MARK} {target} memory. "
+            f"Metadata: {json.dumps(meta, sort_keys=True, default=str)}"
         )
-        if action in {"add", "replace"}:
+        if action in {"replace", "remove", "delete", "forget"}:
+            # The entry replaced or removed, as Hermes names it: the whole of
+            # it (previous_content, newer Hermes) or a piece of it (old_text,
+            # which Hermes requires to match one entry). A remove may carry
+            # no content at all, only these.
+            predecessor = self._mirrored_entry(
+                target,
+                whole=_clean_text(meta.get("previous_content")),
+                piece=_clean_text(meta.get("old_text")) or (clean if action != "replace" else ""),
+            )
+            if action != "replace":
+                # Forgotten only when exactly one mirrored entry is it;
+                # otherwise nothing here is retired on a guess.
+                if predecessor:
+                    self._prefetch_cache.clear()
+                    self._runtime.correct("", target_id=predecessor, action="forget")
+                return
+            if predecessor and clean:
+                # Corrected to the new words, written as a mirrored capture is,
+                # so a later replace or remove finds it.
+                self._prefetch_cache.clear()
+                self._runtime.correct(f"{clean}\n\nContext: {context}", target_id=predecessor, action="update")
+                return
+        if action in {"add", "replace"} and clean:
             self._capture(clean, context=context, importance="high" if target == "user" else "auto")
-        elif action in {"remove", "delete", "forget"}:
-            self._runtime.correct("", query=clean, action="forget")
 
     def get_config_schema(self) -> list[dict[str, Any]]:
         return [
@@ -436,6 +486,8 @@ class MnemosMemoryProviderCore:
     def _tool_correct(self, args: dict[str, Any]) -> str:
         self._ensure_runtime()
         assert self._runtime is not None
+        # What prefetch recalled may be what this corrects or forgets.
+        self._prefetch_cache.clear()
         result = self._runtime.correct(
             correction=_clean_text(args.get("correction")),
             target_id=_clean_text(args.get("target_id")),
@@ -456,7 +508,9 @@ class MnemosMemoryProviderCore:
         if kind == "inbox":
             return _json_ok(kind=kind, inbox=self._review_inbox(limit=max_results), scope=asdict(self.scope))
         if kind == "maintain":
-            return _json_ok(kind=kind, result=self._runtime.maintain(deep=bool(args.get("deep")), auto=False), scope=asdict(self.scope))
+            result = self._runtime.maintain(deep=bool(args.get("deep")), auto=False)
+            self._prefetch_cache.clear()  # upkeep can archive what was recalled
+            return _json_ok(kind=kind, result=result, scope=asdict(self.scope))
         if kind == "status":
             return _json_ok(kind=kind, scope=asdict(self.scope), config=asdict(self._config) if self._config else {})
         return _json_error(f"Unsupported report kind: {kind}")
@@ -466,9 +520,41 @@ class MnemosMemoryProviderCore:
             return
         self.initialize(self._session_id or "mnemos-hermes")
 
+    def _mirrored_entry(self, target: str, *, whole: str = "", piece: str = "") -> str | None:
+        """The one memory in use here mirrored from this Hermes ``target``
+        ("memory" or "user") that is the entry Hermes names, or None: its own
+        words (before the mirror's context) equal to ``whole``, or else
+        containing ``piece``, ignoring case. None too when more than one
+        matches: a replace or remove then retires nothing on a guess. A
+        memory mirrored from the other target, or one the agent wrote
+        itself, is never it."""
+        if not whole and not piece:
+            return None
+        self._runtime._ensure_init()
+        scope = self._runtime.scope
+        marker = f"\n\nContext: {_MIRROR_MARK} {target} memory."
+        rows = self._runtime._store._get_conn().execute(
+            "SELECT id, content FROM engrams WHERE owner_agent_id = ? AND person_id = ? "
+            "AND project_scope = ? AND state != 'archived' AND instr(content, ?) > 0",
+            (scope.agent_id, scope.person_id, scope.project_scope, marker),
+        ).fetchall()
+
+        def own(content: str) -> str:
+            return " ".join(content.split(marker)[0].split()).casefold()
+
+        # Spacing and case are read the same way on both sides: Hermes keeps
+        # the entry's own spacing in old_text, and a double space or a line
+        # break in it is still the same entry.
+        if whole:
+            matches = [r[0] for r in rows if own(r[1]) == " ".join(whole.split()).casefold()]
+        else:
+            matches = [r[0] for r in rows if " ".join(piece.split()).casefold() in own(r[1])]
+        return matches[0] if len(matches) == 1 else None
+
     def _capture(self, content: str, context: str = "", importance: str | float = "auto") -> str:
         self._ensure_runtime()
         assert self._runtime is not None
+        self._prefetch_cache.clear()
         return self._runtime.capture(content, context=context, importance=importance)
 
     def _queue_review_item(self, content: str, *, reason: str, context: str = "") -> str:
