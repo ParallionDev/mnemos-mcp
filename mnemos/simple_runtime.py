@@ -1127,6 +1127,14 @@ def _traced(tool: str) -> Any:
     return decorate
 
 
+
+# A reflection's reply when the memory took the words and its note did not
+# (_carry_reflection_into_note).
+_NOTE_NOT_CARRIED_LINE = (
+    "  Its note could not be updated, so the next session's packet may not "
+    "show this yet. The memory holds it.\n"
+)
+
 class MnemosRuntime:
     """High-level continuity interface used by simple MCP mode and tests."""
 
@@ -3568,6 +3576,22 @@ class MnemosRuntime:
                 f"To decide it, answer again with a verdict: {_VERDICT_HELP[kind]}."
             )
 
+        # The question is spent only with what answering it does: the impact,
+        # the lesson, the belief, together, or none of it. Spent first and
+        # saved after, a failed save closed the question without its effect,
+        # and asking again found nothing pending.
+        with self._store.transaction():
+            return self._answer_and_apply(
+                target_id, target, ask, kind, answer, decided, author, older, scope,
+            )
+
+    def _answer_and_apply(
+        self, target_id: str, target: str, ask: dict[str, Any], kind: str, answer: str,
+        decided: str, author: str, older: bool, scope: dict[str, str],
+    ) -> str:
+        """Spend the question and do what its answer does, inside reflect's
+        transaction."""
+        assert self._store is not None
         item = self._store.answer_reflection(
             target, answer, reflection_id=ask["id"], **scope
         )
@@ -3598,12 +3622,15 @@ class MnemosRuntime:
             engram.impact_source = "agent"
             self._store.save_engram(engram)
             self._traced_write(engram.id)
-            self._traced_write(self._carry_reflection_into_note(engram.id, answer, author=author))
+            carried = self._carry_reflection_into_note(engram.id, answer, author=author)
+            self._traced_write(carried or None)
+            unsaid = _NOTE_NOT_CARRIED_LINE if carried == "" else ""
             return (
                 "Reflection recorded.\n"
                 f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                 f"  Now carries: {answer}\n"
-                "This is what survives when the details fade."
+                + unsaid
+                + "This is what survives when the details fade."
             )
 
         if item["kind"] == "lesson":
@@ -3614,7 +3641,9 @@ class MnemosRuntime:
             engram.impact_source = "agent"
             self._store.save_engram(engram)
             self._traced_write(engram.id)
-            self._traced_write(self._carry_reflection_into_note(engram.id, answer, author=author))
+            carried = self._carry_reflection_into_note(engram.id, answer, author=author)
+            self._traced_write(carried or None)
+            unsaid = _NOTE_NOT_CARRIED_LINE if carried == "" else ""
             if older:
                 # Filing a lesson matches it against the lessons already held,
                 # by rules newer code may have replaced. The memory keeps the
@@ -3624,7 +3653,8 @@ class MnemosRuntime:
                     "Reflection recorded.\n"
                     f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                     f"  Now carries: {answer}\n"
-                    "Filing it as a lesson waits for current Mnemos."
+                    + unsaid
+                    + "Filing it as a lesson waits for current Mnemos."
                 )
 
             # Shift 2: the distilled insight becomes its own durable memory,
@@ -3644,7 +3674,8 @@ class MnemosRuntime:
                     "Reflection recorded.\n"
                     f"  Memory: {' '.join((engram.content or '').split())[:80]}\n"
                     f"  Now carries: {answer}\n"
-                    "No lesson was drawn from it: you didn't write that memory, "
+                    + unsaid
+                    + "No lesson was drawn from it: you didn't write that memory, "
                     "and lessons come only from your own."
                 )
             return (
@@ -3652,6 +3683,7 @@ class MnemosRuntime:
                 f"  From: {' '.join((engram.content or '').split())[:70]}\n"
                 f"  Learned: {answer}\n"
                 + (f"  Kept as: {lesson_id}\n" if lesson_id else "")
+                + unsaid
                 + "The details can fade now. This is what stays."
             )
 
@@ -3862,10 +3894,20 @@ class MnemosRuntime:
 
         The note keeps its original content and gains the sentence. Revising
         preserves the prior version in the entry's revision trail, so nothing
-        the human said is overwritten. Returns the note id, or None when the
-        memory has no note, which is not an error.
+        the human said is overwritten. Returns the note id, None when the
+        memory has no note, which is not an error, and "" when it has one and
+        the note could not be revised: the reply says so (a reflection saved
+        on the memory, not yet in what the next session is shown), never the
+        plain success it gave before.
+
+        Inside a transaction the note is revised under a savepoint, so a
+        failure takes back only the note's half-written revision.
         """
         assert self._store is not None
+        conn = self._store._get_conn()
+        savepoint = bool(getattr(self._store, "_transaction_depth", 0)) and not self._host_mutation_active
+        if savepoint:
+            conn.execute("SAVEPOINT carry_reflection")
         try:
             note = self._store.get_hypomnema_entry_for_engram(
                 engram_id,
@@ -3895,13 +3937,21 @@ class MnemosRuntime:
                 project_scope=self.scope.project_scope,
                 revised_by=author,
             )
-        except Exception:
+        except Exception as exc:
             if self._host_mutation_active:
                 raise
-            # The impact write already succeeded. Losing the note update is
-            # worth reporting as a partial success, never as a failed
-            # reflection the agent might retype.
-            return None
+            if savepoint:
+                conn.execute("ROLLBACK TO carry_reflection")
+            # The impact is saved. The note's revision failing is a partial
+            # success, said as one, never a failed reflection the agent
+            # might retype.
+            logging.getLogger(__name__).warning(
+                "Reflection on %s saved; its note was not revised: %s", engram_id, exc,
+            )
+            return ""
+        finally:
+            if savepoint:
+                conn.execute("RELEASE carry_reflection")
 
     def _reflection_block(self, limit: int = PACKET_QUESTIONS) -> str | None:
         """The question section as the packet shows it, spending one showing

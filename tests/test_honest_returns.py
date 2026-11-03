@@ -657,3 +657,51 @@ def test_repair_versions_refuses_to_write_from_older_code(tmp_path, capsys):
     assert code == 1
     assert "older than the store expects, so it changes nothing" in out
     assert _settled_sha256(db) == before
+
+
+class TestAReflectionIsSavedWholeOrNotAtAll:
+    """reflect spent the question, then saved what the answer does. A failed
+    save closed the question without its effect, and asking again found
+    nothing pending. A failed note revision reported plain success."""
+
+    def _memory_with_question(self, tmp_path, kind):
+        rt = MnemosRuntime(db_path=str(tmp_path / "r.db"), agent_id="t", person_id="p", project_scope="g")
+        rt.introduce(agent_model="claude-opus-5")
+        rt.capture("We moved the launch to Thursday after the build broke", signed_as="claude-opus-5")
+        store = rt._store
+        target = store._get_conn().execute(
+            "SELECT id FROM engrams WHERE content LIKE '%Thursday%'").fetchone()[0]
+        store.enqueue_reflection(kind, target, "What did this teach you?",
+                                 agent_id="t", person_id="p", project_scope="g")
+        return rt, store, target
+
+    @pytest.mark.parametrize("kind", ["impact", "lesson"])
+    def test_a_failed_save_leaves_the_question_open(self, tmp_path, monkeypatch, kind):
+        rt, store, target = self._memory_with_question(tmp_path, kind)
+
+        def fail(*args, **kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        monkeypatch.setattr(store, "save_engram", fail)
+        with pytest.raises(sqlite3.OperationalError):
+            rt.reflect(target, "Ship only when the build is green.", signed_as="claude-opus-5")
+        monkeypatch.undo()
+
+        assert store.pending_reflection_for(target, agent_id="t", person_id="p", project_scope="g")
+        said = rt.reflect(target, "Ship only when the build is green.", signed_as="claude-opus-5")
+        assert "Nothing was pending" not in said
+        assert store.get_engram(target).impact == "Ship only when the build is green."
+
+    def test_a_note_that_could_not_be_revised_is_said(self, tmp_path, monkeypatch):
+        rt, store, target = self._memory_with_question(tmp_path, "impact")
+
+        def fail(*args, **kwargs):
+            raise sqlite3.OperationalError("note write failed")
+
+        monkeypatch.setattr(store, "revise_hypomnema_entry", fail)
+        said = rt.reflect(target, "Green builds only.", signed_as="claude-opus-5")
+        monkeypatch.undo()
+
+        assert "could not be updated" in said
+        assert store.get_engram(target).impact == "Green builds only."
+        assert not store.pending_reflection_for(target, agent_id="t", person_id="p", project_scope="g")
