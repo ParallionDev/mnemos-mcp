@@ -5742,17 +5742,16 @@ class MnemosRuntime:
             )
 
     def _lessons_taught_only_by(self, memories: list[Engram]) -> list[Engram]:
-        """The lessons in use that these memories were distilled into and that
-        hold nothing beyond them: a lesson in one of their impacts' own words,
-        or one no other memory still held was distilled into. A lesson another
-        memory also taught, in words that are not these memories', stays: it
-        is that memory's lesson too."""
+        """The lessons in use that these memories were distilled into and no
+        other memory still held was. A lesson another memory also taught is
+        that memory's lesson too, and stays, whoever's words it is in: it
+        says what that memory taught, and archiving it would leave that
+        memory filed under a lesson out of use."""
         assert self._store is not None
         from .core.types import ConnectionRelation
 
         scope = self._scope_args()
         going = {memory.id for memory in memories}
-        impacts = {" ".join((memory.impact or "").split()) for memory in memories} - {""}
         taught: dict[str, Engram] = {}
         for memory in memories:
             for conn in memory.connections:
@@ -5761,27 +5760,32 @@ class MnemosRuntime:
                 lesson = self._store.get_engram_in_scope(conn.target_id, **scope)
                 if lesson is None or lesson.id in going or not self._still_held(lesson):
                     continue
-                if " ".join((lesson.content or "").split()) not in impacts:
-                    others = [
-                        row[0] for row in self._store._get_conn().execute(
-                            "SELECT source_id FROM connections "
-                            "WHERE target_id = ? AND relation = 'distilled_into'",
-                            (lesson.id,),
-                        ).fetchall()
-                        if row[0] not in going
-                    ]
-                    held = (self._store.get_engram_in_scope(other, **scope) for other in others)
-                    if any(other is not None and self._still_held(other) for other in held):
-                        continue
+                others = [
+                    row[0] for row in self._store._get_conn().execute(
+                        "SELECT source_id FROM connections "
+                        "WHERE target_id = ? AND relation = 'distilled_into'",
+                        (lesson.id,),
+                    ).fetchall()
+                    if row[0] not in going
+                ]
+                held = (self._store.get_engram_in_scope(other, **scope) for other in others)
+                if any(other is not None and self._still_held(other) for other in held):
+                    continue
                 taught[lesson.id] = lesson
         return list(taught.values())
 
-    def _without_lessons(self, retired: list[str]) -> tuple[list[str], list[str]]:
+    def _without_lessons(
+        self, retired: list[str], named: Engram | None,
+    ) -> tuple[list[str], list[str]]:
         """The memories a forget retired, apart from the lessons it took with
-        them, and those lessons: each is said on its own line."""
+        them, and those lessons: each is said on its own line. The memory the
+        forget ``named`` is never one of them, lesson or not: forgetting a
+        lesson by its id archives that lesson, said as the memory it is."""
         assert self._store is not None
         lessons = []
         for engram_id in retired:
+            if named is not None and engram_id == named.id:
+                continue
             engram = self._store.get_engram(engram_id)
             if engram is not None and "lesson" in engram.tags:
                 lessons.append(engram_id)
@@ -6315,7 +6319,7 @@ class MnemosRuntime:
                     retired_notes, retired_memories = self._forget_pair(
                         note, engram, action=action, **signing,
                     )
-                    retired_memories, lessons = self._without_lessons(retired_memories)
+                    retired_memories, lessons = self._without_lessons(retired_memories, engram)
                     if not retired_notes and not retired_memories:
                         lines = [f"Nothing was archived: {label.lower()} {current} was already archived."]
                     elif kind == "note":
@@ -6403,7 +6407,7 @@ class MnemosRuntime:
                         note, engram, action=action, query=query_text, **signing,
                     )
                     maintenance = self._maintain_after_saving(f"forget of note {match['id']}")
-                    retired_memories, lessons = self._without_lessons(retired_memories)
+                    retired_memories, lessons = self._without_lessons(retired_memories, engram)
                     lines = [f"Archived closest continuity note {match['id']}."]
                     if retired_memories:
                         lines.append(f"Its memory {', '.join(retired_memories)} was archived with it.")
@@ -6444,7 +6448,7 @@ class MnemosRuntime:
                 lines = [f"Archived closest matching memory {engram.id}."]
                 if retired_notes:
                     lines.append(f"Its continuity note {', '.join(retired_notes)} was archived with it.")
-                lines += self._lessons_line(self._without_lessons(retired_memories)[1])
+                lines += self._lessons_line(self._without_lessons(retired_memories, engram)[1])
                 return "\n".join(lines)
             # Forgetting acts only on what the words name, and never captures.
             if not search_text:

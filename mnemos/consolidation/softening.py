@@ -30,6 +30,7 @@ import ulid as _ulid_mod
 from ..core.placeholders import is_templated
 from ..core.types import ConnectionRelation, EngramKind, SourceType
 from ..store.fts import distinctive_terms, fts_words, or_query, overlap
+from ..store.sqlite_store import RECALLABLE_ARCHIVE_REASONS
 from .lived import LivedClock
 
 if TYPE_CHECKING:
@@ -513,11 +514,15 @@ def _create_or_reinforce_lesson(
     # again every cycle; reinforcing its lesson each time grew the same lessons
     # without end (143 reinforcements a cycle on a real store) and kept them the
     # most-accessed memories in the graph.
+    # A lesson forgotten or replaced since is no home: the memory files
+    # its lesson afresh instead of answering with one out of use.
     for conn in engram.connections:
         if conn.relation == ConnectionRelation.DISTILLED_INTO:
             lesson = store.get_engram(conn.target_id)
             if (
                 lesson is not None and lesson.author_kind == "agent"
+                and (lesson.state != "archived"
+                     or store.archive_reason(lesson.id) in RECALLABLE_ARCHIVE_REASONS)
                 and _says_the_same(impact_text, lesson.content)
             ):
                 return lesson.id

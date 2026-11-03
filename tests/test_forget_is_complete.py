@@ -310,3 +310,49 @@ class TestForgetTakesTheLessonItAloneTaught:
         rt.correct(correction="", target_id=memory_id, action="forget")
 
         assert store.get_engram(lesson_id).state != "archived", "the first memory still teaches it"
+
+    def test_a_lesson_another_memory_taught_in_the_same_words_stays(self, db):
+        """Two memories that taught the same words share one lesson. Forgetting
+        one archived it while the other still taught it, and that memory then
+        answered with the archived lesson for good."""
+        from mnemos.consolidation.softening import _create_or_reinforce_lesson
+
+        rt = _runtime(db)
+        rt.introduce(agent_model="claude-opus-5")
+        store = rt._store
+        words = "Check the render before calling it done."
+        ids = []
+        for what in ("the fonts looked right in code", "the layout broke on a phone"):
+            rt.capture(what, impact=words, signed_as="claude-opus-5")
+            ids.append(store._get_conn().execute(
+                "SELECT id FROM engrams WHERE content = ? AND state != 'archived'", (what,)).fetchone()[0])
+        lesson_id = _create_or_reinforce_lesson(store.get_engram(ids[0]), store, {})
+        assert _create_or_reinforce_lesson(store.get_engram(ids[1]), store, {}) == lesson_id
+
+        rt.correct(correction="", target_id=ids[0], action="forget")
+
+        assert store.get_engram(lesson_id).state != "archived"
+        assert _create_or_reinforce_lesson(store.get_engram(ids[1]), store, {}) == lesson_id
+
+    def test_forgetting_a_lesson_by_its_id_says_it_was_archived(self, db):
+        rt = _runtime(db)
+        rt.introduce(agent_model="claude-opus-5")
+        _memory_id, lesson_id = self._memory_with_lesson(rt, f"The code {self.CODE} opens the studio door.")
+
+        said = rt.correct(correction="", target_id=lesson_id, action="forget")
+
+        assert said.startswith(f"Archived memory {lesson_id}"), said
+        assert "alone taught" not in said
+        assert rt._store.get_engram(lesson_id).state == "archived"
+
+    def test_a_memory_whose_lesson_was_forgotten_files_a_new_one(self, db):
+        from mnemos.consolidation.softening import _create_or_reinforce_lesson
+
+        rt = _runtime(db)
+        rt.introduce(agent_model="claude-opus-5")
+        memory_id, lesson_id = self._memory_with_lesson(rt, "Pin the parser before a release.")
+        rt.correct(correction="", target_id=lesson_id, action="forget")
+
+        again = _create_or_reinforce_lesson(rt._store.get_engram(memory_id), rt._store, {})
+
+        assert again and again != lesson_id
