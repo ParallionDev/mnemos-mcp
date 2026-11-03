@@ -190,27 +190,31 @@ Mnemos is built for continuity, and it works as memory too. We tested it on
 one person's real work, against the memory Claude Code already has, with the
 questions written before any run and the answers judged blind:
 
-| Test | Claude Code's own memory | With Mnemos | Cost with Mnemos |
-|:---|---:|---:|---:|
-| Three months of work, 30 tasks | 35% | 65% | 22% less |
-| Two years of work, 64 sealed questions | 14% | 41% | 8% less |
-| The same two years, with every tool it normally has | 22% | 38% | 39% less |
+| Test | Claude Code's own memory | With Mnemos |
+|:---|---:|---:|
+| Three months of work, 30 tasks | 35% | 65% |
+| Two years of work, 64 sealed questions | 14% | 41% |
+| The same two years, with every tool it normally has | 22% | 42% |
 
 <sub>Facts recalled, a partly right answer counting half, with the same model in
-every setup, in October 2026. Cost is what Claude Code reports for the model's
-use, at API prices. Claude Code's own memory is its CLAUDE.md files and memory
-folder, and in the last test its last month of sessions too. In the second test,
-every setup could open files but not search them.</sub>
+every setup, in October 2026. Claude Code's own memory is its CLAUDE.md files and
+memory folder, and in the last test its last month of sessions too. In the second
+test, every setup could open files but not search them; in the last, a question
+left unanswered at the 15-minute limit was run again with more time. Cost is what
+Claude Code reports for the model's use, at API prices.</sub>
 
 In the first test, judged blind side by side, Mnemos's answer was the better one
 on 24 of the 30 tasks and the built-in memory's on 4, and on decisions made
-together it recalled 83% against 13%. In the last, it also gave fewer wrong
-answers (7 against 12), and took two minutes a question instead of five.
+together it recalled 83% against 13%. It cost less in the first two tests, 22%
+and 8% less. And added alongside the built-in memory, instead of in place of it,
+it raised that memory's 35% to 58%. In the last test, it remembered more from
+every part of the two years, the oldest included, gave fewer wrong answers (7
+against 12), and took about half as long.
 
 What carries is the memory the agent keeps in its own words. In the last test,
 the same memories saved as plain files the agent could search did about as well
-as Mnemos, with 41% of the facts. Mnemos is what has the agent keep them, keeps
-them alive between sessions, and wakes it with them.
+as Mnemos, with 43% of the facts to its 42%. Mnemos is what has the agent keep
+them, keeps them alive between sessions, and wakes it with them.
 
 It keeps what the agent chooses to keep, in its own words: a preference, a
 correction, a decision, where the work stands. It doesn't index your documents
