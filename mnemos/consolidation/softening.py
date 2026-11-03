@@ -474,14 +474,15 @@ def _says_the_same(mine: str, theirs: str) -> bool:
 
 def _same_words(mine: str, theirs: str) -> bool:
     """Whether two texts are the same lesson for filing one under the other
-    with no one asked: the same words in the same order, ignoring case,
-    spacing and a closing full stop. Shared vocabulary, even with negation,
+    with no one asked: the same words in the same order and case, ignoring
+    only spacing and a closing full stop. Case can be the fact ("/srv/Prod"
+    and "/srv/prod" are different paths). Shared vocabulary, even with negation,
     numbers and names checked (_says_the_same), still merged lessons that say
     different things: "version 1.2" and "version 2.1", "Allow ..." and
     "Block ...", "after review" and "before review", "Alice must ..." and
     "Bob must ...". A near-duplicate lesson is the safe failure."""
     def plain(text: str) -> str:
-        return " ".join((text or "").split()).rstrip(".!").casefold()
+        return " ".join((text or "").split()).rstrip(".!")
 
     return bool(plain(mine)) and plain(mine) == plain(theirs)
 
@@ -731,11 +732,17 @@ def find_misfiled_distillations(
     """distilled_into links from this scope's memories that do not hold what they claim.
 
     A link is misfiled when the memory's impact is a placeholder the server
-    wrote, or when the lesson says something else: not the same lesson by
-    _same_lesson, the bar _create_or_reinforce_lesson applies before filing
-    anything. Links made before that bar existed were filed on any shared
+    wrote, or when the lesson says something else by _says_the_same: too few
+    shared words, or said the other way round ("Never ..." filed under
+    "Always ..."). Links made before that bar existed were filed on any shared
     word, and those made after #75 on one, and still carry recall's light at
     the weight of real evidence.
+
+    A partial, conservative repair, and looser than the bar new links are
+    filed by (_same_words): links filed under the old rules joined rewordings
+    of one lesson, which this keeps. It misses some it should catch: a
+    different version, verb, condition or sentence-initial name ("Alice
+    must ..." under "Bob must ...") reads as the same lesson here.
     """
     rows = store._get_conn().execute(
         """

@@ -60,7 +60,7 @@ def test_sharing_common_words_does_not_make_it_the_same_lesson(store):
 def test_the_same_lesson_said_again_is_reinforced(store):
     rendered = _lesson(store, "Verify the rendered result, not the declaration.")
     again = _fading(store, "fonts looked right in the inspector and wrong on screen",
-                    "verify the rendered  result, not the declaration")
+                    "Verify the rendered  result, not the declaration")
 
     assert _create_or_reinforce_lesson(again, store, {}) == rendered.id
     assert store.get_engram(rendered.id).strength == pytest.approx(0.9)

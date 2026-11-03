@@ -110,7 +110,7 @@ def test_the_same_lesson_in_the_same_words_is_reinforced(store):
     _soften(store)
     (lesson,) = _lessons(store)
 
-    again = _fade(store, "the chapter nine draft ran to forty pages", CHAPTERS.lower())
+    again = _fade(store, "the chapter nine draft ran to forty pages", "  " + CHAPTERS.rstrip("."))
     _soften(store)
 
     (after,) = _lessons(store)
