@@ -354,9 +354,11 @@ class Encoder:
                 pass  # Don't fail encoding if embedding fails
 
         # The edges existing memories hold toward this one (a reverse
-        # direction from the classifier), now that it is stored.
-        for source_id, edge in self._incoming.pop(engram.id, []):
+        # direction from the classifier), now that it is stored. Kept until
+        # saved, so a finish() that failed here can be run again.
+        for source_id, edge in self._incoming.get(engram.id, []):
             self._store.save_connection(source_id, edge)
+        self._incoming.pop(engram.id, None)
 
         # 9. Auto-publish to shared pool if applicable
         if self._shared_pool and should_auto_share(engram):

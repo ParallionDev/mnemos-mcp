@@ -406,11 +406,21 @@ def _reclassify_old_connections(
             # Find the existing connection to update
             for conn in raw_connections:
                 if conn.target_id == cls.candidate_id:
-                    # Update the connection type and strength
-                    conn.relation = cls.relation
-                    conn.strength = round(cls.confidence, 3)
-                    conn.formed_by = "consolidation_reclassified"
-                    store.save_connection(engram.id, conn)
+                    # The typed edge is saved from whichever memory the
+                    # classifier says is the source: a reverse verdict is the
+                    # other memory's edge toward this one, and was saved
+                    # pointing the wrong way. The mechanical row stays: a link
+                    # goes only by a verdict that says so (NONE, below).
+                    source, target = (
+                        (conn.target_id, engram.id) if cls.direction == "reverse"
+                        else (engram.id, conn.target_id)
+                    )
+                    store.save_connection(source, Connection(
+                        target_id=target,
+                        relation=cls.relation,
+                        strength=round(cls.confidence, 3),
+                        formed_by="consolidation_reclassified",
+                    ))
                     stats["connections_reclassified"] += 1
                     reclassified_count += 1
                     break
