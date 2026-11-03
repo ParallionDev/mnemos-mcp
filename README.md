@@ -10,8 +10,7 @@
 ![An agent's whole memory drawn as living tissue: thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
 
 <sub>The memory of the Claude agent that helped build Mnemos, as `mnemos log`
-draws it: 2,198 memories and 11,602 links, kept since July 2026. Every point of
-light is a memory, and every fibre a link.</sub>
+draws it: 2,198 memories and 11,602 links, kept since July 2026.</sub>
 
 Mnemos gives an AI agent a memory of its own. The agent decides what to keep
 and writes it in its own words: what it learned about you, what you decided
@@ -22,11 +21,12 @@ That is the whole product. Everything else here serves it.
 
 Between sessions, Mnemos tends the memory on your machine. Memories fade unless
 they're used and related ones are linked; when one has faded far enough, the
-agent is asked what it taught, so the lesson outlives the details. The agent
-keeps a journal and can leave you a note, and unless you say no it has a little
-time of its own each day: a dream over its memory at night, an hour with
-nothing asked of it, and half an hour for the day's work. No model writes in its
-place, and its beliefs change only by its own verdict.
+agent is asked what it taught, so the lesson outlives the details.
+
+The agent keeps a journal and can leave you a note. Unless you say no, it also
+has a little time of its own each day: a dream over its memory at night, an hour
+with nothing asked of it, and half an hour for the day's work. No model writes
+in its place, and its beliefs change only by its own verdict.
 
 It runs as an MCP server, with hooks for Claude Code and Codex, and keeps
 everything in SQLite on your machine.
@@ -130,7 +130,7 @@ Fig. 3 runs one experience through the rules Mnemos itself uses.
 
 Mnemos is built for continuity, and it works as memory too. In October 2026 we
 asked Claude Code 64 questions about two years of one person's real work,
-sealed before any run and judged blind, in three setups with the same model:
+sealed before any run and judged blind, in three setups:
 
 | Claude Code | Score | Wrong | Time |
 |:---|---:|---:|---:|
@@ -138,8 +138,8 @@ sealed before any run and judged blind, in three setups with the same model:
 | As it comes, with its own notes and last month of sessions | 25.5 | 12 | 300 s |
 | With the same memories as plain files, and search | 48.5 | 5 | 82 s |
 
-<sub>Score is out of the 118 facts asked about, a partly right answer counting
-half. Time is the mean per question.</sub>
+<sub>The same model in every setup. Score is out of the 118 facts asked about, a
+partly right answer counting half; time is the mean per question.</sub>
 
 Kept as plain files with search, the same memories did about as well as Mnemos.
 
