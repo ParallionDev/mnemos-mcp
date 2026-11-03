@@ -112,3 +112,40 @@ def test_a_memory_reinforces_its_lesson_once_not_every_cycle(runtime):
     runtime.maintain()
 
     assert lesson_strength() == pytest.approx(first)
+
+
+@pytest.mark.parametrize("first, then", [
+    ("Always deploy production changes on Friday.", "Never deploy production changes on Friday."),
+    ("Deploy production changes on Friday.", "Don't deploy production changes on Friday."),
+    ("Pin the parser to version 2.1 before release.", "Pin the parser to version 3.0 before release."),
+    ("Ask Mara before changing the release checklist.", "Ask Theo before changing the release checklist."),
+    ("Squash the commits before merging the branch.", "Squash the commits before merging the branch unless review asked otherwise."),
+])
+def test_a_lesson_said_the_other_way_is_its_own(store, first, then):
+    """The same distinctive words, turned around or pinned to something else:
+    filing the second under the first made a memory strengthen the opposite of
+    what it taught, and recall offer it first."""
+    earlier = _lesson(store, first)
+    memory = _fading(store, "what happened this time", then)
+    stats: dict = {}
+
+    lesson_id = _create_or_reinforce_lesson(memory, store, stats)
+
+    assert lesson_id != earlier.id
+    assert store.get_engram(lesson_id).content == then
+    assert stats == {"lessons_created": 1}
+    assert store.get_engram(earlier.id).strength == pytest.approx(0.8)
+
+
+def test_a_memory_filed_under_the_opposite_is_found_for_repair(store):
+    from mnemos.consolidation.softening import find_misfiled_distillations
+    from mnemos.core.engram import Connection
+
+    always = _lesson(store, "Always deploy production changes on Friday.")
+    never = _fading(store, "friday deploy broke prod", "Never deploy production changes on Friday.")
+    never.connections.append(Connection(target_id=always.id, relation=ConnectionRelation.DISTILLED_INTO))
+    store.save_engram(never)
+
+    misfiled = find_misfiled_distillations(store, "default", "user", "global")
+
+    assert {"source_id": never.id, "target_id": always.id, "reason": "unrelated"} in misfiled

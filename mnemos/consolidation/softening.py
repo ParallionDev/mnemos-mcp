@@ -414,6 +414,55 @@ def _same_lesson(mine: set[str], theirs: set[str]) -> bool:
     return bool(mine) and mine == theirs
 
 
+# The words that turn a lesson around or pin it down, which distinctive_terms
+# leaves out as common or too short: "Always deploy on Friday." and "Never
+# deploy on Friday." have the same distinctive words, and were filed as one
+# lesson, the second strengthening the first. "don't" splits into "don" and
+# "t", so "t" is a negation here.
+_NEGATIONS = frozenset("""
+    not no never none nothing nobody nowhere neither nor without cannot t
+    dont doesnt didnt cant wont isnt arent wasnt werent shouldnt wouldnt couldnt
+    mustnt hasnt havent hadnt neednt
+""".split())
+_QUANTIFIERS = frozenset("always never only sometimes usually often rarely seldom".split())
+_CONDITIONS = frozenset("if unless except until".split())
+_WORD = re.compile(r"[^\W_]+")
+
+
+def _specifics(text: str) -> tuple[bool, frozenset[str], frozenset[str], frozenset[str], frozenset[str]]:
+    """What a lesson must agree on with another to be the same lesson: whether
+    it is negated, its quantifiers, its conditions, its numbers (versions and
+    dates among them) and the names in it (a capitalised word that does not
+    begin a sentence)."""
+    words = [w.lower() for w in _WORD.findall(text or "")]
+    names = set()
+    for found in _WORD.finditer(text or ""):
+        word = found.group()
+        before = (text[: found.start()].rstrip() or ".")[-1]
+        if len(word) > 1 and word[0].isupper() and before not in ".!?:;\"'(":
+            names.add(word.lower())
+    return (
+        any(w in _NEGATIONS for w in words),
+        frozenset(w for w in words if w in _QUANTIFIERS),
+        frozenset(w for w in words if w in _CONDITIONS),
+        frozenset(w for w in words if any(c.isdigit() for c in w)),
+        frozenset(names),
+    )
+
+
+def _says_the_same(mine: str, theirs: str) -> bool:
+    """Whether two texts are the same lesson: _same_lesson by their distinctive
+    words, and agreeing on everything that can turn a lesson around or pin it
+    down (_specifics). One said the other way round, for another version or
+    another person, or under another condition, is a lesson of its own. A
+    missed merge leaves a near-duplicate; a false one makes a memory
+    strengthen the opposite of what it taught."""
+    return (
+        _same_lesson(distinctive_terms(mine), distinctive_terms(theirs))
+        and _specifics(mine) == _specifics(theirs)
+    )
+
+
 def _create_or_reinforce_lesson(
     engram: Any,
     store: EngramStore,
@@ -469,7 +518,7 @@ def _create_or_reinforce_lesson(
             lesson = store.get_engram(conn.target_id)
             if (
                 lesson is not None and lesson.author_kind == "agent"
-                and _same_lesson(mine, distinctive_terms(lesson.content))
+                and _says_the_same(impact_text, lesson.content)
             ):
                 return lesson.id
 
@@ -495,8 +544,8 @@ def _create_or_reinforce_lesson(
             continue
         if candidate.author_kind != "agent":
             continue  # a tool's "lesson" is not strengthened by the agent's evidence
-        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _same_lesson(
-            mine, distinctive_terms(candidate.content)
+        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _says_the_same(
+            impact_text, candidate.content
         ):
             # Reinforce existing lesson. Not an access: maintenance reading its
             # own lessons is not the agent reading them, and counting it made
@@ -678,10 +727,7 @@ def find_misfiled_distillations(
     for row in rows:
         if is_templated(row["impact"], row["impact_source"]):
             reason = "placeholder"
-        elif not _same_lesson(
-            distinctive_terms(row["impact"] or row["source_content"] or ""),
-            distinctive_terms(row["lesson"] or ""),
-        ):
+        elif not _says_the_same(row["impact"] or row["source_content"] or "", row["lesson"] or ""):
             reason = "unrelated"
         else:
             continue
