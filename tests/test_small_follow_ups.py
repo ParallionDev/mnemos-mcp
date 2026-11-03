@@ -193,6 +193,9 @@ def meaning(monkeypatch):
 # ── 1. A skip holds across both passes ──
 
 HARBOUR = "The harbour pilot boards every ship at the outer buoy, whatever the weather."
+# An experience, not a fact: a fading fact is asked "still true?", an
+# experience what it taught (_classify_kind reads "fixed" as one).
+HARBOUR_DAY = "We fixed the pilot ladder at the outer buoy before the storm came in."
 
 
 def _fade(db: Path, memory: str, accessibility: float = 0.1) -> None:
@@ -238,7 +241,7 @@ def test_a_skipped_lesson_question_is_never_asked_again_as_what_it_changed(tmp_p
     db = tmp_path / "memory.db"
     rt = _runtime(db)
     try:
-        memory = _memory_id(rt.capture(HARBOUR))
+        memory = _memory_id(rt.capture(HARBOUR_DAY))
     finally:
         rt.close()
     _fade(db, memory)
