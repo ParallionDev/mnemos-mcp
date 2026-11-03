@@ -190,16 +190,17 @@ Mnemos is built for continuity, and it works as memory too. We tested it on
 one person's real work, against the memory Claude Code already has, with the
 questions written before any run and the answers judged blind:
 
-| Test | Claude Code's own memory | With Mnemos |
-|:---|---:|---:|
-| Three months of work, 30 tasks | 35% | 65% |
-| Two years of work, 64 sealed questions | 14% | 41% |
-| The same two years, with every tool it normally has | 22% | 38% |
+| Test | Claude Code's own memory | With Mnemos | Cost with Mnemos |
+|:---|---:|---:|---:|
+| Three months of work, 30 tasks | 35% | 65% | 22% less |
+| Two years of work, 64 sealed questions | 14% | 41% | 8% less |
+| The same two years, with every tool it normally has | 22% | 38% | 39% less |
 
 <sub>Facts recalled, a partly right answer counting half, with the same model in
-every setup, in October 2026. Claude Code's own memory is its CLAUDE.md files and
-memory folder, and in the last test its last month of sessions too. In the second
-test, every setup could open files but not search them.</sub>
+every setup, in October 2026. Cost is what Claude Code reports for the model's
+use, at API prices. Claude Code's own memory is its CLAUDE.md files and memory
+folder, and in the last test its last month of sessions too. In the second test,
+every setup could open files but not search them.</sub>
 
 In the first test, judged blind side by side, Mnemos's answer was the better one
 on 24 of the 30 tasks and the built-in memory's on 4, and on decisions made
