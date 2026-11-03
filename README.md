@@ -117,8 +117,10 @@ A memory fades unless it's used. Every four hours it gets a little harder to
 reach, more slowly the more settled it is and the more it's linked, and each
 recall brings it back and leaves it slower to fade. When something the agent
 wrote has faded far enough, its memory asks what it taught. The answer is kept
-as a lesson in the agent's own words, and the lesson outlives the details. The
-figure runs one memory through the rules Mnemos itself uses.
+as a lesson in the agent's own words, and the lesson outlives the details. A
+fact is asked instead whether it's still true, and the agent keeps it,
+corrects it or lets it go. The figure runs one experience through the rules
+Mnemos itself uses.
 
 ## What it is, and what it isn't
 
