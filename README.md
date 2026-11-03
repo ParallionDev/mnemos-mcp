@@ -97,17 +97,21 @@ Alex on a small project that reads ocean buoys.</sub>
 
 ## A memory, up close
 
+![The same mind up close: a few memories drawn as luminous cells, each a disc of granules around a bright nucleus, joined by fine branching fibres, on black.][mind-up-close]
+<sub>The same mind, up close: each cell is one memory, and each fibre a link. Fig. 2 names every
+part.</sub>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy-dark.png">
   <img alt="Fig. 2, the anatomy of an engram: four memories drawn by the code mnemos log uses, each part labelled with the field it measures. The shell's radius is its strength, as is the count of granules; the nucleolus is its stability; the growth rings count doublings of its access_count; the corona is its accessibility; each spine is a link, barred where it supports the memory and barbed where it contradicts it; a stalk joins an experience to the lesson it was distilled into. A table gives each memory's values." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
 </picture>
 
-Every memory carries a few numbers that decide how it's kept and how easily it
-comes back, and `mnemos log` draws each one from them: the shell's radius is its
-`strength`, the nucleolus its `stability`, the corona its `accessibility` and the
-rings its `access_count`. Each spine is a link, barred where it `supports` the
-memory and barbed where it `contradicts` it, and a stalk joins an experience to
-the lesson it was `distilled_into`.
+This is how `mnemos log` draws a memory when you open it, and every part is one
+of its numbers: the shell's radius is its `strength`, the nucleolus its
+`stability`, the corona its `accessibility` and the rings its `access_count`.
+Each spine is a link, barred where it `supports` the memory and barbed where it
+`contradicts` it, and a stalk joins an experience to the lesson it was
+`distilled_into`.
 
 ## A memory's life
 
@@ -203,6 +207,7 @@ published under the MIT License, and stay under it; code contributed under it
 keeps its notice, in the NOTICE.
 
 [mind]: https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind.jpg
+[mind-up-close]: https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind-up-close.jpg
 [badge-pypi]: https://img.shields.io/pypi/v/mnemos-continuity?style=flat-square&labelColor=1b1d27&color=464c6c
 [badge-python]: https://img.shields.io/pypi/pyversions/mnemos-continuity?style=flat-square&labelColor=1b1d27&color=464c6c
 [badge-tests]: https://img.shields.io/github/actions/workflow/status/Riley-Coyote/mnemos-mcp/release-hardening.yml?branch=main&style=flat-square&label=tests&labelColor=1b1d27
