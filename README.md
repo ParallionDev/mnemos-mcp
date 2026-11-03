@@ -129,17 +129,19 @@ Fig. 3 runs one experience through the rules Mnemos itself uses.
 ## How well it remembers
 
 Mnemos is built for continuity, and it works as memory too. In October 2026 we
-tested it on 64 questions about two years of one person's real work, sealed
-before any run and judged blind, with the same model in every setup:
+asked Claude Code 64 questions about two years of one person's real work,
+sealed before any run and judged blind, in three setups with the same model:
 
-| Setup | Score, of 118 facts | Wrong answers | Time per question |
+| Claude Code | Score | Wrong | Time |
 |:---|---:|---:|---:|
-| Claude Code with Mnemos | 45 | 7 | 119 s |
-| Claude Code as it comes, with its own notes and its last month of sessions | 25.5 | 12 | 300 s |
-| Claude Code with the same memories as plain files, and search | 48.5 | 5 | 82 s |
+| With Mnemos | 45 | 7 | 119 s |
+| As it comes, with its own notes and last month of sessions | 25.5 | 12 | 300 s |
+| With the same memories as plain files, and search | 48.5 | 5 | 82 s |
 
-A partly right answer counts half. Kept as plain files with search, the same
-memories did about as well as Mnemos.
+<sub>Score is out of the 118 facts asked about, a partly right answer counting
+half. Time is the mean per question.</sub>
+
+Kept as plain files with search, the same memories did about as well as Mnemos.
 
 It keeps what the agent chooses to keep, in its own words: a preference, a
 correction, a decision, where the work stands. It doesn't index your documents
@@ -164,7 +166,10 @@ short excerpts of its recent memory, its wake, and whatever it reads or recalls.
 Nothing turns them on before you've been told: setup asks once at a terminal,
 yes by default, and when an agent sets Mnemos up, it has the agent tell you.
 With no `claude` command they stay off. To turn them off:
-`mnemos daemon uninstall --hours --write`.
+
+```bash
+mnemos daemon uninstall --hours --write
+```
 
 [Privacy and security][privacy] lists each one, and how to turn it off.
 
