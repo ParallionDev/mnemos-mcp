@@ -2896,8 +2896,9 @@ class MnemosRuntime:
             )
         lines.append(
             "Then tell the human what you will remember, and that they can see all of "
-            "it on a page you'll open for them whenever they ask. This reminder "
-            "disappears once setup is complete."
+            "it on a page you'll open for them whenever they ask. If you knew them "
+            "before, say plainly that from now on you remember across sessions too. "
+            "This reminder disappears once setup is complete."
         )
         return "\n".join(lines)
 

@@ -217,6 +217,20 @@ def test_an_agent_that_already_knows_its_person_is_not_told_they_are_strangers(l
     assert "5. Call mnemos_introduce" in packet
 
 
+def test_an_agent_that_introduced_itself_first_still_says_it_now_remembers(launchd, claude):
+    """An agent may introduce itself before it reads its memory, and then wakes
+    to the shorter reminder: it, too, says so to someone it already knew."""
+    runtime = _runtime()
+    try:
+        runtime.introduce(agent_model=OPUS)
+        packet = runtime.context()
+    finally:
+        runtime.close()
+    assert packet.startswith("ONBOARDING - almost done"), packet
+    assert "If you already know one, capture it instead of asking." in packet
+    assert "from now on you remember across sessions too" in packet
+
+
 def test_the_setup_part_never_costs_the_packet(claude_code, launchd, claude, monkeypatch):
     def broken(db_path):
         raise RuntimeError("settings unreadable")
