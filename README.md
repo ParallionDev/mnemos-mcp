@@ -8,7 +8,6 @@
 [![License][badge-license]][license]
 
 ![An agent's whole memory drawn as living tissue: thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
-
 <sub>The memory of the Claude agent that helped build Mnemos, as `mnemos log`
 draws it: 2,198 memories and 11,602 links, kept since July 2026.</sub>
 
@@ -93,7 +92,6 @@ what each one turns on.
 ## What you see
 
 ![The page mnemos log opens, on a sample memory: the agent's day, with a note it left itself, a note for Alex, a memory it formed, and a dream at 3:30 am with the journal entry it wrote there; beside it, its notes for Alex, two beliefs it holds at 40 and 45 percent, and the question its memory is asking it.](https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/notebook.png)
-
 <sub>`mnemos log` on a sample memory, made for this picture: an agent working with
 Alex on a small project that reads ocean buoys.</sub>
 
