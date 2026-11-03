@@ -7,23 +7,29 @@
 [![Tests][badge-tests]][tests]
 [![License][badge-license]][license]
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-memory-dark.png">
-  <img alt="Plate I, the memory of one agent: 2,226 memories and 11,766 links, as the Claude agent that helped build Mnemos kept them on 2 November 2026, engraved where its page lays them out and seen through a lens focused on the mind's middle. In focus, each memory is a small shell, sized by its strength, round for a lesson and a drop for the rest; in front of the focus and behind it, memories are stipple. Hairlines join linked memories into lobes, and a few marked links cross between them: a bar where one memory supports another, a barb where it contradicts it. A ring marked II shows the field that Plate II enlarges." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-memory.png">
-</picture>
+![An agent's whole memory drawn as living tissue: thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
 
-Mnemos gives an AI agent the thing it otherwise cannot have: a sense of being
-someone who persists. At the start of a session it reads its own words about
-its own experience back to itself — what it learned about you, what you
-decided together, what it got wrong last time — before you say anything.
+<sub>The memory of the Claude agent that helped build Mnemos, as `mnemos log`
+draws it: 2,198 memories and 11,602 links, kept since July 2026. Every point of
+light is a memory, and every fibre a link.</sub>
 
-That is the whole product. Everything else in here serves it.
+Mnemos gives an AI agent a memory of its own. The agent decides what to keep
+and writes it in its own words: what it learned about you, what you decided
+together, what it got wrong last time. Each session begins with the agent
+reading that back, before you say anything.
 
-Between your conversations it keeps living a little. It keeps a journal and
-can leave you a note, and unless you say no it has an hour a day that's its
-own, half an hour for the day's work, and a short time each night to dream
-over its memory. Only the agent writes its journal and its notes, and no model
-writes in its place: its beliefs move only by its own verdict.
+That is the whole product. Everything else here serves it.
+
+Between sessions, Mnemos tends the memory on your machine. Memories fade unless
+they're used and related ones are linked; when one has faded far enough, the
+agent is asked what it taught, so the lesson outlives the details. The agent
+keeps a journal and can leave you a note, and unless you say no it has a little
+time of its own each day: a dream over its memory at night, an hour with
+nothing asked of it, and half an hour for the day's work. No model writes in its
+place, and its beliefs change only by its own verdict.
+
+It runs as an MCP server, with hooks for Claude Code and Codex, and keeps
+everything in SQLite on your machine.
 
 ## Quick start
 
@@ -36,16 +42,10 @@ mnemos mcp install claude-code --write
 mnemos hooks install claude-code --write
 ```
 
-Then start Claude Code: it wakes with its memory, and the memory tools are
-there. Its first session starts by making sure the memory carries. If
-something isn't set up yet, it says so plainly and sets it up itself with your
-yes. Then it gets to know you.
-
-Mnemos needs Python 3.10 or newer. Install it somewhere it will stay: the
-hooks call the `mnemos` that set them up, by its full path. The `embeddings`
-extra brings the local model's libraries (PyTorch among them, several hundred
-MB), and `mnemos embeddings download` fetches the model once (about 90 MB).
-Without it Mnemos still works, but recall matches words only.
+Then start Claude Code. It wakes with its memory, and the memory tools are
+there. Its first session makes sure the memory carries: if anything isn't set
+up yet, it says so plainly and, with your yes, sets it up. Then it gets to know
+you.
 
 | Client | Setup |
 |---|---|
@@ -54,28 +54,34 @@ Without it Mnemos still works, but recall matches words only.
 | Cursor, or any MCP client | `mnemos mcp install cursor` or `mnemos mcp install generic` |
 | Hermes | `mnemos hermes quickstart --agent-safe` |
 
-[The guide][guide] has every path, and what each one turns on. Mnemos runs on
-macOS and Linux; on Windows the memory and its tools work, and the scheduled
-parts need macOS or Linux.
+Mnemos needs Python 3.10 or newer. Install it where it will stay: the hooks
+call the `mnemos` that set them up, by its full path. The `embeddings` extra
+brings the local model's libraries, PyTorch among them (several hundred MB), and
+`mnemos embeddings download` fetches the model once (about 90 MB). Without it,
+Mnemos still works, but recall matches words only.
+
+It runs on macOS and Linux. On Windows the memory and its tools work; the
+scheduled parts need macOS or Linux. [The guide][guide] has every setup, and
+what each one turns on.
 
 ## What it does
 
 - **It wakes with its memory.** Each session starts with what the agent kept:
-  what it learned about you, what you decided together, the note it left for
-  whoever came next. In Claude Code and Codex a hook puts it there before the
-  first turn, and again after compaction.
-- **What bears on a message comes up.** In Claude Code, a message you send can
-  bring up to three memories that may bear on it, one line each. Most bring
-  nothing.
+  what it learned about you, what you decided together, and the note it left
+  for whoever came next. In Claude Code and Codex, a hook puts it there before
+  the first turn, and again after compaction.
+- **What bears on a message comes up.** In Claude Code, each message you send
+  can bring up to three memories that may bear on it, one line each. Most bring
+  none.
 - **It keeps its memory in its own words.** Twelve tools: it keeps what's
-  durable, recalls, corrects what turned out wrong, and answers what its
-  memory asks it. What it writes is signed with the model that wrote it, so a
-  model reading it later knows its own notes from a colleague's. Your words
-  stay yours.
-- **It lives between sessions.** Every four hours memories fade a little with
-  time and related ones are linked, and a deeper pass runs each night. With no
-  model chosen for Mnemos, all of it runs on your machine.
-- **You can see it.** `mnemos log` opens a small page on your own machine: the
+  durable, recalls, corrects what turned out wrong, and answers what its memory
+  asks. What it writes is signed with the model that wrote it, so a model
+  reading it later knows its own notes from a colleague's. Your words stay
+  yours.
+- **It lives between sessions.** Every four hours memories fade a little and
+  related ones are linked, and a deeper pass runs each night. With no model
+  chosen for Mnemos, all of it runs on your machine.
+- **You can see it.** `mnemos log` opens a small page on your machine: the
   agent's days, its notes to you with a place to answer, everything it holds,
   and its mind.
 
@@ -91,31 +97,19 @@ parts need macOS or Linux.
 <sub>`mnemos log` on a sample memory, made for this picture: an agent working with
 Alex on a small project that reads ocean buoys.</sub>
 
-![The mind view of mnemos log: an agent's whole memory as thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
-
-<sub>The page's own view of the memory Plate I engraves: every point of light is
-a memory, and every fibre a link.</sub>
-
 ## A memory, up close
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-up-close-dark.png">
-  <img alt="Plate II, memories up close: the field marked II on Plate I, enlarged 6.5 times as a round field under the lens. Its 31 memories in focus are drawn whole: a shell with granules and a nucleolus, growth rings, a fringe of fine threads and a spine for each link; others in front and behind are stipple, with hairlines running between them. Four are lettered, with their values beside them. a, a lesson kept from experience b: strength 0.78, stability 1.00, accessibility 0.36, not recalled yet, 5 links. b, an experience: strength 0.51, stability 1.00, accessibility 0.11, not recalled yet, 3 links. c, an experience: strength 0.46, stability 1.00, accessibility 0.64, recalled twice, 13 links. d, an experience: strength 0.57, stability 1.00, accessibility 0.73, recalled once, 14 links. A small map of Plate I shows where the field lies." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-up-close.png">
-</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy-dark.png">
   <img alt="Fig. 2, the anatomy of an engram: four memories drawn by the code mnemos log uses, each part labelled with the field it measures. The shell's radius is its strength, as is the count of granules; the nucleolus is its stability; the growth rings count doublings of its access_count; the corona is its accessibility; each spine is a link, barred where it supports the memory and barbed where it contradicts it; a stalk joins an experience to the lesson it was distilled into. A table gives each memory's values." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
 </picture>
 
-Plate II enlarges a small field of Plate I: the memories in it are real, and the
-values beside them are their own. Fig. 2 names the parts. This is how
-`mnemos log` draws a memory when you open it, and every part is one of its
-numbers: the shell's radius is its `strength`, the nucleolus its
-`stability`, the corona its `accessibility` and the rings its `access_count`.
-Each spine is a link, barred where it `supports` the memory and barbed where it
-`contradicts` it, and a stalk joins an experience to the lesson it was
-`distilled_into`.
+Every memory carries a few numbers that decide how it's kept and how easily it
+comes back, and `mnemos log` draws each one from them: the shell's radius is its
+`strength`, the nucleolus its `stability`, the corona its `accessibility` and the
+rings its `access_count`. Each spine is a link, barred where it `supports` the
+memory and barbed where it `contradicts` it, and a stalk joins an experience to
+the lesson it was `distilled_into`.
 
 ## A memory's life
 
@@ -125,38 +119,39 @@ Each spine is a link, barred where it `supports` the memory and barbed where it
 </picture>
 
 A memory fades unless it's used. Every four hours it gets a little harder to
-reach, more slowly the more settled it is and the more it's linked, and each
-recall brings it back and leaves it slower to fade. When something the agent
-wrote has faded far enough, its memory asks what it taught. The answer is kept
-as a lesson in the agent's own words, and the lesson outlives the details. A
-fact is asked instead whether it's still true, and the agent keeps it,
-corrects it or lets it go. The figure runs one experience through the rules
-Mnemos itself uses.
+reach, more slowly the more settled and linked it is, and each recall brings it
+back and leaves it slower to fade. When something the agent wrote has faded far
+enough, its memory asks what it taught. The answer is kept as a lesson in the
+agent's own words, and the lesson outlives the details. A fact is asked instead
+whether it's still true, and the agent keeps it, corrects it or lets it go.
+Fig. 3 runs one experience through the rules Mnemos itself uses.
 
-## What it is, and what it isn't
+## How well it remembers
 
-Mnemos is built for continuity: an agent that carries you, your work and
-itself from one session to the next. It works as memory too.
+Mnemos is built for continuity, and it works as memory too. In October 2026 we
+tested it on 64 questions about two years of one person's real work, sealed
+before any run and judged blind, with the same model in every setup:
 
-In October 2026 we tested it on 64 questions about two years of one person's
-real work, sealed before any run and judged blind. Claude Code with Mnemos
-scored 45 of the 118 facts asked about (a partly right answer counts half),
-with 7 wrong answers, in about 2 minutes a question. Claude Code as it comes,
-with its own notes and its last month of sessions, scored 25.5, with 12 wrong,
-in about 5 minutes. The same two years of memories kept as plain files, with
-search, did about as well as Mnemos: 48.5, with 5 wrong.
+| Setup | Score, of 118 facts | Wrong answers | Time per question |
+|:---|---:|---:|---:|
+| Claude Code with Mnemos | 45 | 7 | 119 s |
+| Claude Code as it comes, with its own notes and its last month of sessions | 25.5 | 12 | 300 s |
+| Claude Code with the same memories as plain files, and search | 48.5 | 5 | 82 s |
+
+A partly right answer counts half. Kept as plain files with search, the same
+memories did about as well as Mnemos.
 
 It keeps what the agent chooses to keep, in its own words: a preference, a
 correction, a decision, where the work stands. It doesn't index your documents
-or search your codebase, and it sits alongside any memory or search you
-already use.
+or search your codebase, and it sits alongside any memory or search you already
+use.
 
 ## What leaves your machine
 
-Local SQLite. No account, no API key, no service of its own. Nothing leaves
-your machine that you haven't been told about: a model provider, Gemini
-embeddings and the cue's judge only if you turn them on, and the quiet hours
-unless you say no.
+Local SQLite. No account, no API key, no service of its own. Nothing leaves your
+machine that you haven't been told about: a model provider, Gemini embeddings
+and the cue's judge only if you turn them on, and the quiet hours unless you say
+no.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/map-dark.png">
@@ -165,9 +160,9 @@ unless you say no.
 
 The quiet hours run your own Claude Code on its own, on your Claude plan, so
 what the agent thinks over in them goes to Anthropic: its words for the hour,
-short excerpts of its recent memory, its wake, and whatever it reads or
-recalls. Nothing turns them on before you've been told: setup asks once at a
-terminal, yes by default, and set up by an agent, it has the agent tell you.
+short excerpts of its recent memory, its wake, and whatever it reads or recalls.
+Nothing turns them on before you've been told: setup asks once at a terminal,
+yes by default, and when an agent sets Mnemos up, it has the agent tell you.
 With no `claude` command they stay off. To turn them off:
 `mnemos daemon uninstall --hours --write`.
 
@@ -186,12 +181,12 @@ With no `claude` command they stay off. To turn them off:
   built the way it is.
 - **[Changelog][changelog]**
 
-## Taking it out
+## Uninstall
 
 `mnemos uninstall` says what it would remove, and `mnemos uninstall --write`
 removes it: its hooks, its server entries for Claude Code, Codex and Claude
-Desktop, and its scheduled jobs. The memories stay, in `~/.mnemos`; they're
-the agent's, so deleting them is left to you.
+Desktop, and its scheduled jobs. The memories stay, in `~/.mnemos`. They're the
+agent's, so deleting them is left to you.
 
 ## Contributing
 
