@@ -258,12 +258,22 @@ def run_connection_discovery(
 
                 strength = min(0.95, cls.confidence + 0.05 * tag_overlap)
 
-                engram.add_connection(
-                    target_id=cls.candidate_id,
-                    relation=cls.relation,
-                    strength=round(strength, 3),
-                    formed_by="consolidation",
-                )
+                if cls.direction == "reverse":
+                    # The existing memory is the source ("it caused this one"):
+                    # the edge is its own, not this memory's toward it.
+                    store.save_connection(cls.candidate_id, Connection(
+                        target_id=engram.id,
+                        relation=cls.relation,
+                        strength=round(strength, 3),
+                        formed_by="consolidation",
+                    ))
+                else:
+                    engram.add_connection(
+                        target_id=cls.candidate_id,
+                        relation=cls.relation,
+                        strength=round(strength, 3),
+                        formed_by="consolidation",
+                    )
                 stats["connections_created"] += 1
         else:
             # Fallback when no LLM client is available: FTS keyword overlap
