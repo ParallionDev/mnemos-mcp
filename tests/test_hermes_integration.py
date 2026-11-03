@@ -617,3 +617,55 @@ def test_durable_memories_do_not_leak_between_people_sharing_an_agent(tmp_path, 
         )
     finally:
         other_project.close()
+
+
+def test_prefetch_never_serves_what_was_forgotten_since(tmp_path):
+    """prefetch cached by session and query, and nothing cleared it: after a
+    forget, the same query in the same session returned the forgotten words."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        assert "ZEBRA4471" in provider.prefetch("studio door code")
+        provider.handle_tool_call("mnemos_identity_correct",
+                                  {"query": "studio door code ZEBRA4471", "action": "forget"})
+        assert "ZEBRA4471" not in provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+
+def test_prefetch_sees_another_process_forget(tmp_path):
+    from mnemos.simple_runtime import MnemosRuntime
+
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        assert "ZEBRA4471" in provider.prefetch("studio door code")
+        scope = provider.scope
+        other = MnemosRuntime(db_path=str(tmp_path / "mnemos.db"), agent_id=scope.agent_id,
+                              person_id=scope.person_id, project_scope=scope.project_scope)
+        other.correct("", query="studio door code ZEBRA4471", action="forget")
+        other.close()
+        assert "ZEBRA4471" not in provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+
+def test_a_mirrored_replace_supersedes_what_it_replaced(tmp_path):
+    """Hermes's replace names the old entry by a piece of its text
+    (metadata old_text). It was captured beside the old one, both in use."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Fly.io.",
+                                 metadata={"old_text": "billing service deploys to Vercel"})
+        recalled = provider._runtime.recall("billing service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "Fly.io" in recalled
+    assert "Vercel" not in recalled

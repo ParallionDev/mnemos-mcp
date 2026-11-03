@@ -194,7 +194,10 @@ class MnemosMemoryProviderCore:
         self._scope: HermesScope | None = None
         self._runtime: MnemosRuntime | None = None
         self._session_id = ""
-        self._prefetch_cache: dict[str, tuple[str, str]] = {}
+        # What prefetch last recalled for each session: the query, the store's
+        # revision then (_store_revision), and the context. A write here
+        # clears it; another process's write changes the revision.
+        self._prefetch_cache: dict[str, tuple[str, int | None, str]] = {}
         self._writes_enabled = True
         self._turn_count = 0
 
@@ -265,22 +268,31 @@ class MnemosMemoryProviderCore:
         if not clean:
             return ""
         cache_key = session_id or self._session_id or self.scope.session_id
+        revision = self._store_revision()
         cached = self._prefetch_cache.get(cache_key)
-        if cached and cached[0] == clean:
-            return cached[1]
+        if cached and cached[0] == clean and revision is not None and cached[1] == revision:
+            return cached[2]
         recalled = self._runtime.recall(clean, max_results=self._config.max_recall_results)
         if "No relevant continuity found" in recalled:
             return ""
         context = _truncate("# Mnemos Recall\n" + recalled, self._config.max_context_chars)
-        self._prefetch_cache[cache_key] = (clean, context)
+        self._prefetch_cache[cache_key] = (clean, revision, context)
         return context
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
-        context = self.prefetch(query, session_id=session_id)
-        if not context:
-            return
-        cache_key = session_id or self._session_id or self.scope.session_id
-        self._prefetch_cache[cache_key] = (_clean_text(query), context)
+        self.prefetch(query, session_id=session_id)
+
+    def _store_revision(self) -> int | None:
+        """The store's revision as this provider's connection sees it: SQLite's
+        data_version, which moves when another connection commits. A cached
+        recall from an older revision may hold what was since forgotten or
+        corrected elsewhere. None when it can't be read: then nothing cached
+        is trusted."""
+        try:
+            self._runtime._ensure_init()
+            return int(self._runtime._store._get_conn().execute("PRAGMA data_version").fetchone()[0])
+        except Exception:
+            return None
 
     def sync_turn(
         self,
@@ -377,9 +389,17 @@ class MnemosMemoryProviderCore:
             f"Mirrored from Hermes built-in {target} memory. "
             f"Metadata: {json.dumps(metadata or {}, sort_keys=True, default=str)}"
         )
-        if action in {"add", "replace"}:
+        old = _clean_text((metadata or {}).get("old_text"))
+        if action == "replace" and old:
+            # Hermes names the entry it replaced by a piece of its text. The
+            # memory mirrored from it is corrected to the new words, not left
+            # in use beside them; with none matching, the words are kept as new.
+            self._prefetch_cache.clear()
+            self._runtime.correct(clean, query=old, action="update")
+        elif action in {"add", "replace"}:
             self._capture(clean, context=context, importance="high" if target == "user" else "auto")
         elif action in {"remove", "delete", "forget"}:
+            self._prefetch_cache.clear()
             self._runtime.correct("", query=clean, action="forget")
 
     def get_config_schema(self) -> list[dict[str, Any]]:
@@ -436,6 +456,8 @@ class MnemosMemoryProviderCore:
     def _tool_correct(self, args: dict[str, Any]) -> str:
         self._ensure_runtime()
         assert self._runtime is not None
+        # What prefetch recalled may be what this corrects or forgets.
+        self._prefetch_cache.clear()
         result = self._runtime.correct(
             correction=_clean_text(args.get("correction")),
             target_id=_clean_text(args.get("target_id")),
@@ -469,6 +491,7 @@ class MnemosMemoryProviderCore:
     def _capture(self, content: str, context: str = "", importance: str | float = "auto") -> str:
         self._ensure_runtime()
         assert self._runtime is not None
+        self._prefetch_cache.clear()
         return self._runtime.capture(content, context=context, importance=importance)
 
     def _queue_review_item(self, content: str, *, reason: str, context: str = "") -> str:
