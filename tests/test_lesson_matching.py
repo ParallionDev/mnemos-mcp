@@ -149,3 +149,14 @@ def test_a_memory_filed_under_the_opposite_is_found_for_repair(store):
     misfiled = find_misfiled_distillations(store, "default", "user", "global")
 
     assert {"source_id": never.id, "target_id": always.id, "reason": "unrelated"} in misfiled
+
+
+@pytest.mark.parametrize("first, then", [
+    ("Pin Python before a release.", "pin python before a release."),
+    ("- Always verify the rendered page before shipping.", "Always verify the rendered page before shipping."),
+])
+def test_casing_and_bullets_are_not_another_name(store, first, then):
+    earlier = _lesson(store, first)
+    memory = _fading(store, "what happened this time", then)
+
+    assert _create_or_reinforce_lesson(memory, store, {}) == earlier.id

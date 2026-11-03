@@ -186,6 +186,10 @@ def _tags_for(text: str, *extra: str) -> list[str]:
     return sorted(tags)
 
 
+
+# How a memory mirrored from Hermes's built-in memory begins its context.
+_MIRROR_MARK = "Mirrored from Hermes built-in"
+
 class MnemosMemoryProviderCore:
     """Hermes-compatible provider implementation without importing Hermes."""
 
@@ -338,6 +342,7 @@ class MnemosMemoryProviderCore:
         interval = self._config.maintenance_interval
         if interval and self._turn_count > 0 and self._turn_count % interval == 0:
             self._runtime.maintain(auto=True)
+            self._prefetch_cache.clear()  # upkeep can archive what was recalled
 
     def on_session_end(self, messages: list[dict[str, Any]]) -> None:
         """The memory's upkeep, and nothing written from the session."""
@@ -346,6 +351,7 @@ class MnemosMemoryProviderCore:
         self._ensure_runtime()
         assert self._runtime is not None
         self._runtime.maintain(auto=True)
+        self._prefetch_cache.clear()  # upkeep can archive what was recalled
 
     def on_session_switch(
         self,
@@ -386,16 +392,19 @@ class MnemosMemoryProviderCore:
             return
         action = (action or "").lower()
         context = (
-            f"Mirrored from Hermes built-in {target} memory. "
+            f"{_MIRROR_MARK} {target} memory. "
             f"Metadata: {json.dumps(metadata or {}, sort_keys=True, default=str)}"
         )
         old = _clean_text((metadata or {}).get("old_text"))
-        if action == "replace" and old:
+        mirrored = self._memory_holding(old) if action == "replace" and old else None
+        if mirrored:
             # Hermes names the entry it replaced by a piece of its text. The
-            # memory mirrored from it is corrected to the new words, not left
-            # in use beside them; with none matching, the words are kept as new.
+            # memory holding exactly those words is corrected to the new ones,
+            # not left in use beside them. Matched by the words themselves,
+            # never by recall's closest note, which could be an unrelated one.
             self._prefetch_cache.clear()
-            self._runtime.correct(clean, query=old, action="update")
+            # Written as a mirrored capture is, so a later replace finds it.
+            self._runtime.correct(f"{clean}\n\nContext: {context}", target_id=mirrored, action="update")
         elif action in {"add", "replace"}:
             self._capture(clean, context=context, importance="high" if target == "user" else "auto")
         elif action in {"remove", "delete", "forget"}:
@@ -478,7 +487,9 @@ class MnemosMemoryProviderCore:
         if kind == "inbox":
             return _json_ok(kind=kind, inbox=self._review_inbox(limit=max_results), scope=asdict(self.scope))
         if kind == "maintain":
-            return _json_ok(kind=kind, result=self._runtime.maintain(deep=bool(args.get("deep")), auto=False), scope=asdict(self.scope))
+            result = self._runtime.maintain(deep=bool(args.get("deep")), auto=False)
+            self._prefetch_cache.clear()  # upkeep can archive what was recalled
+            return _json_ok(kind=kind, result=result, scope=asdict(self.scope))
         if kind == "status":
             return _json_ok(kind=kind, scope=asdict(self.scope), config=asdict(self._config) if self._config else {})
         return _json_error(f"Unsupported report kind: {kind}")
@@ -487,6 +498,23 @@ class MnemosMemoryProviderCore:
         if self._runtime is not None:
             return
         self.initialize(self._session_id or "mnemos-hermes")
+
+    def _memory_holding(self, words: str) -> str | None:
+        """The newest memory in use here mirrored from Hermes whose own words
+        (before its "Mirrored from Hermes" context) contain ``words`` exactly,
+        ignoring case, or None: what a mirrored replace names by its old_text.
+        A memory the agent wrote itself is never one, whatever it says."""
+        self._runtime._ensure_init()
+        scope = self._runtime.scope
+        marker = f"\n\nContext: {_MIRROR_MARK}"
+        row = self._runtime._store._get_conn().execute(
+            "SELECT id FROM engrams WHERE owner_agent_id = ? AND person_id = ? "
+            "AND project_scope = ? AND state != 'archived' AND instr(content, ?) > 0 "
+            "AND instr(lower(substr(content, 1, instr(content, ?) - 1)), lower(?)) > 0 "
+            "ORDER BY created_at DESC LIMIT 1",
+            (scope.agent_id, scope.person_id, scope.project_scope, marker, marker, words),
+        ).fetchone()
+        return row[0] if row else None
 
     def _capture(self, content: str, context: str = "", importance: str | float = "auto") -> str:
         self._ensure_runtime()

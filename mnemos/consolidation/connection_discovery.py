@@ -198,6 +198,15 @@ def run_connection_discovery(
     for engram, existing_connections in underconnected[:max_per_pass]:
         stats["engrams_processed"] += 1
         existing_target_ids = {c.target_id for c in existing_connections}
+        # With a model, the memories already linked toward this one too: a
+        # reverse relation is saved from the existing memory, so without this
+        # the same pair was a candidate, and a model call, every pass.
+        if llm_client:
+            existing_target_ids |= {
+                row[0] for row in store._get_conn().execute(
+                    "SELECT source_id FROM connections WHERE target_id = ?", (engram.id,),
+                ).fetchall()
+            }
         candidates = []
 
         # 1. Candidates by meaning (if available, within the pass's time):

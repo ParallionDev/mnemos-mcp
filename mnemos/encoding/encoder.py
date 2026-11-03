@@ -346,17 +346,17 @@ class Encoder:
         the memory would be stored without a vector and nothing would say so.
         Call this after the transaction that saved the engram has committed.
         """
-        # 7. The edges existing memories hold toward this one (a reverse
-        # direction from the classifier), now that it is stored.
-        for source_id, edge in self._incoming.pop(engram.id, []):
-            self._store.save_connection(source_id, edge)
-
         # 8. Auto-index embedding (if embedding index available)
         if self._embedding_index:
             try:
                 self._embedding_index.index_engram(engram.id, engram.content)
             except Exception:
                 pass  # Don't fail encoding if embedding fails
+
+        # The edges existing memories hold toward this one (a reverse
+        # direction from the classifier), now that it is stored.
+        for source_id, edge in self._incoming.pop(engram.id, []):
+            self._store.save_connection(source_id, edge)
 
         # 9. Auto-publish to shared pool if applicable
         if self._shared_pool and should_auto_share(engram):
@@ -696,8 +696,11 @@ class Encoder:
             [(None, c) for c in connections] + incoming,
             key=lambda pair: pair[1].strength, reverse=True,
         )[: self._max_connections]
-        if any(source for source, _ in ranked):
-            self._incoming[engram.id] = [(s, c) for s, c in ranked if s]
+        # Only the memory being encoded waits for finish(): one prepared
+        # and never stored leaves nothing behind.
+        self._incoming = {engram.id: [(s, c) for s, c in ranked if s]} if any(
+            source for source, _ in ranked
+        ) else {}
         return [c for source, c in ranked if source is None]
 
 

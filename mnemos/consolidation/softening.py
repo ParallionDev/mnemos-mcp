@@ -440,7 +440,7 @@ def _specifics(text: str) -> tuple[bool, frozenset[str], frozenset[str], frozens
     for found in _WORD.finditer(text or ""):
         word = found.group()
         before = (text[: found.start()].rstrip() or ".")[-1]
-        if len(word) > 1 and word[0].isupper() and before not in ".!?:;\"'(":
+        if len(word) > 1 and word[0].isupper() and before not in ".!?:;\"'(“‘*-•#>":
             names.add(word.lower())
     return (
         any(w in _NEGATIONS for w in words),
@@ -458,10 +458,18 @@ def _says_the_same(mine: str, theirs: str) -> bool:
     another person, or under another condition, is a lesson of its own. A
     missed merge leaves a near-duplicate; a false one makes a memory
     strengthen the opposite of what it taught."""
-    return (
-        _same_lesson(distinctive_terms(mine), distinctive_terms(theirs))
-        and _specifics(mine) == _specifics(theirs)
-    )
+    if not _same_lesson(distinctive_terms(mine), distinctive_terms(theirs)):
+        return False
+    *rest_mine, names_mine = _specifics(mine)
+    *rest_theirs, names_theirs = _specifics(theirs)
+    if rest_mine != rest_theirs:
+        return False
+    # A name differs only when the other text lacks the word altogether:
+    # "Python" in one and "python" in the other, or a word capitalised
+    # after a bullet, names the same thing.
+    words_mine = {w.lower() for w in _WORD.findall(mine or "")}
+    words_theirs = {w.lower() for w in _WORD.findall(theirs or "")}
+    return names_mine <= words_theirs and names_theirs <= words_mine
 
 
 def _create_or_reinforce_lesson(

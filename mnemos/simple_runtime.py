@@ -3940,6 +3940,10 @@ class MnemosRuntime:
         except Exception as exc:
             if self._host_mutation_active:
                 raise
+            if savepoint and not conn.in_transaction:
+                # The error ended the whole transaction (a full disk, an I/O
+                # error): the impact went with it, so the reflection failed.
+                raise
             if savepoint:
                 conn.execute("ROLLBACK TO carry_reflection")
             # The impact is saved. The note's revision failing is a partial
@@ -3950,7 +3954,7 @@ class MnemosRuntime:
             )
             return ""
         finally:
-            if savepoint:
+            if savepoint and conn.in_transaction:
                 conn.execute("RELEASE carry_reflection")
 
     def _reflection_block(self, limit: int = PACKET_QUESTIONS) -> str | None:

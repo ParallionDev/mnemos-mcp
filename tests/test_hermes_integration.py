@@ -669,3 +669,38 @@ def test_a_mirrored_replace_supersedes_what_it_replaced(tmp_path):
 
     assert "Fly.io" in recalled
     assert "Vercel" not in recalled
+
+
+def test_a_mirrored_replace_never_rewrites_an_unrelated_note(tmp_path):
+    """With nothing mirrored that holds the old words, replace matched
+    recall's closest note and rewrote the agent's own unrelated memory."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "Calibrate the studio monitor before colour grading."})
+        provider.on_memory_write("replace", "memory", "The studio monitor is a 27-inch panel.",
+                                 metadata={"old_text": "studio monitor"})
+        recalled = provider._runtime.recall("studio monitor")
+    finally:
+        provider.shutdown()
+
+    assert "Calibrate the studio monitor" in recalled
+    assert "27-inch" in recalled
+
+
+def test_a_second_replace_finds_the_first(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        provider.on_memory_write("replace", "memory", "The billing service deploys to Render.",
+                                 metadata={"old_text": "deploys to Fly.io"})
+        recalled = provider._runtime.recall("billing service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "Render" in recalled
+    assert "Fly.io" not in recalled and "Vercel" not in recalled
