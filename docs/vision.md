@@ -83,8 +83,8 @@ We learned that the expensive way.
 An earlier version of this system scheduled a transcript indexer: it read session logs
 and extracted memories automatically. It worked, in the sense that it ran and produced
 output. On one live install it had written roughly **7,058 engrams** against **13**
-that came from a deliberate capture. A ratio of about 543 to 1 against the thing the
-product exists for. The consequence was not a full disk. It was that a session's
+that came from a deliberate capture. A ratio of about 543 to 1 against the thing
+Mnemos exists for. The consequence was not a full disk. It was that a session's
 context packet spent five of its six long-term slots on paraphrases of a single
 harvested fact about a cron job — while the handful of things that actually mattered
 sat below the fold, technically stored, functionally lost.
@@ -441,7 +441,7 @@ ladder, the modulators — is resolved internally and never surfaced as a decisi
 agent has to make mid-conversation. The engine is as large as section V describes. The
 agent's share of it is a sentence in its own voice.
 
-That restraint is a product decision with teeth. There is a full operator surface —
+That restraint is a design decision with teeth. There is a full operator surface —
 roughly two dozen additional tools for inspecting engrams, writing hypomnema directly,
 listing beliefs, forcing consolidation — and it is deliberately *not* the default,
 because a larger tool surface makes an agent likelier to reach for the wrong instrument
@@ -454,7 +454,7 @@ as it needs to be.
 
 ---
 
-## VI · Continuity is the product
+## VI · Continuity is what it's for
 
 Here is the part most easily missed: **memory an agent has to be asked to load is not
 continuity.**
@@ -465,7 +465,7 @@ already knowing — that there is no ritual, no prompt, no moment where you noti
 machinery.
 
 Two mechanisms close that gap, and any change that quietly breaks either is a change
-that breaks the product:
+that breaks Mnemos:
 
 **Server instructions.** Mnemos ships behavioural instructions with the MCP server
 itself: load context at session start, capture durable things as they appear, refresh a
