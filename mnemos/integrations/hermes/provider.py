@@ -280,8 +280,16 @@ class MnemosMemoryProviderCore:
         if "No relevant continuity found" in recalled:
             return ""
         context = _truncate("# Mnemos Recall\n" + recalled, self._config.max_context_chars)
-        # Read after the recall, whose own bookkeeping writes count as no change.
-        self._prefetch_cache[cache_key] = (clean, self._store_revision(), context)
+        after = self._store_revision()
+        # Cached only when no other connection committed during the recall:
+        # what it read may be older than that commit (a forget, a correction),
+        # and would be served again under the newer revision. This connection's
+        # own writes, the recall's bookkeeping, are read after it, so they
+        # count as no change.
+        if revision is not None and after is not None and after[0] == revision[0]:
+            self._prefetch_cache[cache_key] = (clean, after, context)
+        else:
+            self._prefetch_cache.pop(cache_key, None)
         return context
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
@@ -534,10 +542,13 @@ class MnemosMemoryProviderCore:
         def own(content: str) -> str:
             return " ".join(content.split(marker)[0].split()).casefold()
 
+        # Spacing and case are read the same way on both sides: Hermes keeps
+        # the entry's own spacing in old_text, and a double space or a line
+        # break in it is still the same entry.
         if whole:
             matches = [r[0] for r in rows if own(r[1]) == " ".join(whole.split()).casefold()]
         else:
-            matches = [r[0] for r in rows if piece.casefold() in own(r[1])]
+            matches = [r[0] for r in rows if " ".join(piece.split()).casefold() in own(r[1])]
         return matches[0] if len(matches) == 1 else None
 
     def _capture(self, content: str, context: str = "", importance: str | float = "auto") -> str:
