@@ -11,8 +11,8 @@
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind-dark.png">
   <img alt="An agent's whole memory, printed in sixteen greys like a plate from an old microscope atlas: thousands of small ringed cells gathered in clusters, a few drawn sharp with branching fibres." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind.png">
 </picture>
-<sub>The memory of the agent that helped build Mnemos, drawn by `mnemos log` and
-printed in sixteen greys: 2,198 memories and 11,602 links, kept since July 2026.</sub>
+<sub>The memory of the agent that helped build Mnemos, drawn by <code>mnemos log</code>
+and printed in sixteen greys: 2,198 memories and 11,602 links, kept since July 2026.</sub>
 
 Mnemos gives an AI agent a memory of its own. The agent decides what to keep
 and writes it in its own words: what it learned about you, what you decided
