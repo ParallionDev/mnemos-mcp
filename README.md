@@ -7,12 +7,13 @@
 [![Tests][badge-tests]][tests]
 [![License][badge-license]][license]
 
+<p>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind-dark.png">
   <img alt="An agent's whole memory, printed in sixteen greys like a plate from an old microscope atlas: thousands of small ringed cells gathered in clusters, a few drawn sharp with branching fibres." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind.png">
 </picture>
-<sub>The memory of the agent that helped build Mnemos, drawn by <code>mnemos log</code>
-and printed in sixteen greys: 2,198 memories and 11,602 links, kept since July 2026.</sub>
+<sub>The memory of the agent that helped build Mnemos, printed in greys from <code>mnemos log</code>: 2,198 memories and 11,602 links, kept since July 2026.</sub>
+</p>
 
 Mnemos gives an AI agent a memory of its own. The agent decides what to keep
 and writes it in its own words: what it learned about you, what you decided
@@ -101,12 +102,13 @@ Alex on a small project that reads ocean buoys.</sub>
 
 ## A memory, up close
 
+<p>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind-up-close-dark.png">
   <img alt="The same mind up close, printed in greys: a few memories drawn as cells, each a disc of granules around a dense nucleus, joined by fine branching fibres." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/mind-up-close.png">
 </picture>
-<sub>The same mind, up close: each cell is one memory, and each fibre a link. Fig. 2 names every
-part.</sub>
+<sub>The same mind, up close: each cell is one memory, and each fibre a link. Fig. 2 names every part.</sub>
+</p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy-dark.png">
