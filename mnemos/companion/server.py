@@ -581,24 +581,32 @@ class _Handler(BaseHTTPRequestHandler):
                    "application/json; charset=utf-8", True)
 
     def _redirect(self, location: str) -> None:
-        self.send_response(HTTPStatus.FOUND)
-        self.send_header("Location", location)
-        self.send_header("Content-Length", "0")
-        self.end_headers()
+        try:
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", location)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
     def _send(self, status: HTTPStatus, content: bytes, kind: str, body: bool, *,
               cache: str = "no-store", **headers: str) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", kind)
-        self.send_header("Content-Length", str(len(content)))
-        self.send_header("Cache-Control", cache)
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Referrer-Policy", "no-referrer")
-        for name, value in headers.items():
-            self.send_header(name, value)
-        self.end_headers()
-        if body:
-            self.wfile.write(content)
+        # The browser may hang up before the answer is all sent (a page closed, or reloaded mid-load): there's
+        # no one left to answer, so the connection just ends, with no trace on the terminal.
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", cache)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            for name, value in headers.items():
+                self.send_header(name, value)
+            self.end_headers()
+            if body:
+                self.wfile.write(content)
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
 
 def serve(*, db_path: str | None = None, agent_id: str | None = None, person_id: str | None = None,

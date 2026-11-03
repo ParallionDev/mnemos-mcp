@@ -797,6 +797,25 @@ def test_a_config_jev_cant_read_is_left_as_it_is(mind, jev_unset):
     assert config.read_text() == "{not json"
 
 
+@pytest.mark.parametrize("hung_up", [BrokenPipeError, ConnectionResetError])
+def test_a_browser_that_hangs_up_mid_answer_ends_quietly(hung_up):
+    """A page closed or reloaded while an answer was on its way raised
+    BrokenPipeError out of _send, and the server printed a traceback for it."""
+
+    class Gone:
+        def write(self, data):
+            raise hung_up()
+
+    handler = log_server._Handler.__new__(log_server._Handler)
+    handler.wfile, handler.request_version, handler.requestline = Gone(), "HTTP/1.1", "GET / HTTP/1.1"
+    handler.command, handler.client_address, handler.close_connection = "GET", ("127.0.0.1", 0), False
+    handler._send(200, b"x" * 100_000, "text/plain", True)
+    assert handler.close_connection is True
+    handler.close_connection = False
+    handler._redirect("/elsewhere/")
+    assert handler.close_connection is True
+
+
 def test_a_schedule_that_cant_be_made_says_why(mind, monkeypatch):
     from mnemos import cli
 
