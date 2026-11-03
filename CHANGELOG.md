@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.6.0 (2026-11-02)
+
+### The notebook page
+
+`mnemos log` grew from a log into the agent's notebook, the page you keep
+beside the chat:
+
+- **The mind** ("Open the mind"): its whole memory, live. Every memory is a
+  point of light among the ones it's tied to, every link a fibre, and recall
+  lights up along the links as it happens. Open a memory to see it up close,
+  with what it's tied to.
+- **Correct a memory, or let it go**, from the page, in your own words. Your
+  correction is signed as yours, even when your agent's own server serves the
+  page (`mnemos_page`); letting go asks first.
+- **Settings**: whether the agent has quiet hours and when each starts,
+  whether Jev judges what comes up (below), and a quiet notification when
+  your agent asks you something while the page is in the background.
+- **What's new**: it opens on what changed since you were last there.
+- **Every mind on this computer**, one name away: the agent's name opens the
+  others that keep their memory beside it.
+- A browser that closes or reloads the page while it's still loading no
+  longer makes the server print an error for every file it was sending.
+
+### A new memory isn't a new person
+
+An agent's first session with Mnemos told it this was the first time it and
+the person met, so an agent that had known someone for months, from its
+instructions, notes or files, still asked what to call them. Now it asks only
+what it doesn't already know, keeps what it does know in its own words, still
+introduces itself, and tells them plainly that from now on it remembers across
+sessions too. Someone new to it gets the meeting as before. What they want it
+to always remember is kept standing, so it never fades.
+
+### "Still true?" for fading facts
+
+A fading memory was always asked what it taught, facts included. A fact
+teaches nothing; it's true or it isn't. So a fading fact is now asked whether
+it's still true, with three answers: still true (it stays, and wakes as if
+recalled; the answer when unsure), changed (the agent corrects it), or no
+longer true (it's let go: archived, never deleted). Experiences are still
+asked what they taught. The wake and the dream both ask it.
+
+### Jev, if you want it
+
+Jev, TypeSafe's judge of which proposed memories really bear on a message,
+was on only for someone who edited a config file. It's now a switch in the
+notebook's Settings, with a field for your own TypeSafe key, which the page
+never shows back. It's off until you turn it on. The panel says what leaves
+your machine while it's on: each message, cut to 1,000 characters, and at
+most six memory lines of 200 characters, with no ids, dates or anything that
+says whose memory it is ([in full](docs/privacy-security.md#the-cues-judge)).
+
+### Upgrading
+
+- The first open by 0.6.0 updates the store (schema 19, so the new question
+  can be filed), after a verified backup in `~/.mnemos/backups/`. Nothing to
+  do.
+- Sessions still running 0.5.0 stop maintaining the store once 0.6.0 has
+  opened it, as with every release that changes how memory is kept, and say
+  so; restart them. Until then they keep the agent's words, and leave a
+  "still true?" question open for a current session rather than spend it.
+
 ## 0.5.0 (2026-10-28)
 
 ### Apache-2.0, and a new home

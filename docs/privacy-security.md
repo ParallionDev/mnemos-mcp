@@ -82,7 +82,10 @@ The cue can ask a judge which of the memories it proposes bear on a message:
 Jev, typesafe.ai's model, at `api.typesafe.ai`. It is off by default, and on
 only with `"cue_judge": "jev"` in `~/.mnemos/config.json` or
 `MNEMOS_CUE_JUDGE=jev`, and its key in `~/.config/jev/api_key` (or the file
-`MNEMOS_JEV_KEY_FILE` names). Switched on, each message sends Jev the message
+`MNEMOS_JEV_KEY_FILE` names). The Settings of `mnemos log` set both: the key
+is kept readable only by you (the file 0600, in a 0700 folder) and is never
+shown back, and the switch is written into the config file with the rest of
+it kept. Switched on, each message sends Jev the message
 (up to 1,000 characters; a longer one goes as its start and its end) and at
 most six memory lines of up to 200 characters each, with no id, date or scope.
 Its scores only choose which lines the cue shows: they never change a memory,

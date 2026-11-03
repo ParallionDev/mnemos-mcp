@@ -306,6 +306,21 @@ mnemos hooks install claude-code --no-prompt --write
 
 `--prompt`, which once asked for it, is still accepted and changes nothing.
 
+**Jev, the cue's judge (optional).** The cue proposes memories by words and
+meaning, and some of what it proposes is only loosely related. Jev, a model
+from TypeSafe, can judge which of them really bear on your message, so fewer
+and better ones come up. It's off until you turn it on, and it needs a
+TypeSafe key of your own. Turn it on in `mnemos log`, under Settings: paste
+your key (the page never shows it back, only that one is saved), then flip the
+switch. While it's on, each message you send, cut to 1,000 characters, and
+the six or fewer memory lines that might come up with it (200 characters
+each) go to TypeSafe's service at `api.typesafe.ai`, with no ids, dates or
+anything that says whose memory it is. Jev only chooses which lines come up:
+it never changes a memory, and nothing it answers is kept. Turn it off, or
+remove the key, in the same place. Without the page, the switch is
+`"cue_judge": "jev"` in `~/.mnemos/config.json` and the key is the file
+`~/.config/jev/api_key` ([what leaves, in full](privacy-security.md#the-cues-judge)).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/session-dark.png">
   <img alt="Fig. 2, a Claude Code session as a sequence diagram between you, the agent, Mnemos and its memory. At the start the hook brings the agent its wake. With each message, the cue looks up the ten nearest memories by words and meaning and returns up to three, or none, before the agent answers. When the agent chooses, it keeps something or recalls something, and what returns grows stronger. After compaction the wake is read back in, and its handoff is kept exactly as written." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/session.png">
@@ -328,8 +343,9 @@ mind.
   you something come first, with the box already open. There's also a box
   to leave it a note of your own. It wakes with what you write, once, in
   its next session.
-- **Settings**: whether it has quiet hours, and when each starts. It also
-  says where its memory lives.
+- **Settings**: whether it has quiet hours, and when each starts, and
+  whether Jev judges which memories come up, with a key of your own (see
+  the cue, above). It also says where its memory lives.
 - **The mind** ("Open the mind"): its whole memory, live. Every memory is a
   point of light where it sits among the ones it's tied to, and every link a
   fibre; recall lights up along the links as it happens. It also replays
