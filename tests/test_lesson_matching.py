@@ -58,10 +58,9 @@ def test_sharing_common_words_does_not_make_it_the_same_lesson(store):
 
 
 def test_the_same_lesson_said_again_is_reinforced(store):
-    rendered = _lesson(store, "Verify the rendered result, not the declaration: "
-                              "computed styles prove nothing.")
+    rendered = _lesson(store, "Verify the rendered result, not the declaration.")
     again = _fading(store, "fonts looked right in the inspector and wrong on screen",
-                    "Verify the rendered result, not the declaration.")
+                    "verify the rendered  result, not the declaration")
 
     assert _create_or_reinforce_lesson(again, store, {}) == rendered.id
     assert store.get_engram(rendered.id).strength == pytest.approx(0.9)
@@ -151,12 +150,27 @@ def test_a_memory_filed_under_the_opposite_is_found_for_repair(store):
     assert {"source_id": never.id, "target_id": always.id, "reason": "unrelated"} in misfiled
 
 
+def test_a_lesson_in_other_words_is_its_own(store):
+    """Filed with no one asked, only the same words are the same lesson:
+    shared vocabulary merged lessons that say different things. A rewording
+    leaves a near-duplicate, the safe failure."""
+    rendered = _lesson(store, "Verify the rendered result, not the declaration: "
+                              "computed styles prove nothing.")
+    again = _fading(store, "fonts looked right in the inspector and wrong on screen",
+                    "Verify the rendered result, not the declaration.")
+
+    assert _create_or_reinforce_lesson(again, store, {}) != rendered.id
+    assert store.get_engram(rendered.id).strength == pytest.approx(0.8)
+
+
 @pytest.mark.parametrize("first, then", [
-    ("Pin Python before a release.", "pin python before a release."),
-    ("- Always verify the rendered page before shipping.", "Always verify the rendered page before shipping."),
+    ("Pin the parser to version 1.2 before release.", "Pin the parser to version 2.1 before release."),
+    ("Allow production deployments during outages.", "Block production deployments during outages."),
+    ("Deploy only after review passes.", "Deploy only before review passes."),
+    ("Alice must approve production releases.", "Bob must approve production releases."),
 ])
-def test_casing_and_bullets_are_not_another_name(store, first, then):
+def test_lessons_that_share_words_but_not_meaning_stay_apart(store, first, then):
     earlier = _lesson(store, first)
     memory = _fading(store, "what happened this time", then)
 
-    assert _create_or_reinforce_lesson(memory, store, {}) == earlier.id
+    assert _create_or_reinforce_lesson(memory, store, {}) != earlier.id

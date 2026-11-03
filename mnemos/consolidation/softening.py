@@ -452,12 +452,12 @@ def _specifics(text: str) -> tuple[bool, frozenset[str], frozenset[str], frozens
 
 
 def _says_the_same(mine: str, theirs: str) -> bool:
-    """Whether two texts are the same lesson: _same_lesson by their distinctive
-    words, and agreeing on everything that can turn a lesson around or pin it
-    down (_specifics). One said the other way round, for another version or
-    another person, or under another condition, is a lesson of its own. A
-    missed merge leaves a near-duplicate; a false one makes a memory
-    strengthen the opposite of what it taught."""
+    """Whether a link already filed between two texts holds up, for the lesson
+    repair: _same_lesson by their distinctive words, and agreeing on what can
+    turn a lesson around or pin it down (_specifics). Looser than _same_words,
+    which files new links: links filed under the old rule joined rewordings of
+    one lesson, and the repair keeps those. It finds the memories filed under
+    the opposite ("Always ..." under "Never ..."), not every pair that differs."""
     if not _same_lesson(distinctive_terms(mine), distinctive_terms(theirs)):
         return False
     *rest_mine, names_mine = _specifics(mine)
@@ -470,6 +470,20 @@ def _says_the_same(mine: str, theirs: str) -> bool:
     words_mine = {w.lower() for w in _WORD.findall(mine or "")}
     words_theirs = {w.lower() for w in _WORD.findall(theirs or "")}
     return names_mine <= words_theirs and names_theirs <= words_mine
+
+
+def _same_words(mine: str, theirs: str) -> bool:
+    """Whether two texts are the same lesson for filing one under the other
+    with no one asked: the same words in the same order, ignoring case,
+    spacing and a closing full stop. Shared vocabulary, even with negation,
+    numbers and names checked (_says_the_same), still merged lessons that say
+    different things: "version 1.2" and "version 2.1", "Allow ..." and
+    "Block ...", "after review" and "before review", "Alice must ..." and
+    "Bob must ...". A near-duplicate lesson is the safe failure."""
+    def plain(text: str) -> str:
+        return " ".join((text or "").split()).rstrip(".!").casefold()
+
+    return bool(plain(mine)) and plain(mine) == plain(theirs)
 
 
 def _create_or_reinforce_lesson(
@@ -531,7 +545,7 @@ def _create_or_reinforce_lesson(
                 lesson is not None and lesson.author_kind == "agent"
                 and (lesson.state != "archived"
                      or store.archive_reason(lesson.id) in RECALLABLE_ARCHIVE_REASONS)
-                and _says_the_same(impact_text, lesson.content)
+                and _same_words(impact_text, lesson.content)
             ):
                 return lesson.id
 
@@ -557,7 +571,7 @@ def _create_or_reinforce_lesson(
             continue
         if candidate.author_kind != "agent":
             continue  # a tool's "lesson" is not strengthened by the agent's evidence
-        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _says_the_same(
+        if ("lesson" in candidate.tags or "distilled" in candidate.tags) and _same_words(
             impact_text, candidate.content
         ):
             # Reinforce existing lesson. Not an access: maintenance reading its
