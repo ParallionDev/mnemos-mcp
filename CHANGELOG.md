@@ -52,6 +52,31 @@ your machine while it's on: each message, cut to 1,000 characters, and at
 most six memory lines of 200 characters, with no ids, dates or anything that
 says whose memory it is ([in full](docs/privacy-security.md#the-cues-judge)).
 
+### Repairs from an outside review
+
+An independent review of 0.5.0 found places where memory said it kept one
+thing and kept another. Each is fixed and tested:
+
+- **A lesson is filed under another only when it says the same words.**
+  "Never deploy on Friday." was filed under, and strengthened, "Always deploy
+  on Friday."; a different version, name or condition could merge the same
+  way. A lesson in other words is now a lesson of its own.
+- **Forgetting a memory lets go of a lesson only it taught.** The lesson had
+  kept its words in use, and in recall. A lesson another memory also taught
+  stays.
+- **Answering your memory's question saves the answer and closes the
+  question together, or neither.** A failed save had closed the question with
+  its answer lost, and asking again found nothing.
+- **Correcting a belief follows the rule reflecting on it does:** only the
+  model that formed it can rewrite or retire it, and the belief written in
+  its place is signed.
+- **"This caused that" keeps its direction**, with a model provider on: the
+  link had been saved pointing from the effect to the cause.
+- **With Hermes**, a forgotten memory is no longer served from what was
+  fetched before, and an entry Hermes replaces or removes changes the one
+  memory mirrored from it, not one beside it. An older Hermes that doesn't
+  send the whole entry needs Mnemos's copy to be in step with it.
+
 ### Upgrading
 
 - The first open by 0.6.0 updates the store (schema 19, so the new question
