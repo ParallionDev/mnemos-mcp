@@ -653,6 +653,22 @@ class Exporter:
         agent = resolve_scope(agent_id=named.group(1).strip("'\"") if named else None).agent_id
         return kind.group(1) if agent == self.scope.agent_id else None
 
+    @staticmethod
+    def jev() -> dict:
+        """Jev, the cue's judge, as Settings shows it: whether it's switched
+        on, whether a key is saved (never the key), whether the environment
+        decides the switch, and what leaves the machine with each message."""
+        from .. import jev
+
+        try:
+            status = jev.status()
+        except Exception:
+            return {"on": False, "key": False, "env": False}
+        return {"on": status["switched_on"], "key": status["key"],
+                "env": bool((os.environ.get(jev.SWITCH_ENV) or "").strip()), "host": status["host"],
+                "messageChars": status["message_chars"], "candidates": status["candidates"],
+                "lineChars": status["line_chars"]}
+
     def schedule(self) -> list[dict]:
         """Whether anything wakes the hours on its own: a LaunchAgent, a
         systemd user timer (what `mnemos daemon install --hours` writes where
@@ -742,6 +758,7 @@ class Exporter:
             "identity": who,
             "hours": hours,
             "schedule": self.schedule(),
+            "jev": self.jev(),
             "journal": journal,
             "notes": notes,
             "studio": files,

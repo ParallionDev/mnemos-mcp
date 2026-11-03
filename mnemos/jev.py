@@ -186,6 +186,67 @@ def status(environ: Mapping[str, str] | None = None, *, config_path: str | Path 
             "line_chars": LINE_CHARS}
 
 
+# ── Set by the person (the notebook's Settings) ──
+
+# What a key may be: one line of printable ASCII with no spaces, at most this long.
+KEY_MAX_CHARS = 512
+
+
+def well_formed_key(key: object) -> bool:
+    """Whether ``key`` can be a key: one line of printable ASCII, no spaces.
+    Says nothing of the key itself."""
+    return (isinstance(key, str) and 0 < len(key) <= KEY_MAX_CHARS and key.isascii()
+            and key.isprintable() and not any(c.isspace() for c in key))
+
+
+def save_key(key: str, environ: Mapping[str, str] | None = None) -> None:
+    """Keep the key where ``_read_key`` finds it, private: the file 0600, and
+    its folder 0700 when it is Jev's own (``~/.config/jev``); a folder that
+    ``MNEMOS_JEV_KEY_FILE`` names is the person's, and is made private only
+    when this makes it. Raises ValueError, in words without the key, when it
+    isn't one."""
+    from .file_security import atomic_write_text, secure_directory
+
+    if not well_formed_key(key):
+        raise ValueError("That doesn't look like a key: one line of letters, numbers and symbols, with no spaces.")
+    env = os.environ if environ is None else environ
+    path = key_file(environ)
+    secure_directory(path.parent, force=not (env.get(KEY_FILE_ENV) or "").strip())
+    atomic_write_text(path, key + "\n")
+
+
+def remove_key(environ: Mapping[str, str] | None = None) -> bool:
+    """Remove the key file. Whether there was one."""
+    try:
+        key_file(environ).unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def set_switch(on: bool, *, config_path: str | Path | None = None) -> None:
+    """Turn Jev on (``"cue_judge": "jev"``) or off (the key removed) in the
+    config file, keeping everything else in it as it was. A file that can't
+    be read is left as it is (ValueError); with none, off writes nothing."""
+    from .file_security import atomic_write_text, secure_directory
+
+    path = Path(config_path).expanduser() if config_path is not None else Path.home() / ".mnemos" / "config.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{_home_path(path)} couldn't be read, so it was left as it is.") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{_home_path(path)} isn't a settings file Mnemos can change, so it was left as it is.")
+    if on:
+        data[SWITCH_KEY] = JEV
+    elif SWITCH_KEY in data:
+        del data[SWITCH_KEY]
+    else:
+        return
+    secure_directory(path.parent, force=path.parent == Path.home() / ".mnemos")
+    atomic_write_text(path, json.dumps(data, indent=2) + "\n")
+
+
 # ── One call ──
 
 

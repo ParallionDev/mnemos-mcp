@@ -261,6 +261,12 @@
 .set-time{font:450 var(--t-body)/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink-1);background:var(--surface-3);border:1px solid transparent;border-radius:8px;padding:7px 10px;color-scheme:dark}
 .set-time:focus{outline:none;border-color:var(--focus)}
 .set-time:disabled{color:var(--ink-4);background:transparent}
+.set-key{flex:0 1 260px;min-width:0;box-sizing:border-box;font:450 var(--t-body)/1 var(--sans);color:var(--ink-1);background:var(--surface-3);border:1px solid transparent;border-radius:8px;padding:8px 10px}
+.set-key:focus{outline:none;border-color:var(--focus)}
+.set-key:disabled{color:var(--ink-4);background:transparent}
+.set-leaves{margin-top:var(--s4)}
+.set-leaves .set-d{margin-top:4px}
+.switch[disabled]{cursor:default;opacity:.45}
 .switch{all:unset;flex:none;cursor:pointer;position:relative;width:42px;height:24px;border-radius:999px;background:var(--surface-3);transition:background var(--quick)}
 .switch .knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--ink-2);box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .28s var(--glide,ease),background var(--quick)}
 .switch[aria-checked="true"]{background:var(--signal)}

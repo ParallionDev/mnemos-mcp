@@ -721,6 +721,82 @@ def test_the_quiet_hours_take_only_a_yes_or_no_and_times_of_day(mind, monkeypatc
     assert asked == []
 
 
+KEY = "ts_live_9f2Q7xK3mP0wZ8yV"
+
+
+@pytest.fixture
+def jev_unset(monkeypatch):
+    """Jev as a person finds it: no switch in the environment, its own key file."""
+    monkeypatch.delenv("MNEMOS_CUE_JUDGE", raising=False)
+    monkeypatch.delenv("MNEMOS_JEV_KEY_FILE", raising=False)
+    return Path.home() / ".config" / "jev" / "api_key", Path.home() / ".mnemos" / "config.json"
+
+
+def test_jev_is_off_until_the_person_saves_a_key_and_turns_it_on(mind, jev_unset, caplog):
+    """0.6.0: Jev, the cue's judge, is set in the page's Settings. The key is
+    kept private (folder 0700, file 0600) and never said back; the switch is
+    "cue_judge" in the config, set and removed with the rest kept."""
+    import logging
+
+    from mnemos import jev
+
+    key_path, config = jev_unset
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(json.dumps({"server": {"mode": "simple"}}))
+    caplog.set_level(logging.DEBUG)
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        assert json.loads(server.documents()[0])["jev"]["on"] is False
+        assert post(server, {"command": "jev", "on": True}) == (400, {"error": "Save a key first: without one, Jev can't run."})
+
+        status, answer = post(server, {"command": "jev", "key": f"  {KEY}\n"})
+        assert status == 200, answer
+        assert KEY not in json.dumps(answer)
+        assert key_path.read_text() == KEY + "\n"
+        assert oct(key_path.stat().st_mode & 0o777) == "0o600"
+        assert oct(key_path.parent.stat().st_mode & 0o777) == "0o700"
+        life = json.loads(server.documents()[0])
+        assert (life["jev"]["key"], life["jev"]["on"]) == (True, False)
+        assert KEY.encode() not in server.documents()[0]
+        assert jev.in_use() is False, "a saved key alone turns nothing on"
+
+        assert post(server, {"command": "jev", "on": True}) == (200, {"result": "Jev is on."})
+        assert json.loads(config.read_text()) == {"server": {"mode": "simple"}, "cue_judge": "jev"}
+        assert jev.in_use() is True
+        assert post(server, {"command": "jev", "on": False}) == (200, {"result": "Jev is off."})
+        assert json.loads(config.read_text()) == {"server": {"mode": "simple"}}
+
+        post(server, {"command": "jev", "on": True})
+        assert post(server, {"command": "jev", "remove_key": True}) == (200, {"result": "The key is removed, and Jev is off."})
+        assert not key_path.exists()
+        assert json.loads(config.read_text()) == {"server": {"mode": "simple"}}
+    assert KEY not in caplog.text
+
+
+def test_jev_takes_only_a_key_a_removal_or_a_yes_or_no_and_only_from_its_page(mind, jev_unset):
+    key_path, config = jev_unset
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        for request in ({"command": "jev"}, {"command": "jev", "on": "yes"}, {"command": "jev", "key": ""},
+                        {"command": "jev", "key": "two words"}, {"command": "jev", "key": 12345},
+                        {"command": "jev", "key": "x" * 513}):
+            status, answer = post(server, request)
+            assert status == 400 and "error" in answer, request
+            assert "two words" not in answer["error"]
+        assert post(server, {"command": "jev", "key": KEY}, origin="https://example.com")[0] == 403
+    assert not key_path.exists() and not config.exists()
+
+
+def test_a_config_jev_cant_read_is_left_as_it_is(mind, jev_unset):
+    key_path, config = jev_unset
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text("{not json")
+    key_path.parent.mkdir(parents=True)
+    key_path.write_text(KEY)
+    with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        status, answer = post(server, {"command": "jev", "on": True})
+    assert status == 400 and "left as it is" in answer["error"], answer
+    assert config.read_text() == "{not json"
+
+
 def test_a_schedule_that_cant_be_made_says_why(mind, monkeypatch):
     from mnemos import cli
 

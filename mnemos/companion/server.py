@@ -52,10 +52,10 @@ logger = logging.getLogger(__name__)
 
 CACHE_SECONDS = 5.0
 # What the page may write: only the person's own words (a note, a reply, a correction in their words, a memory they
-# let go), which notes they read, and whether and when the agent's quiet hours run (the one setting that's the
-# person's to decide; the rest of Mnemos tunes itself). A correction or a forget is always the person's, whoever
-# serves the page.
-ACTS = ("reply", "note", "read", "hours", "correct", "forget")
+# let go), which notes they read, whether and when the agent's quiet hours run, and whether Jev judges what comes
+# to mind, with the person's own key (the settings that are the person's to decide; the rest of Mnemos tunes
+# itself). A correction or a forget is always the person's, whoever serves the page.
+ACTS = ("reply", "note", "read", "hours", "jev", "correct", "forget")
 CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 MOST_READ = 200
 MOST_ACT_BYTES = 32 * 1024
@@ -221,6 +221,8 @@ class LogServer(ThreadingHTTPServer):
         mind = self.mind(agent)
         if mind is None:
             return {"error": "There's no such mind on this machine."}
+        if request.get("command") == "jev":
+            return self._jev(request, mind)
         if UNFILED in (mind.exporter.scope.person_id, mind.exporter.scope.project_scope):
             return {"error": "This mind's memory is from before notes and hours; the page only reads it."}
         if request.get("command") == "read":
@@ -290,6 +292,39 @@ class LogServer(ThreadingHTTPServer):
             words = " ".join(failed.getvalue().split()) or " ".join(said.getvalue().split())
             return {"error": words[:400] or "The quiet hours couldn't be changed."}
         return {"result": " ".join(said.getvalue().split())[:400]}
+
+    def _jev(self, request: dict, mind: _Mind) -> dict:
+        """Jev, the cue's judge, as the person sets it, one change at a time:
+        save its key (``{"key": ...}``), remove it (``{"remove_key": true}``,
+        which turns Jev off too), or turn it on or off (``{"on": ...}``), on
+        only with a key saved. What ``jev.save_key``, ``jev.remove_key`` and
+        ``jev.set_switch`` do, for the whole machine. The key is never said
+        back: not in a reply, an error or a log line."""
+        from .. import jev
+
+        with self._settings:
+            try:
+                if request.get("remove_key") is True:
+                    jev.remove_key()
+                    jev.set_switch(False)
+                    said = "The key is removed, and Jev is off."
+                elif "key" in request:
+                    key = request.get("key")
+                    jev.save_key(key.strip() if isinstance(key, str) else key)
+                    said = "The key is saved. Turn Jev on when you want it."
+                elif isinstance(request.get("on"), bool):
+                    if request["on"] and not jev.has_key():
+                        return {"error": "Save a key first: without one, Jev can't run."}
+                    jev.set_switch(request["on"])
+                    said = "Jev is on." if request["on"] else "Jev is off."
+                else:
+                    return {"error": 'Jev takes a "key" to save, "remove_key", or "on": true or false.'}
+            except ValueError as exc:  # its words never hold the key
+                return {"error": str(exc)}
+            except OSError:
+                return {"error": "Jev's setting couldn't be saved on this machine."}
+        mind.forget()
+        return {"result": said}
 
     def _read(self, ids: object, mind: _Mind) -> dict:
         """Mark these notes of the agent's read, each once (one already read
@@ -449,7 +484,7 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             request = None
         if not isinstance(request, dict) or request.get("command") not in ACTS:
-            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, correct a memory or let one go, say a note was read, or turn the quiet hours on or off, and nothing else."})
+            return self._json(HTTPStatus.BAD_REQUEST, {"error": "The page can leave a reply or a note, correct a memory or let one go, say a note was read, turn the quiet hours on or off, or set Jev, and nothing else."})
         answer = server.act(request, _agent(self.path))
         return self._json(HTTPStatus.OK if "result" in answer else HTTPStatus.BAD_REQUEST, answer)
 

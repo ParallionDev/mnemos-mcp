@@ -34,6 +34,7 @@ export class Room {
     this.toMark = new Set();
     this.present = false;                   // someone has touched the page: moved, scrolled, typed
     this.hours = null;                      // the quiet hours as you're setting them, until saved
+    this.jevKey = '';                       // a key you're typing for Jev, held only here until it's sent
     this.bind();
   }
 
@@ -86,6 +87,9 @@ export class Room {
     if (typing && search) { search.focus({ preventScroll: true }); search.setSelectionRange(...typing); }
     const draft = typingIn && this.bodyEl.querySelector(`[data-draft="${CSS.escape(typingIn[0])}"]`);
     if (draft) { draft.focus({ preventScroll: true }); draft.setSelectionRange(typingIn[1], typingIn[2]); }
+    // a key being typed is set back as a value, never written into the page
+    const key = this.jevKey && this.bodyEl.querySelector('[data-jev-key]');
+    if (key) { key.value = this.jevKey; const save = this.bodyEl.querySelector('[data-jev-save]'); if (save && this.sending !== 'jev') save.disabled = false; }
     this.watchReading();
     const plate = open && this.bodyEl.querySelector('.specimen canvas');
     if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }) });
@@ -99,7 +103,7 @@ export class Room {
     if (scrollY > y) scrollTo({ top: y });
   }
   /* a live redraw waits while you're writing, so nothing you type is lost or jumps */
-  refresh() { if (!this.bodyEl.contains(document.activeElement) || !document.activeElement.matches('[data-draft]')) this.render(); }
+  refresh() { if (!this.bodyEl.contains(document.activeElement) || !document.activeElement.matches('[data-draft], [data-jev-key]')) this.render(); }
 
   /* the folded text of a long entry, with its button; the whole text is kept for the button */
   own(id, text, cls = 'text', long = 520) {
@@ -505,6 +509,7 @@ export class Room {
           ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
           <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
       </div>`}
+      ${this.jevPanel()}
       ${this.tellPanel()}
       <div class="belief set">
         <div class="set-title">Where it lives</div>
@@ -514,9 +519,40 @@ export class Room {
           <dt>Agent</dt><dd>${esc(who.agentId || '')}${who.model ? ` · signs as ${esc(who.name)}` : ''}</dd>
           <dt>You</dt><dd>${who.person ? esc(who.person) : 'not named: start the page with --person-name, or set MNEMOS_PERSON_NAME'}</dd>
         </dl>
-        <p class="set-d set-foot">On this machine only. Nothing here leaves it.</p>
+        <p class="set-d set-foot">On this machine only. Nothing here leaves it${life.jev?.on && life.jev?.key ? ', except what Jev is sent, above' : ''}.</p>
       </div>
     </section>`;
+  }
+  /* Jev, TypeSafe's judge of which memories bear on each message you send: on only with your own key, and off until
+     you turn it on. What leaves the machine is said beside the switch. The key is never shown back, only that one is
+     saved; it's sent once, to `mnemos log`, and kept nowhere on the page. */
+  jevPanel() {
+    const j = this.ctx().life.jev || {}, on = !!(j.on && j.key), busy = this.sending === 'jev';
+    const notice = this.notices.get('jev'), n = (x) => Number(x || 0).toLocaleString('en-US');
+    const hint = notice || (j.env ? 'Where this page runs, MNEMOS_CUE_JUDGE decides, so this switch can’t change it.'
+      : on ? 'On. Jev judges each message you send.' : j.key ? 'Off. A key is saved; nothing leaves this machine.' : 'Off. Nothing leaves this machine.');
+    return `<div class="belief set">
+      <div class="set-head"><div><div class="set-title">Jev</div>
+        <p class="set-d">With each message you send, a few memories might come up. Jev judges which of them really bear on it, so the ones that come up are the ones that matter. It’s a service from TypeSafe, and it runs only with a key of your own.</p></div>
+        <button class="switch" type="button" role="switch" aria-checked="${on}" data-jev-on="${on ? 'off' : 'on'}"${j.key && !j.env && !busy ? '' : ' disabled'}><span class="knob" aria-hidden="true"></span><span class="vh">Jev</span></button></div>
+      <div class="set-leaves"><span class="set-k">What leaves this machine</span>
+        <p class="set-d">While Jev is on: each message you send, cut to ${n(j.messageChars)} characters, and the few memories that might come up with it (at most ${n(j.candidates)}, each cut to ${n(j.lineChars)} characters), sent to TypeSafe’s service at ${esc(j.host || 'api.typesafe.ai')}. No ids, no dates, nothing that says whose memory it is. Jev only decides what comes up: it never changes a memory, and nothing it answers is kept.</p></div>
+      <div class="set-rows">${j.key
+        ? `<div class="set-row"><span><span class="set-k">Key</span><span class="set-d">A key is saved on this machine.</span></span><button class="cancel" type="button" data-jev-remove="1"${busy ? ' disabled' : ''}>Remove key</button></div>`
+        : `<label class="set-row"><span><span class="set-k">Key</span><span class="set-d">Your TypeSafe key. It’s kept on this machine, readable only by you.</span></span><input class="set-key" type="password" autocomplete="off" spellcheck="false" data-jev-key="1"${busy ? ' disabled' : ''} aria-label="Your TypeSafe key"></label>`}</div>
+      <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(hint)}</span>
+        ${j.key ? '' : `<button class="send" type="button" data-jev-save="1" disabled>${busy ? 'Saving…' : 'Save key'}</button>`}</div>
+    </div>`;
+  }
+  async jevSend(request) {
+    if (this.sending || !this.hooks.send) return;
+    this.sending = 'jev'; this.notices.delete('jev'); this.render();
+    let answer;
+    try { answer = await this.hooks.send({ command: 'jev', ...request }); }
+    catch { answer = { error: 'It couldn’t be changed just now. Is `mnemos log` still running?' }; }
+    this.sending = null;
+    if (answer?.result) this.jevKey = ''; else this.notices.set('jev', answer?.error || 'It couldn’t be changed.');
+    this.render();
   }
   /* a quiet notification when it asks you something, only if you want one */
   tellPanel() {
@@ -585,6 +621,10 @@ export class Room {
       if (sw) { this.hours = { ...this.currentHours(), on: sw.dataset.hoursOn === 'on' }; this.notices.delete('hours'); return this.render(); }
       if (e.target.closest('[data-hours-reset]')) { this.hours = null; this.notices.delete('hours'); return this.render(); }
       if (e.target.closest('[data-hours-save]')) return this.saveHours();
+      const jevSw = e.target.closest('[data-jev-on]');
+      if (jevSw) return this.jevSend({ on: jevSw.dataset.jevOn === 'on' });
+      if (e.target.closest('[data-jev-remove]')) return this.jevSend({ remove_key: true });
+      if (e.target.closest('[data-jev-save]')) { const key = this.jevKey.trim(); return key ? this.jevSend({ key }) : undefined; }
       const pic = e.target.closest('[data-pic]'); if (pic) return this.hooks.picture?.(pic.dataset.pic, pic.dataset.cap);
       const m = e.target.closest('[data-mem]'); if (m && !m.disabled) return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem });
       if (e.target.closest('[data-back]')) return this.go({ tab: this.s.tab, memory: null });
@@ -601,8 +641,14 @@ export class Room {
         if (k.startsWith('fix:')) this.bodyEl.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
       }
       if (e.key === 'Escape' && this.editing) { this.editing = null; this.render(); }
+      if (e.key === 'Enter' && e.target.dataset?.jevKey) { e.preventDefault(); this.bodyEl.querySelector('[data-jev-save]:not([disabled])')?.click(); }
     });
     body.addEventListener('input', (e) => {
+      if (e.target.dataset?.jevKey) {
+        this.jevKey = e.target.value;
+        const save = this.bodyEl.querySelector('[data-jev-save]'); if (save) save.disabled = !this.jevKey.trim() || this.sending === 'jev';
+        return;
+      }
       const time = e.target.dataset?.hoursTime;
       if (time) {
         // the field keeps its focus: only the Save button and the hint change while you set a time
