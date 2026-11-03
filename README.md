@@ -7,11 +7,10 @@
 [![Tests][badge-tests]][tests]
 [![License][badge-license]][license]
 
-![An agent's whole memory drawn as living tissue: thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
-
-<sub>The memory of the Claude agent that helped build Mnemos, as `mnemos log`
-draws it: 2,198 memories and 11,602 links, kept since July 2026. Every point of
-light is a memory, and every fibre a link.</sub>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-memory-dark.png">
+  <img alt="Plate I, the memory of one agent: 2,226 memories and 11,766 links, as the Claude agent that helped build Mnemos kept them on 2 November 2026, engraved where its page lays them out and seen through a lens focused on the mind's middle. In focus, each memory is a small shell, sized by its strength, round for a lesson and a drop for the rest; in front of the focus and behind it, memories are stipple. Hairlines join linked memories into lobes, and a few marked links cross between them: a bar where one memory supports another, a barb where it contradicts it. A ring marked II shows the field that Plate II enlarges." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-memory.png">
+</picture>
 
 Mnemos gives an AI agent the thing it otherwise cannot have: a sense of being
 someone who persists. At the start of a session it reads its own words about
@@ -92,15 +91,27 @@ parts need macOS or Linux.
 <sub>`mnemos log` on a sample memory, made for this picture: an agent working with
 Alex on a small project that reads ocean buoys.</sub>
 
+![The mind view of mnemos log: an agent's whole memory as thousands of points of light gathered in clusters and joined by fine fibres, on black.][mind]
+
+<sub>The page's own view of the memory Plate I engraves: every point of light is
+a memory, and every fibre a link.</sub>
+
 ## A memory, up close
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-up-close-dark.png">
+  <img alt="Plate II, memories up close: the field marked II on Plate I, enlarged 6.5 times as a round field under the lens. Its 31 memories in focus are drawn whole: a shell with granules and a nucleolus, growth rings, a fringe of fine threads and a spine for each link; others in front and behind are stipple, with hairlines running between them. Four are lettered, with their values beside them. a, a lesson kept from experience b: strength 0.78, stability 1.00, accessibility 0.36, not recalled yet, 5 links. b, an experience: strength 0.51, stability 1.00, accessibility 0.11, not recalled yet, 3 links. c, an experience: strength 0.46, stability 1.00, accessibility 0.64, recalled twice, 13 links. d, an experience: strength 0.57, stability 1.00, accessibility 0.73, recalled once, 14 links. A small map of Plate I shows where the field lies." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/plate-up-close.png">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy-dark.png">
   <img alt="Fig. 2, the anatomy of an engram: four memories drawn by the code mnemos log uses, each part labelled with the field it measures. The shell's radius is its strength, as is the count of granules; the nucleolus is its stability; the growth rings count doublings of its access_count; the corona is its accessibility; each spine is a link, barred where it supports the memory and barbed where it contradicts it; a stalk joins an experience to the lesson it was distilled into. A table gives each memory's values." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/anatomy.png">
 </picture>
 
-This is how `mnemos log` draws a memory when you open it, and every part is one
-of its numbers: the shell's radius is its `strength`, the nucleolus its
+Plate II enlarges a small field of Plate I: the memories in it are real, and the
+values beside them are their own. Fig. 2 names the parts. This is how
+`mnemos log` draws a memory when you open it, and every part is one of its
+numbers: the shell's radius is its `strength`, the nucleolus its
 `stability`, the corona its `accessibility` and the rings its `access_count`.
 Each spine is a link, barred where it `supports` the memory and barbed where it
 `contradicts` it, and a stalk joins an experience to the lesson it was
