@@ -199,9 +199,9 @@ class MnemosMemoryProviderCore:
         self._runtime: MnemosRuntime | None = None
         self._session_id = ""
         # What prefetch last recalled for each session: the query, the store's
-        # revision then (_store_revision), and the context. A write here
-        # clears it; another process's write changes the revision.
-        self._prefetch_cache: dict[str, tuple[str, int | None, str]] = {}
+        # revision then (_store_revision), and the context. Any write, here
+        # or by another process, changes the revision.
+        self._prefetch_cache: dict[str, tuple[str, tuple[int, int] | None, str]] = {}
         self._writes_enabled = True
         self._turn_count = 0
 
@@ -272,29 +272,33 @@ class MnemosMemoryProviderCore:
         if not clean:
             return ""
         cache_key = session_id or self._session_id or self.scope.session_id
-        revision = self._store_revision()
         cached = self._prefetch_cache.get(cache_key)
+        revision = self._store_revision()
         if cached and cached[0] == clean and revision is not None and cached[1] == revision:
             return cached[2]
         recalled = self._runtime.recall(clean, max_results=self._config.max_recall_results)
         if "No relevant continuity found" in recalled:
             return ""
         context = _truncate("# Mnemos Recall\n" + recalled, self._config.max_context_chars)
-        self._prefetch_cache[cache_key] = (clean, revision, context)
+        # Read after the recall, whose own bookkeeping writes count as no change.
+        self._prefetch_cache[cache_key] = (clean, self._store_revision(), context)
         return context
 
     def queue_prefetch(self, query: str, *, session_id: str = "") -> None:
         self.prefetch(query, session_id=session_id)
 
-    def _store_revision(self) -> int | None:
+    def _store_revision(self) -> tuple[int, int] | None:
         """The store's revision as this provider's connection sees it: SQLite's
-        data_version, which moves when another connection commits. A cached
-        recall from an older revision may hold what was since forgotten or
-        corrected elsewhere. None when it can't be read: then nothing cached
-        is trusted."""
+        data_version, which moves when another connection commits, and the
+        connection's own total_changes, which moves with every write made
+        through it (a review note, upkeep, a correction), so no write path
+        has to remember to clear the cache. A cached recall from an older
+        revision may hold what was since forgotten or corrected. None when it
+        can't be read: then nothing cached is trusted."""
         try:
             self._runtime._ensure_init()
-            return int(self._runtime._store._get_conn().execute("PRAGMA data_version").fetchone()[0])
+            conn = self._runtime._store._get_conn()
+            return int(conn.execute("PRAGMA data_version").fetchone()[0]), conn.total_changes
         except Exception:
             return None
 
@@ -387,29 +391,38 @@ class MnemosMemoryProviderCore:
         assert self._runtime is not None
         if not self._writes_enabled or not self._config.mirror_builtin_memory:
             return
-        clean = _clean_text(content)
-        if not clean:
-            return
         action = (action or "").lower()
+        clean = _clean_text(content)
+        meta = metadata or {}
         context = (
             f"{_MIRROR_MARK} {target} memory. "
-            f"Metadata: {json.dumps(metadata or {}, sort_keys=True, default=str)}"
+            f"Metadata: {json.dumps(meta, sort_keys=True, default=str)}"
         )
-        old = _clean_text((metadata or {}).get("old_text"))
-        mirrored = self._memory_holding(old) if action == "replace" and old else None
-        if mirrored:
-            # Hermes names the entry it replaced by a piece of its text. The
-            # memory holding exactly those words is corrected to the new ones,
-            # not left in use beside them. Matched by the words themselves,
-            # never by recall's closest note, which could be an unrelated one.
-            self._prefetch_cache.clear()
-            # Written as a mirrored capture is, so a later replace finds it.
-            self._runtime.correct(f"{clean}\n\nContext: {context}", target_id=mirrored, action="update")
-        elif action in {"add", "replace"}:
+        if action in {"replace", "remove", "delete", "forget"}:
+            # The entry replaced or removed, as Hermes names it: the whole of
+            # it (previous_content, newer Hermes) or a piece of it (old_text,
+            # which Hermes requires to match one entry). A remove may carry
+            # no content at all, only these.
+            predecessor = self._mirrored_entry(
+                target,
+                whole=_clean_text(meta.get("previous_content")),
+                piece=_clean_text(meta.get("old_text")) or (clean if action != "replace" else ""),
+            )
+            if action != "replace":
+                # Forgotten only when exactly one mirrored entry is it;
+                # otherwise nothing here is retired on a guess.
+                if predecessor:
+                    self._prefetch_cache.clear()
+                    self._runtime.correct("", target_id=predecessor, action="forget")
+                return
+            if predecessor and clean:
+                # Corrected to the new words, written as a mirrored capture is,
+                # so a later replace or remove finds it.
+                self._prefetch_cache.clear()
+                self._runtime.correct(f"{clean}\n\nContext: {context}", target_id=predecessor, action="update")
+                return
+        if action in {"add", "replace"} and clean:
             self._capture(clean, context=context, importance="high" if target == "user" else "auto")
-        elif action in {"remove", "delete", "forget"}:
-            self._prefetch_cache.clear()
-            self._runtime.correct("", query=clean, action="forget")
 
     def get_config_schema(self) -> list[dict[str, Any]]:
         return [
@@ -499,22 +512,33 @@ class MnemosMemoryProviderCore:
             return
         self.initialize(self._session_id or "mnemos-hermes")
 
-    def _memory_holding(self, words: str) -> str | None:
-        """The newest memory in use here mirrored from Hermes whose own words
-        (before its "Mirrored from Hermes" context) contain ``words`` exactly,
-        ignoring case, or None: what a mirrored replace names by its old_text.
-        A memory the agent wrote itself is never one, whatever it says."""
+    def _mirrored_entry(self, target: str, *, whole: str = "", piece: str = "") -> str | None:
+        """The one memory in use here mirrored from this Hermes ``target``
+        ("memory" or "user") that is the entry Hermes names, or None: its own
+        words (before the mirror's context) equal to ``whole``, or else
+        containing ``piece``, ignoring case. None too when more than one
+        matches: a replace or remove then retires nothing on a guess. A
+        memory mirrored from the other target, or one the agent wrote
+        itself, is never it."""
+        if not whole and not piece:
+            return None
         self._runtime._ensure_init()
         scope = self._runtime.scope
-        marker = f"\n\nContext: {_MIRROR_MARK}"
-        row = self._runtime._store._get_conn().execute(
-            "SELECT id FROM engrams WHERE owner_agent_id = ? AND person_id = ? "
-            "AND project_scope = ? AND state != 'archived' AND instr(content, ?) > 0 "
-            "AND instr(lower(substr(content, 1, instr(content, ?) - 1)), lower(?)) > 0 "
-            "ORDER BY created_at DESC LIMIT 1",
-            (scope.agent_id, scope.person_id, scope.project_scope, marker, marker, words),
-        ).fetchone()
-        return row[0] if row else None
+        marker = f"\n\nContext: {_MIRROR_MARK} {target} memory."
+        rows = self._runtime._store._get_conn().execute(
+            "SELECT id, content FROM engrams WHERE owner_agent_id = ? AND person_id = ? "
+            "AND project_scope = ? AND state != 'archived' AND instr(content, ?) > 0",
+            (scope.agent_id, scope.person_id, scope.project_scope, marker),
+        ).fetchall()
+
+        def own(content: str) -> str:
+            return " ".join(content.split(marker)[0].split()).casefold()
+
+        if whole:
+            matches = [r[0] for r in rows if own(r[1]) == " ".join(whole.split()).casefold()]
+        else:
+            matches = [r[0] for r in rows if piece.casefold() in own(r[1])]
+        return matches[0] if len(matches) == 1 else None
 
     def _capture(self, content: str, context: str = "", importance: str | float = "auto") -> str:
         self._ensure_runtime()

@@ -704,3 +704,73 @@ def test_a_second_replace_finds_the_first(tmp_path):
 
     assert "Render" in recalled
     assert "Fly.io" not in recalled and "Vercel" not in recalled
+
+
+def test_prefetch_still_caches_when_nothing_was_written(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.handle_tool_call("mnemos_identity_capture",
+                                  {"content": "The studio door code is ZEBRA4471."})
+        calls = []
+        recall = provider._runtime.recall
+        provider._runtime.recall = lambda *a, **k: calls.append(1) or recall(*a, **k)
+        first = provider.prefetch("studio door code")
+        second = provider.prefetch("studio door code")
+    finally:
+        provider.shutdown()
+
+    assert first == second and "ZEBRA4471" in first
+    assert len(calls) == 1, "the second prefetch recalled again"
+
+
+def test_a_mirrored_replace_respects_its_target(tmp_path):
+    """Two mirrored entries in different Hermes targets: the replace named the
+    newest substring match, archiving the other target's entry."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The image service deploys to Vercel.", metadata={})
+        provider.on_memory_write("add", "user", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The image service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        recalled = provider._runtime.recall("service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "The billing service deploys to Vercel." in recalled
+    assert "The image service deploys to Fly.io." in recalled
+    assert "The image service deploys to Vercel." not in recalled
+
+
+def test_an_ambiguous_replace_retires_nothing(tmp_path):
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The image service deploys to Vercel.", metadata={})
+        provider.on_memory_write("add", "memory", "The billing service deploys to Vercel.", metadata={})
+        provider.on_memory_write("replace", "memory", "The image service deploys to Fly.io.",
+                                 metadata={"old_text": "deploys to Vercel"})
+        recalled = provider._runtime.recall("service deploys")
+    finally:
+        provider.shutdown()
+
+    assert "The billing service deploys to Vercel." in recalled
+    assert "The image service deploys to Vercel." in recalled
+    assert "Fly.io" in recalled
+
+
+def test_a_remove_with_no_content_is_mirrored(tmp_path):
+    """Hermes sends a remove with empty content and the entry in metadata;
+    it was dropped before the action was read."""
+    provider = _new_provider(tmp_path)
+    provider.initialize("session-1", hermes_home=tmp_path)
+    try:
+        provider.on_memory_write("add", "memory", "The vault code is QUARTZ8812.", metadata={})
+        provider.on_memory_write("remove", "memory", "",
+                                 metadata={"previous_content": "The vault code is QUARTZ8812."})
+        recalled = provider._runtime.recall("vault code QUARTZ8812")
+    finally:
+        provider.shutdown()
+
+    assert "QUARTZ8812" not in recalled
