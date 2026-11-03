@@ -3536,24 +3536,26 @@ class MnemosRuntime:
             # direct verdict has no question to keep the words on: nothing changes.
             if self._older_than_store() is not None:
                 return "Nothing was changed: this code is older than the memory, so it doesn't keep or retire beliefs."
-            if decided == "decline":
-                result = "Left as it is. The belief is unchanged."
-            else:
-                result = self._apply_reaffirmation(ask, answer, decided, author=author)
-            # The verdict answers the question that waits on this belief too:
-            # asking it again right after would be asking twice. Beliefs belong
-            # to the agent, not to a scope: it waits in every person's and project's.
-            for waiting in self._store._get_conn().execute(
-                "SELECT id, target_id, person_id, project_scope FROM reflection_queue "
-                "WHERE agent_id = ? AND kind = 'reaffirm' AND answered_at IS NULL "
-                "AND instr(prompt, ?) > 0",
-                (scope["agent_id"], f"[belief:{target}]"),
-            ).fetchall():
-                self._store.answer_reflection(
-                    waiting["target_id"], answer, reflection_id=waiting["id"],
-                    agent_id=scope["agent_id"], person_id=waiting["person_id"],
-                    project_scope=waiting["project_scope"],
-                )
+            # The verdict and the questions it answers, together or not at all.
+            with self._store.transaction():
+                if decided == "decline":
+                    result = "Left as it is. The belief is unchanged."
+                else:
+                    result = self._apply_reaffirmation(ask, answer, decided, author=author)
+                # The verdict answers the question that waits on this belief too:
+                # asking it again right after would be asking twice. Beliefs belong
+                # to the agent, not to a scope: it waits in every person's and project's.
+                for waiting in self._store._get_conn().execute(
+                    "SELECT id, target_id, person_id, project_scope FROM reflection_queue "
+                    "WHERE agent_id = ? AND kind = 'reaffirm' AND answered_at IS NULL "
+                    "AND instr(prompt, ?) > 0",
+                    (scope["agent_id"], f"[belief:{target}]"),
+                ).fetchall():
+                    self._store.answer_reflection(
+                        waiting["target_id"], answer, reflection_id=waiting["id"],
+                        agent_id=scope["agent_id"], person_id=waiting["person_id"],
+                        project_scope=waiting["project_scope"],
+                    )
             return result
 
         # Code older than the store keeps the agent's words and applies none
