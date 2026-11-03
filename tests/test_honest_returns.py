@@ -441,7 +441,8 @@ def test_maintenance_records_no_access(tmp_path, monkeypatch):
                         impact="Verify the rendered result, not the declaration.")
         assert runtime._store is not None
         store = runtime._store
-        said = "Verify the rendered result, not the declaration: computed styles prove nothing."
+        # The lesson in the impact's own words, so softening reinforces it.
+        said = "Verify the rendered result, not the declaration."
         lesson = Engram(
             content=said, impact=said, kind="procedural", tags=["lesson", "distilled"],
             strength=0.5, stability=0.5, owner_agent_id="demo",
