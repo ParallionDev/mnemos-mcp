@@ -156,3 +156,46 @@ class TestAgentAuthoredEdgeIsRemovable:
             assert not any(c.target_id == b.id for c in store.get_connections(a.id))
         finally:
             store.close()
+
+
+class TestABeliefIsItsOwnModelsToCorrect:
+    """reflect refused another kind of model's verdict on a belief; correct
+    let it replace the same belief, and left the replacement unsigned."""
+
+    def _belief(self, tmp_path):
+        from mnemos.core.belief import Belief
+        from mnemos.simple_runtime import MnemosRuntime
+
+        rt = MnemosRuntime(db_path=str(tmp_path / "b.db"), agent_id="t", person_id="p", project_scope="g")
+        rt.introduce(agent_model="claude-opus-4-6")
+        belief = Belief(agent_id="t", content="Riley prefers short replies.", confidence=0.6,
+                        domain="general", source="agent", author_model="claude-opus-4-6")
+        rt._store.save_belief(belief)
+        return rt, belief
+
+    @pytest.mark.parametrize("action", ["update", "forget"])
+    def test_another_kind_of_model_cannot_correct_it(self, tmp_path, action):
+        rt, belief = self._belief(tmp_path)
+
+        said = rt.correct("Riley prefers long replies.", target_id=belief.id, action=action,
+                          signed_as="claude-sonnet-4-6")
+
+        assert "Nothing was changed" in said
+        assert not rt._store.get_belief(belief.id).superseded_by
+
+    def test_unsigned_it_is_the_model_the_session_introduced(self, tmp_path):
+        rt, belief = self._belief(tmp_path)
+        rt.introduce(agent_model="claude-sonnet-4-6")
+
+        said = rt.correct("Riley prefers long replies.", target_id=belief.id)
+
+        assert "not yours" in said
+        assert not rt._store.get_belief(belief.id).superseded_by
+
+    def test_its_own_model_replaces_it_and_signs_the_replacement(self, tmp_path):
+        rt, belief = self._belief(tmp_path)
+
+        rt.correct("Riley prefers long replies.", target_id=belief.id, signed_as="claude-opus-4-7")
+
+        replacement = rt._store.get_belief(rt._store.get_belief(belief.id).superseded_by)
+        assert replacement.author_model == "claude-opus-4-7"

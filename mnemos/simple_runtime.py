@@ -6158,6 +6158,20 @@ class MnemosRuntime:
                 f'Nothing was changed: the belief "{shown}" is not one you '
                 "stated, so a correction cannot retire or rewrite it."
             )
+        # The rule reflect keeps: a belief is its own model's to keep, retire
+        # or rewrite. A correction let another kind of model replace one that
+        # reflect refused to let it retire.
+        author = self.author_model(signed_as)
+        if belief.author_model and not author:
+            return (
+                f"Nothing was changed: this belief is {display_name(belief.author_model)}'s, and your "
+                "correction isn't signed. Pass signed_as with your exact model id."
+            )
+        if belief.author_model and not same_mind(author, belief.author_model):
+            return (
+                f"This belief is {display_name(belief.author_model)}'s to keep, retire or rewrite, "
+                "not yours. Nothing was changed."
+            )
         text = correction.strip()
         left = f'The belief "{shown}" is left as it is: this session\'s code changes no belief.'
         if older:
@@ -6188,6 +6202,8 @@ class MnemosRuntime:
             domain=belief.domain,
             supporting_engram_ids=list(belief.supporting_engram_ids),
             source="agent",
+            author_model=author,
+            author_session=harness_session(),
         )
         belief.revise(0.0, f"corrected by the agent: {text}")
         belief.superseded_by = replacement.id
