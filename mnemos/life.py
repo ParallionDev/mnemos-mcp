@@ -13,6 +13,12 @@ after the agent's own words for the hour, and wakes the agent with
 
 The engine prepares; the agent lives. Nothing here writes words into memory.
 
+Claude Code is the one agent whose hour Mnemos runs, walled in. Every other
+agent can have an hour handed to it (``--handoff``): the same prompt, from the
+same words and the same material, printed for the agent to take in its own
+session with its own tools, and recorded like any hour so tomorrow's material
+moves on. That is not walled in, and the prompt says so (``HANDOFF_FENCE``).
+
 An hour is safe to have on for anyone (2026-10-20): it loads none of the
 person's own Claude Code settings, is given no folder to read but the ones
 Mnemos's config names (``read_dirs``), spends what its budget allows
@@ -132,6 +138,71 @@ BOOTSTRAP = {
         "words/dream.md in your studio, in your own hour."
     ),
 }
+
+
+# What a hand-off says before the hour's own prompt. The agent takes the hour in
+# its own session, with the tools it has there, so nothing walls it in the way
+# Claude Code's hours are walled in; these words are what is asked instead.
+HANDOFF_FENCE = (
+    "This hour is handed to you to take now, in this session, as the one whose memory "
+    "this is. Mnemos prepared it; nothing here runs for you and nothing below is written "
+    "into your memory for you. Answer with your memory's own tools (mnemos_reflect, "
+    "mnemos_capture, mnemos_journal), signed as yourself, or answer nothing, and nothing "
+    "is written.\n\n"
+    "It is not walled in the way Claude Code's quiet hours are: you have your usual tools "
+    "here. {kept} Where the text below says this folder, it means {studio}."
+)
+HANDOFF_KEPT = {
+    "mine": "Keep to what the hour is for: it is yours, and nothing is asked of you.",
+    "ours": "Keep to what the hour is for: the day's work below. Push, publish and send nothing.",
+    "dream": (
+        "Keep to what a dream is for: stay inward. Use no file, no shell, no web and no one "
+        "else's tools, only your memory's, and leave no note, open no page and write no handoff."
+    ),
+}
+
+
+def hand_off_model(path, scope) -> str:
+    """The model whose memory this is, for a hand-off: the person's own choice
+    (MNEMOS_HOUR_MODEL), else the memory's resident, else ``""``. Unlike
+    ``hour_model`` it never refuses: any model can take an hour handed to it.
+    The questions an hour gives are the ones asked of that model line."""
+    chosen = os.environ.get("MNEMOS_HOUR_MODEL", "").strip()
+    if chosen:
+        return chosen
+    from .interface.context_packet import resident_model
+
+    store = ReadOnlyEngramStore(path)
+    try:
+        return resident_model(store, scope)
+    except Exception:
+        return ""
+    finally:
+        store.close()
+
+
+def builtin_refusal(runner: str, kind: str) -> str:
+    """Why Mnemos won't run this agent's hour by itself, or ``""`` when it will.
+
+    Only an agent whose flags are known to wall the run in to Mnemos's tools
+    runs built in (``Runner.walled`` in setup/harnesses.py); every other agent
+    has the hour handed to it."""
+    from .setup.harnesses import get
+
+    harness = get(runner)
+    hand = f" Hand the hour to it instead: mnemos life --hour {kind} --handoff"
+    if harness is None:
+        return f"Mnemos doesn't know an agent called {runner}." + hand
+    if harness.key == "claude-code":
+        return ""
+    built = harness.hours.runner if harness.hours else None
+    if built is None:
+        return f"Mnemos has no built-in run for {harness.label}." + hand
+    if built.walled is not True:
+        state = "was seen not to" if built.walled is False else "has not been shown to"
+        return (f"Mnemos doesn't run {harness.label}'s hour by itself: its flags {state} limit it "
+                f"to Mnemos's tools ({built.why})." + hand)
+    return f"Mnemos has no built-in run for {harness.label} yet." + hand
 
 
 def studio_dir(agent_id) -> Path:
@@ -786,11 +857,91 @@ def _answered(store, ids) -> list[str]:
     ).fetchall()]
 
 
+def _hand_off(kind, *, resolved, scope, live, hours, dry_run, out) -> dict:
+    """An hour handed to the agent: the prompt the hour would get, printed to
+    ``out`` for the agent to take in its own session, and recorded like any
+    hour (a done hour on the live store) so the next one's material moves on
+    and the same material can't be handed twice. Nothing is run, nothing is
+    written to memory, and the store is not touched."""
+    records_path = hours / "hours.jsonl"
+    studio = studio_dir(resolved.agent_id)
+
+    def fenced(prompt):
+        fence = HANDOFF_FENCE.format(kept=HANDOFF_KEPT[kind], studio=studio)
+        return fence + "\n\n---\n\n" + prompt
+
+    if dry_run:
+        if not live.exists():
+            return {"status": "failed", "reason": f"There is no memory store at {live}."}
+        records = _records(records_path)
+        since = since_for(kind, records)
+        model = hand_off_model(live, scope)
+        prompt, waiting, skip, said = _prepare(kind, live, since, scope, model, resolved.agent_id, records)
+        print(f"Dry run · {kind} hour · hand-off · nothing recorded", file=out)
+        print(f"Store: {live}", file=out)
+        print(f"Since: {_minute(since)}", file=out)
+        if skip:
+            print("The hour would skip: " + skip, file=out)
+        print("\n── prompt ──\n" + fenced(prompt), file=out)
+        return {"dry_run": True, "kind": kind, "skip": skip, "prompt": fenced(prompt), "waiting": waiting}
+
+    hour_id = _gen_ulid()
+    record = {
+        "id": hour_id, "kind": kind, "started_at": datetime.now(timezone.utc).isoformat(),
+        "ended_at": "", "model": "", "status": "", "reason": "", "tokens": None,
+        "journal_ids": [], "note_ids": [], "store": "live", "session_id": "", "since": "",
+        "waiting": {"handoffs": 0, "captures": 0, "questions": 0}, "discarded_ids": [],
+        "handoff": True,
+    }
+    hours.mkdir(parents=True, exist_ok=True)
+    with (hours / ".lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            record.update(status="skipped", reason="Another hour is running.")
+            return record
+        try:
+            records = _records(records_path)
+            since = since_for(kind, records)
+            record["since"] = since
+            if not live.exists():
+                record.update(status="failed", reason=f"There is no memory store at {live}.")
+                return record
+            model = hand_off_model(live, scope)
+            record["model"] = model
+            prompt, waiting, skip, said = _prepare(kind, live, since, scope, model, resolved.agent_id, records)
+            record["waiting"] = waiting
+            if kind == "dream":
+                record["said"] = said
+            if skip:
+                record.update(status="skipped", reason=skip)
+                return record
+            # Handed only once it has been written out: an hour whose prompt
+            # never left (a closed pipe) hands nothing and moves nothing on.
+            out.write(fenced(prompt) + "\n")
+            out.flush()
+            record.update(status="done", reason="Handed to the agent to take in its own session.")
+            return record
+        except Exception as exc:
+            record.update(status="failed", reason=(
+                f"The hand-off hit an error: {type(exc).__name__}: {_line(str(exc))}"
+            ))
+            return record
+        finally:
+            if not record["since"]:
+                record["since"] = since_for(kind, _records(records_path))
+            record["ended_at"] = datetime.now(timezone.utc).isoformat()
+            with records_path.open("a") as output:
+                output.write(json.dumps(record, ensure_ascii=False) + "\n")
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
 def run_hour(kind: str, *, db_path: str | None = None, agent_id: str | None = None,
              person_id: str | None = None, project_scope: str | None = None,
              dry_run: bool = False, config_dir: str | None = None, store_copy: bool = False,
              max_minutes: float | None = None, max_tokens: int | None = None,
-             max_seconds: float | None = None, out=sys.stdout) -> dict:
+             max_seconds: float | None = None, out=sys.stdout,
+             handoff: bool = False, runner: str = "claude-code") -> dict:
     started_at = datetime.now(timezone.utc).isoformat()
     resolved = resolve_scope(db_path=db_path, agent_id=agent_id, person_id=person_id,
                              project_scope=project_scope)
@@ -799,6 +950,12 @@ def run_hour(kind: str, *, db_path: str | None = None, agent_id: str | None = No
     live = Path(resolved.db_path).expanduser()
     hours = hours_dir(resolved.agent_id)
     records_path = hours / "hours.jsonl"
+    if handoff:
+        return _hand_off(kind, resolved=resolved, scope=scope, live=live, hours=hours,
+                         dry_run=dry_run, out=out)
+    refusal = builtin_refusal(runner, kind)
+    if refusal:
+        return {"kind": kind, "id": "", "status": "failed", "reason": refusal}
     max_seconds, max_tokens, unbudgeted = budget(
         kind, max_minutes=max_minutes, max_tokens=max_tokens, max_seconds=max_seconds,
     )

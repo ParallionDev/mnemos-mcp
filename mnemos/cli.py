@@ -347,6 +347,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="Run the hour on a copy of the store; the live store is not touched")
     p_life.add_argument("--max-minutes", type=float)
     p_life.add_argument("--max-tokens", type=int)
+    p_life.add_argument("--handoff", action="store_true",
+                        help="Print the hour's prompt for the agent to take in its own session, "
+                             "run nothing, and record the hour. Needs no claude; works for any agent")
+    p_life.add_argument("--runner", default="claude-code", metavar="AGENT",
+                        help="Whose command runs the hour built in. Only claude-code does; "
+                             "any other agent has the hour handed to it (--handoff)")
 
     # ── notes ──
     p_notes = sub.add_parser(
@@ -2778,15 +2784,19 @@ def _cmd_life(args: argparse.Namespace) -> int:
     record = life.run_hour(
         args.hour, **scope_args, dry_run=args.dry_run, config_dir=args.config_dir,
         store_copy=args.store_copy, max_minutes=args.max_minutes, max_tokens=args.max_tokens,
+        handoff=args.handoff, runner=args.runner,
     )
-    if args.dry_run and record.get("status") == "failed":
+    if record.get("status") == "failed" and (args.dry_run or not record.get("id")):
         print(record["reason"], file=sys.stderr)
         return 1
     if not args.dry_run:
         kind, hour_id, status, reason = (record[key] for key in ("kind", "id", "status", "reason"))
-        print(f"{kind} hour {hour_id}: {status}" + (f". {reason}" if reason else "."))
+        # A hand-off's stdout is the prompt itself, so what is said about it
+        # goes to stderr.
+        report = sys.stderr if args.handoff else sys.stdout
+        print(f"{kind} hour {hour_id}: {status}" + (f". {reason}" if reason else "."), file=report)
         scope = resolve_scope(**scope_args)
-        print(f"Record: {life.hours_dir(scope.agent_id) / 'hours.jsonl'}")
+        print(f"Record: {life.hours_dir(scope.agent_id) / 'hours.jsonl'}", file=report)
     return 1 if record.get("status") == "failed" else 0
 
 

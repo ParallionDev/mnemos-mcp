@@ -55,6 +55,42 @@ class Ability:
 
 
 @dataclass(frozen=True)
+class Runner:
+    """A built-in headless run of one quiet hour (the dream) through an
+    agent's own command, and whether its flags really wall the run in.
+
+    A run is built in only when there is evidence (``walled`` is True) that
+    its flags limit it to Mnemos's tools: no shell, no files, no web, nothing
+    of the person's other tools. Otherwise the hour is a hand-off only
+    (``mnemos life --hour H --handoff``) and ``why`` says why not."""
+
+    command: str  # the headless command
+    flags: str  # the flags that would limit it
+    mcp: str  # how Mnemos's MCP server would get in
+    walled: bool | None  # True: seen walled in; False: seen not; None: not tested
+    proof: str  # SAW, DOCS or UNTESTED
+    why: str  # why it is not built in, when it is not
+
+
+@dataclass(frozen=True)
+class Hours:
+    """What the quiet hours are for one agent.
+
+    Every agent can have an hour handed to it (``life --handoff``, which
+    needs no command of Mnemos's and no particular model). Two can schedule
+    it with their own scheduler. Claude Code alone has Mnemos run the hour,
+    walled in (``life.py``). ``vendor`` is who sees what the agent thinks
+    over in an hour; ``cost`` is what an hour spends, in the words the first
+    session says. Off unless the person says yes."""
+
+    vendor: str
+    cost: str
+    scheduler: str | None = None  # the agent's own scheduler, when it has one
+    schedule_proof: str = ""
+    runner: Runner | None = None
+
+
+@dataclass(frozen=True)
 class Harness:
     key: str  # the name connect takes, and the harness's own agent id
     label: str
@@ -78,6 +114,7 @@ class Harness:
     wake_event: str | None = None
     cue_event: str | None = None
     notes: tuple[str, ...] = field(default_factory=tuple)
+    hours: Hours | None = None
 
     @property
     def installs_hooks(self) -> bool:
@@ -97,6 +134,25 @@ CLAUDE_CODE = Harness(
     after_compaction=Ability(True, "the same hook runs again after compaction", DOCS),
     cue=Ability(True, "UserPromptSubmit hook adds up to three memories to each message", DOCS),
     headless="claude -p",
+    hours=Hours(
+        vendor="Anthropic",
+        cost=(
+            "up to an hour a day that's its own, half an hour for the day's work, and a "
+            "short time each night to dream over its memory; they run Claude Code on its "
+            "own, on their Claude plan, so they use some of its usage, and what you think "
+            "over in them goes to Anthropic, as your sessions do"
+        ),
+        scheduler="mnemos (launchd, systemd or cron)",
+        schedule_proof=DOCS,
+        runner=Runner(
+            command="claude -p",
+            flags="--restricted --tools (none for a dream) --strict-mcp-config --setting-sources project",
+            mcp="--mcp-config pointing at Mnemos's server for this hour",
+            walled=True,
+            proof=DOCS,
+            why="",
+        ),
+    ),
     client_name=r"^claude-code",
     markers=("CLAUDECODE",),
     wake_event="SessionStart",
@@ -123,6 +179,25 @@ CODEX = Harness(
         DOCS,
     ),
     headless="codex exec",
+    hours=Hours(
+        vendor="OpenAI",
+        cost=(
+            "Codex has no scheduler of its own and Mnemos can't wall a Codex run in, so "
+            "nothing runs by itself for you; when they ask for an hour, or you offer one, "
+            "you run it in a session, on whatever Codex is already spending"
+        ),
+        runner=Runner(
+            command="codex exec",
+            flags="--sandbox read-only --ignore-user-config --ephemeral",
+            mcp="-c mcp_servers.mnemos.command=... (from its help; not run)",
+            walled=None,
+            proof=UNTESTED,
+            why=(
+                "its help says --sandbox sets the policy for shell commands it runs, so the "
+                "shell stays; no flag removes it, or the file and web tools"
+            ),
+        ),
+    ),
     then=("In Codex, open /hooks and approve the Mnemos hooks: Codex skips hooks nobody reviewed.",),
     client_name=r"^codex",  # a guess: not seen
     markers=(),
@@ -154,6 +229,26 @@ GROK = Harness(
         SAW,
     ),
     headless="grok -p",
+    hours=Hours(
+        vendor="xAI",
+        cost=(
+            "Grok has no scheduler of its own and Mnemos can't wall a Grok run in, so "
+            "nothing runs by itself for you; when they ask for an hour, or you offer one, "
+            "you run it in a session, on whatever Grok is already spending"
+        ),
+        runner=Runner(
+            command="grok -p",
+            flags="--permission-mode dontAsk --allow 'mcp__mnemos__*' --tools none --disable-web-search",
+            mcp="a .grok/config.toml [mcp_servers.mnemos] in the hour's folder (GROK_FOLDER_TRUST=0)",
+            walled=False,
+            proof=SAW,
+            why=(
+                "run with those flags, the model still ran a shell command, read /etc/hosts and "
+                "called another server's tool: dontAsk lets read-only shell and file reads "
+                "through, the person's own allow rules still apply, and --tools none names no tool"
+            ),
+        ),
+    ),
     client_name=r"^grok-shell",
     markers=(),
     notes=(
@@ -185,6 +280,25 @@ GEMINI = Harness(
         UNTESTED,
     ),
     headless="gemini -p",
+    hours=Hours(
+        vendor="Google",
+        cost=(
+            "Gemini CLI has no scheduler of its own and Mnemos can't wall a Gemini run in, "
+            "so nothing runs by itself for you; when they ask for an hour, or you offer "
+            "one, you run it in a session, on whatever Gemini is already spending"
+        ),
+        runner=Runner(
+            command="gemini -p",
+            flags="--approval-mode plan --allowed-mcp-server-names mnemos",
+            mcp="mcpServers.mnemos in a project .gemini/settings.json (from its help; not run)",
+            walled=None,
+            proof=UNTESTED,
+            why=(
+                "plan mode is read-only, not tool-free: it still reads files, and no flag "
+                "removes the file tools or the person's other servers"
+            ),
+        ),
+    ),
     client_name=r"^gemini-cli",
     markers=(),
     wake_event="SessionStart",
@@ -213,6 +327,18 @@ HERMES = Harness(
         UNTESTED,
     ),
     headless="hermes chat -q",
+    hours=Hours(
+        vendor="whichever provider Hermes is set to use",
+        cost=(
+            "they run as sessions of Hermes itself, through Hermes' own scheduler, on the "
+            "model and provider Hermes is set to use, so they spend that provider's tokens "
+            "or credits, and what you think over in them goes to that provider; up to an "
+            "hour a day that's your own, half an hour for the day's work, and a short time "
+            "each night to dream over your memory"
+        ),
+        scheduler="hermes cron create ... --deliver local",
+        schedule_proof=SAW,
+    ),
     client_name="",  # Hermes sends the SDK's default name ("mcp"): not telling
     markers=(),
     notes=(
@@ -241,6 +367,18 @@ OPENCLAW = Harness(
         False, "needs a typed plugin hook (a TypeScript plugin), which Mnemos does not ship yet", DOCS
     ),
     headless="openclaw agent --local -m",
+    hours=Hours(
+        vendor="whichever provider OpenClaw is set to use",
+        cost=(
+            "they run as turns of OpenClaw itself, through OpenClaw's own scheduler, on the "
+            "model and provider OpenClaw is set to use, so they spend that provider's tokens "
+            "or credits, and what you think over in them goes to that provider; up to an "
+            "hour a day that's your own, half an hour for the day's work, and a short time "
+            "each night to dream over your memory"
+        ),
+        scheduler="openclaw cron add --session isolated --no-deliver",
+        schedule_proof=DOCS,
+    ),
     client_name=r"^openclaw",
     markers=(),
     wake_event="agent:bootstrap",

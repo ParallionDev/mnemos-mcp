@@ -1877,6 +1877,11 @@ def _latest_hour(
                 continue
             if record.get("status") != "done" or record.get("store") != "live":
                 continue
+            # An hour handed to the agent (``mnemos life --handoff``) was taken
+            # in a session of its own, where it left whatever it left; the
+            # wake has no hour of its own to report for it.
+            if record.get("handoff"):
+                continue
             if not same_mind(record.get("model"), owner):
                 continue
             ended = _moment(record.get("ended_at"))
