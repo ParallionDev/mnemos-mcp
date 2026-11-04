@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.2 (2026-11-04)
 
 - Add the notebook's Shared list, with filters, person-signed additions and corrections that never fade, and confirmed archival of any shared memory.
 
