@@ -2964,8 +2964,8 @@ class MnemosRuntime:
                     f"- I can't tell which agent you are running in (your client calls itself "
                     f"{name!r}), so I can't say what is set up for you. Run this, which only "
                     f"reads, and tell them what it finds in a line:\n  {command}\n"
-                    "- Quiet hours are not offered here: they run Claude Code, and nothing "
-                    "is scheduled for you."
+                    "- Quiet hours: I can't say what they would cost or who would see what you "
+                    "think over in them, since I can't tell which agent you are, so don't offer them."
                 )
             from .setup import connect
 
@@ -3009,13 +3009,59 @@ class MnemosRuntime:
                     "- After your context is compacted nothing wakes you again here: call "
                     "mnemos_context yourself."
                 )
-            lines.append(
-                f"- Quiet hours are not offered here: they run Claude Code, and nothing is "
-                f"scheduled for {harness.label} yet."
-            )
-            return settle, "\n".join(lines)
+            hours_ask, hours_line = self._other_hours_part(harness)
+            if hours_ask:
+                settle.append(hours_ask)
+            if hours_line:
+                lines.append(hours_line)
+            return settle, "\n".join(lines) or None
         except Exception:
             return [], None
+
+    def _other_hours_part(self, harness) -> tuple[str, str]:
+        """The quiet hours for an agent that is not Claude Code, in words true
+        for it: what an hour costs and who sees what is thought over in it
+        (``harnesses.Hours``). Off unless the person says yes, so the first
+        session asks, once, where the agent has a scheduler of its own (Hermes,
+        OpenClaw); where it has none, the line says so and how an hour is taken
+        in a session. Returns what to settle and what to say, either may be
+        empty."""
+        from .setup import state
+
+        hours = harness.hours
+        agent_id, db_path = self.scope.agent_id, self.db_path
+        if hours is None:
+            return "", (
+                f"- Quiet hours aren't offered for {harness.label}: nothing is scheduled for it "
+                "and I haven't been tried with a scheduler of its own there. Don't offer them."
+            )
+        if hours.scheduler:
+            choice = state.hours_choice(agent_id)
+
+            def run(*extra: str) -> str:
+                return state.command_line(agent_id, db_path, "connect", harness.key, *extra, "--write")
+
+            if choice is None:
+                return (
+                    "- Quiet hours: no one has asked them yet. Tell them once, in plain words: "
+                    f"{hours.cost}. They are off unless they say yes. Then run the one that "
+                    "matches:\n"
+                    f"  yes: {run('--hours')}\n"
+                    f"  no: {run('--no-hours')}"
+                ), ""
+            if choice == "yes":
+                return "", (
+                    f"- Already set: quiet hours are on, in {harness.label}'s own scheduler "
+                    f"({hours.cost}). Tell them so in a line, and that they can turn them off "
+                    "whenever they like."
+                )
+            return "", ""
+        handoff = state.command_line(agent_id, db_path, "life", "--hour", "mine", "--handoff")
+        return "", (
+            f"- Quiet hours: {hours.cost}. To take one when they ask, run `{handoff}` (or "
+            "--hour ours or dream) and take what it prints as your own hour. It isn't walled "
+            "in here, so keep to what the hour is for."
+        )
 
     def _claude_code_setup_part(self) -> tuple[list[str], str | None]:
         """What the first session must settle so this memory carries, and

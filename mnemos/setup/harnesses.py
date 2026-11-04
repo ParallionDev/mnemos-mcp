@@ -143,10 +143,10 @@ CLAUDE_CODE = Harness(
     hours=Hours(
         vendor="Anthropic",
         cost=(
-            "up to an hour a day that's its own, half an hour for the day's work, and a "
-            "short time each night to dream over its memory; they run Claude Code on its "
-            "own, on their Claude plan, so they use some of its usage, and what you think "
-            "over in them goes to Anthropic, as your sessions do"
+            "between sessions you'd have up to an hour a day that's your own, half an hour "
+            "for the day's work, and a short time each night to dream over your memory; "
+            "they run Claude Code on its own, on their Claude plan, so they use some of its "
+            "usage, and what you think over in them goes to Anthropic, as your sessions do"
         ),
         scheduler="mnemos (launchd, systemd or cron)",
         schedule_proof=DOCS,
@@ -188,9 +188,10 @@ CODEX = Harness(
     hours=Hours(
         vendor="OpenAI",
         cost=(
-            "Codex has no scheduler of its own and Mnemos can't wall a Codex run in, so "
-            "nothing runs by itself for you; when they ask for an hour, or you offer one, "
-            "you run it in a session, on whatever Codex is already spending"
+            "no hour runs by itself in Codex: it has no scheduler Mnemos uses, and Mnemos "
+            "can't wall a Codex run in. If they ask you to take one, you take it inside the "
+            "session, on that session's model, so it spends what the session spends and what "
+            "you think over in it goes to OpenAI, as your sessions do"
         ),
         runner=Runner(
             command="codex exec",
@@ -238,9 +239,10 @@ GROK = Harness(
     hours=Hours(
         vendor="xAI",
         cost=(
-            "Grok has no scheduler of its own and Mnemos can't wall a Grok run in, so "
-            "nothing runs by itself for you; when they ask for an hour, or you offer one, "
-            "you run it in a session, on whatever Grok is already spending"
+            "no hour runs by itself in Grok: it has no scheduler Mnemos uses, and Mnemos "
+            "can't wall a Grok run in. If they ask you to take one, you take it inside the "
+            "session, on that session's model, so it spends what the session spends and what "
+            "you think over in it goes to xAI, as your sessions do"
         ),
         runner=Runner(
             command="grok -p",
@@ -290,9 +292,10 @@ GEMINI = Harness(
     hours=Hours(
         vendor="Google",
         cost=(
-            "Gemini CLI has no scheduler of its own and Mnemos can't wall a Gemini run in, "
-            "so nothing runs by itself for you; when they ask for an hour, or you offer "
-            "one, you run it in a session, on whatever Gemini is already spending"
+            "no hour runs by itself in Gemini CLI: it has no scheduler Mnemos uses, and Mnemos "
+            "can't wall a Gemini run in. If they ask you to take one, you take it inside the "
+            "session, on that session's model, so it spends what the session spends and what "
+            "you think over in it goes to Google, as your sessions do"
         ),
         runner=Runner(
             command="gemini -p",
@@ -337,11 +340,11 @@ HERMES = Harness(
     hours=Hours(
         vendor="whichever provider Hermes is set to use",
         cost=(
-            "they run as sessions of Hermes itself, through Hermes' own scheduler, on the "
-            "model and provider Hermes is set to use, so they spend that provider's tokens "
-            "or credits, and what you think over in them goes to that provider; up to an "
-            "hour a day that's your own, half an hour for the day's work, and a short time "
-            "each night to dream over your memory"
+            "between sessions you'd have up to an hour a day that's your own, half an hour "
+            "for the day's work, and a short time each night to dream over your memory; "
+            "they wake you through Hermes' own scheduler, on the model and provider Hermes "
+            "is set to use, so they spend that provider's tokens or credits, and what you "
+            "think over in them goes to that provider; each job's reply stays on this machine"
         ),
         scheduler="hermes cron create ... --deliver local",
         schedule_proof=SAW,
@@ -377,11 +380,12 @@ OPENCLAW = Harness(
     hours=Hours(
         vendor="whichever provider OpenClaw is set to use",
         cost=(
-            "they run as turns of OpenClaw itself, through OpenClaw's own scheduler, on the "
-            "model and provider OpenClaw is set to use, so they spend that provider's tokens "
-            "or credits, and what you think over in them goes to that provider; up to an "
-            "hour a day that's your own, half an hour for the day's work, and a short time "
-            "each night to dream over your memory"
+            "between sessions you'd have up to an hour a day that's your own, half an hour "
+            "for the day's work, and a short time each night to dream over your memory; "
+            "they wake you through OpenClaw's own scheduler, on the model and provider "
+            "OpenClaw is set to use, so they spend that provider's tokens or credits, and "
+            "what you think over in them goes to that provider; each job's reply goes to no "
+            "chat or channel"
         ),
         scheduler="openclaw cron add --session isolated --no-deliver",
         schedule_proof=DOCS,

@@ -171,7 +171,7 @@ def test_connecting_codex_adds_the_server_the_wake_and_the_cue(agents, tmp_path,
     assert "--agent-id codex" in hooks["SessionStart"][0]["hooks"][0]["command"]
     assert "open /hooks" in text.lower() or "/hooks" in text
     assert "Upkeep between sessions is on" in text
-    assert "Quiet hours" in text and "don't run for Codex yet" in text
+    assert "Quiet hours don't run by themselves for Codex" in text
     # And the status now says so, read from the machine.
     st = cn.status(hs.get("codex"), "codex", str(Path.home() / ".mnemos" / "codex.db"))
     assert (st.wake, st.cue) == ("set", "set")
@@ -347,7 +347,8 @@ def test_the_first_session_in_grok_says_it_wakes_by_mnemos_context_and_has_no_qu
         runtime.close()
     assert "Grok can't load your memory before the first message" in packet
     assert "call mnemos_context yourself" in packet
-    assert "Quiet hours are not offered here" in packet and "Quiet hours: no one has asked" not in packet
+    assert "no hour runs by itself in Grok" in packet and "Quiet hours: no one has asked" not in packet
+    assert "goes to xAI" in packet and "life --hour mine --handoff" in packet
     assert "use some of its usage" not in packet and "goes to Anthropic" not in packet
     assert "connect grok --write" in packet  # upkeep is not scheduled yet
     assert "1. Ask what they would like you to call them." in packet  # the ritual is as it was
@@ -374,7 +375,7 @@ def test_an_agent_that_cannot_be_told_is_told_so_and_pointed_at_connect(agents, 
         runtime.close()
     assert "I can't tell which agent you are running in" in packet
     assert f"--agent-id zed --db-path {tmp_path / 'm.db'} connect\n" in packet
-    assert "Quiet hours are not offered here" in packet
+    assert "I can't say what they would cost" in packet and "don't offer them" in packet
 
 
 def test_no_client_at_all_changes_nothing_about_the_ritual(agents, tmp_path):

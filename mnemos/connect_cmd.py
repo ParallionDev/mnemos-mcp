@@ -33,6 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .setup import agent_hours as ah
 from .setup import connect as cn
 from .setup import harnesses as hs
 from .setup import state
@@ -127,16 +128,31 @@ def _status_lines(h: hs.Harness, st: cn.Status) -> list[str]:
     lines.append("after compaction: " + _compaction_line(h, st))
     lines.append("memories for each message: " + _hook_line(h, st.cue, h.cue, "cue"))
     lines.append("upkeep between sessions: " + ("scheduled" if st.upkeep else "not scheduled"))
-    if h.key == "claude-code":
-        lines.append("quiet hours: " + ("on" if state.quiet_hours_on(st.agent_id) else "off or never asked"))
-    else:
-        lines.append(f"quiet hours: not for {h.label} yet (they run Claude Code; none are scheduled)")
+    lines.append("quiet hours: " + _hours_status(h, st))
     if st.borrowed is not None:
         lines.append(
             f"it is reading Claude Code's `{st.borrowed.name}` server from {st.borrowed.source}: "
             f"that opens {st.borrowed.scope()[0] or 'that'} agent's memory inside {h.label}"
         )
     return lines
+
+
+def _hours_status(h: hs.Harness, st: cn.Status) -> str:
+    if h.key == "claude-code":
+        return "on" if state.quiet_hours_on(st.agent_id) else "off or never asked"
+    if h.hours is None:
+        return f"none: Mnemos has not been tried with {h.label}'s own scheduler"
+    if ah.AGENTS.get(h.key):
+        asked = state.hours_choice(st.agent_id)
+        if asked == "yes":
+            return (f"on, as you asked, in {h.label}'s own scheduler "
+                    f"(turn them off: mnemos connect {h.key} --no-hours --write)")
+        return ("off" + ("; you said no" if asked == "no" else "; never asked")
+                + f" (turn them on: mnemos connect {h.key} --hours --write)")
+    return (
+        "none scheduled; Mnemos can't run them for it, but an hour can be handed to it in a session: "
+        "mnemos life --hour mine --handoff"
+    )
 
 
 def _hook_line(h: hs.Harness, kind: str, ability: hs.Ability, what: str) -> str:
@@ -192,12 +208,20 @@ def _one(h: hs.Harness, args: argparse.Namespace) -> int:
         _say()
     if h.key == "grok":
         _say(
-            "Also: Grok runs the hooks in ~/.claude/settings.json. Claude Code's Mnemos hooks "
-            "therefore run in Grok too: they read Claude Code's memory and count a day lived "
-            "there, but what they print never reaches Grok's model. To stop Grok running Claude "
-            "Code's hooks: set GROK_CLAUDE_HOOKS_ENABLED=0 (or [compat.claude] hooks = false in "
-            "~/.grok/config.toml)."
+            "Also: Grok runs the hooks in ~/.claude/settings.json, so Claude Code's Mnemos hooks "
+            "run in Grok too. This version of Mnemos makes them do nothing there (Grok marks "
+            "every hook it runs with GROK_HOOK_EVENT), but an older install of Mnemos in that "
+            "file would still read Claude Code's memory and count a day lived there. To stop "
+            "Grok running Claude Code's hooks at all: set GROK_CLAUDE_HOOKS_ENABLED=0 (or "
+            "[compat.claude] hooks = false in ~/.grok/config.toml)."
         )
+        _say()
+
+    if getattr(args, "hours", False) and not (h.hours is not None and ah.AGENTS.get(h.key)):
+        if h.key == "claude-code":
+            _say("Claude Code's quiet hours are set with: mnemos daemon install --hours --write")
+        else:
+            _say(f"--hours: nothing to schedule for {h.label}. " + _hours_gaps(h)[0])
         _say()
 
     steps = _plan(h, st, args)
@@ -255,15 +279,78 @@ def _gaps(h: hs.Harness, st: cn.Status) -> None:
         out.append(f"No per-message memories in {h.label} ({h.cue.how}).")
     if h.wake.proof == hs.UNTESTED or h.cue.proof == hs.UNTESTED:
         out.append(f"Whether the text reaches {h.label}'s model was not tested on this machine.")
-    out.append(
-        f"Quiet hours (the agent's own time between sessions) don't run for {h.label} yet; "
-        "they run Claude Code. Upkeep between sessions does."
-    )
+    out.extend(_hours_gaps(h))
     for note in h.notes:
         out.append(note)
     _say("What it will not have:")
     for line in out:
         _say(f"  - {line}")
+
+
+def _hours_gaps(h: hs.Harness) -> list[str]:
+    """What this agent's quiet hours are, said plainly (none are on unless asked for)."""
+    if h.hours is None:
+        return [f"Quiet hours (the agent's own time between sessions) aren't offered for {h.label}."]
+    if ah.AGENTS.get(h.key):
+        where = "kept on this machine" if h.key == "hermes" else "sent to no chat or channel"
+        return [
+            f"Quiet hours are off unless you ask: mnemos connect {h.key} --hours --write. They are "
+            f"three jobs in {h.label}'s own scheduler (an hour in the morning, one for the day's "
+            f"work, a short dream at night) that wake {h.label} itself, on the model and provider "
+            f"it is set to use: they spend that provider's usage, and what the agent thinks over "
+            f"in them goes to that provider. Each job's reply is {where}. An hour is not walled in "
+            f"the way Claude Code's are: the agent has its usual tools there, and the hour's words "
+            "ask it to keep to what the hour is for."
+            + (" Hermes fires its jobs only while its gateway runs (hermes gateway install)."
+               if h.key == "hermes" else "")
+        ]
+    why = h.hours.runner.why if h.hours.runner else ""
+    return [
+        f"Quiet hours don't run by themselves for {h.label}: it has no scheduler Mnemos uses, and "
+        f"Mnemos runs no hour of its own for it ({why}). An hour can be handed to it in a session "
+        f"(mnemos life --hour mine --handoff); it is taken in that session, on its model, so it "
+        f"spends what the session spends and what the agent thinks over goes to {h.hours.vendor}."
+    ]
+
+
+def _hours_steps(h: hs.Harness, scope, args) -> list[tuple[str, object]]:
+    """The quiet hours step, only when asked for (--hours) or turned off (--no-hours)."""
+    if getattr(args, "hours", False) and getattr(args, "no_hours", False):
+        return []
+    if getattr(args, "hours", False):
+        if h.hours is None or not ah.AGENTS.get(h.key):
+            return []
+        return [(
+            f"schedule the quiet hours in {h.label}'s own scheduler (3 jobs; replies go nowhere)",
+            lambda: _hours_on(h, scope),
+        )]
+    if getattr(args, "no_hours", False) and h.hours is not None and ah.AGENTS.get(h.key):
+        return [(f"remove the quiet hours from {h.label}'s scheduler", lambda: _hours_off(h, scope))]
+    return []
+
+
+def _hours_on(h: hs.Harness, scope) -> tuple[bool, str]:
+    ok, message = ah.install(h.key, cli_mnemos(), _flags(scope))
+    if ok:
+        state.record_hours_choice(scope.agent_id, "yes")
+        if h.key == "hermes":
+            message += "\nHermes fires them only while its gateway runs: hermes gateway install"
+    return ok, message
+
+
+def _hours_off(h: hs.Harness, scope) -> tuple[bool, str]:
+    ok, message = ah.remove(h.key)
+    if ok:
+        state.record_hours_choice(scope.agent_id, "no")
+    return ok, message
+
+
+def _with_hours(steps, h: hs.Harness, scope, args) -> list[tuple[str, object]]:
+    """The steps with the quiet hours step: after them to turn the hours on
+    (they ask the agent to use its tools, so those come first), before them to
+    turn the hours off (which works whatever else stops)."""
+    hours = _hours_steps(h, scope, args)
+    return hours + steps if getattr(args, "no_hours", False) else steps + hours
 
 
 def _plan(h: hs.Harness, st: cn.Status, args) -> list[tuple[str, object]]:
@@ -277,7 +364,7 @@ def _plan(h: hs.Harness, st: cn.Status, args) -> list[tuple[str, object]]:
             steps.append((_hermes_text(st, args), lambda: _hermes(scope, st, args)))
         if upkeep:
             steps.append(("schedule upkeep between sessions", lambda: _upkeep(h, scope, args)))
-        return steps
+        return _with_hours(steps, h, scope, args)
     if st.mcp != "set":
         steps.append((f"add the Mnemos server to {h.label}", lambda: _add_server(h, scope, name, mnemos)))
     wants_cue = h.cue_event is not None and not getattr(args, "no_prompt", False)
@@ -292,7 +379,7 @@ def _plan(h: hs.Harness, st: cn.Status, args) -> list[tuple[str, object]]:
             return steps  # its hooks step schedules upkeep and asks about the quiet hours
     if upkeep:
         steps.append(("schedule upkeep between sessions", lambda: _upkeep(h, scope, args)))
-    return steps
+    return _with_hours(steps, h, scope, args)
 
 
 def cli_mnemos() -> str:

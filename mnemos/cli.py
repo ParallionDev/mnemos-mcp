@@ -732,6 +732,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Don't schedule upkeep between sessions",
     )
     p_connect.add_argument(
+        "--hours", action="store_true",
+        help=(
+            "Hermes or OpenClaw: schedule the quiet hours in the agent's own scheduler (off "
+            "unless you ask). They wake the agent itself, on its own model and provider, and "
+            "each job's reply goes nowhere"
+        ),
+    )
+    p_connect.add_argument(
+        "--no-hours", action="store_true",
+        help="Hermes or OpenClaw: remove the quiet hours from the agent's scheduler, and keep that choice",
+    )
+    p_connect.add_argument(
         "--agent-safe", action="store_true",
         help=(
             "Hermes: add only the tools and leave memory.provider alone, as when an agent runs "
@@ -4627,6 +4639,23 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
             _remove_registered_server("openclaw", ["hooks", "disable", "mnemos-wake"], write=True)
             shutil.rmtree(hook_dir, ignore_errors=True)
         done.append(f"OpenClaw: the mnemos-wake hook {'removed from' if write else 'in'} {hook_dir}")
+
+    # The quiet hours connect --hours put in an agent's own scheduler.
+    from .setup import agent_hours as _hours
+
+    for key, label in (("hermes", "Hermes"), ("openclaw", "OpenClaw")):
+        binary = shutil.which(key)
+        held = _hours.listed(key, binary) if binary else None
+        if not held:
+            continue
+        if write:
+            ok, said = _hours.remove(key)
+            if not ok:
+                problems.append(f"{label}: {said}")
+                continue
+        done.append(
+            f"{label}: the quiet hours ({len(held)} jobs) {'removed from' if write else 'in'} its scheduler"
+        )
 
     if done:
         print("Removed:" if write else "Would remove:")
