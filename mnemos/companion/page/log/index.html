@@ -247,8 +247,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   /* the mind, whole and running, under everything: softened right out into the haze of light the floor is made of,
      and brought to focus as the cards move out of its way. The cards keep their place and their scroll while they're
      gone, and come back the way they left. */
-  /* it runs a rail's width past the right of the screen, so the mind's centre is the centre of the space beside the rail */
-  #behind{position:fixed;left:0;top:0;z-index:0;width:calc(100% + var(--rail-w));height:100%;border:0;pointer-events:none;filter:blur(22px) brightness(.46) saturate(1.15);transform:scale(1.05);
+  #behind{position:fixed;left:0;top:0;z-index:0;width:100%;height:100%;border:0;pointer-events:none;filter:blur(22px) brightness(.46) saturate(1.15);transform:scale(1.05);
     transition:filter .95s var(--glide),transform .95s var(--glide)}
   /* in the light the same haze is a soft shadow: its light turned over, so a bright region reads as a cloud in white glass */
   :root[data-theme="light"] #behind{filter:blur(22px) invert(1) grayscale(1) brightness(1.04)}
@@ -260,24 +259,16 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .page{transition:transform .78s var(--glide)}
   body.parted .page,body.parted .drawer{transform:translateX(100vw)}
 
-  /* the rail stays, as what floats over the mind: no floor under it now, so its words take the mind's own inks whichever
-     look the page is in, held off the light by the same soft shadow as the mind's controls. Only what can be pressed
-     takes a hand; the rest lets you take hold of the mind through it. */
+  /* the rail belongs to the notebook: it steps aside with the cards, and the mind has the whole window */
+  .rail{transition:opacity .5s var(--glide) .12s,transform .78s var(--glide),visibility 0s}
+  body.parted .rail{opacity:0;visibility:hidden;transform:translateX(-14px);transition:opacity .24s linear,transform .78s var(--glide),visibility 0s .24s}
   body.parted{background:#060608}
   html:has(body.parted){background:#060608}
-  body.parted .rail{--ink-1:rgba(236,239,244,.94);--ink-2:rgba(236,239,244,.74);--ink-3:rgba(236,239,244,.62);--ink-4:rgba(236,239,244,.55);--signal:#6d93c9;
-    --focus:rgba(255,255,255,.6);--hair:rgba(255,255,255,.1);--raised:#16161a;--raised-2:#1f1f24;--on-ground:rgba(255,255,255,.1);--on-ground-2:rgba(255,255,255,.17);
-    --glow-rgb:255,255,255;--glow:1;pointer-events:none;color:var(--ink-1);text-shadow:0 0 14px rgba(6,6,8,.95),0 0 3px rgba(6,6,8,.9)}
-  body.parted .rail :is(.pick,.sincebar .go,.nav,.seg,.to-mind,.minds){pointer-events:auto}
-  body.parted .marker{opacity:0}
-  :root[data-theme="light"] body.parted .seg{background:var(--on-ground)}
-  :root[data-theme="light"] body.parted .seg button[aria-pressed="true"]{background:var(--on-ground-2);box-shadow:none}
-  body.parted .seg,body.parted .to-mind{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-  :root[data-theme="light"] body.parted .to-mind{background:var(--on-ground);color:var(--ink-1)}
 }
 @media (min-width:760px) and (prefers-reduced-motion:reduce){
   #behind{transition:filter .2s linear}
-  .page{transition:opacity .2s linear}
+  .page,.rail,body.parted .rail{transition:opacity .2s linear,visibility 0s}
+  body.parted .rail{transform:none}
   .shell::before{transition:none}
   body.parted .page,body.parted .drawer{transform:none;opacity:0}
 }
@@ -316,40 +307,18 @@ dialog .cap button:hover{color:var(--ink-1)}
   .scroller{margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter)}
   .minds{min-width:0;width:calc(100vw - 32px)}
 }
-/* ---------- a memory open: it opens where it is, and the page around it softens and stays the page ----------
-   Stacked glass, each pane starting further from the card than the last, so focus falls away gently. log/lens.js moves
-   the sheet and the words. */
-#lens{position:fixed;inset:0;z-index:30;--cx:50%;--cy:50%}
-#lens[hidden]{display:none}
-.lens-world{position:absolute;inset:0}
-.lens-blur,.lens-falloff,.lens-lights{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block}
-.lens-blur{-webkit-backdrop-filter:blur(var(--b));backdrop-filter:blur(var(--b));-webkit-mask-image:radial-gradient(ellipse at var(--cx) var(--cy),transparent var(--from),#000 var(--to));mask-image:radial-gradient(ellipse at var(--cx) var(--cy),transparent var(--from),#000 var(--to))}
-.lens-blur.b0{--b:1.5px;-webkit-mask-image:none;mask-image:none}
-.lens-blur.b1{--b:3px;--from:36%;--to:64%}
-.lens-blur.b2{--b:6px;--from:58%;--to:96%}
-.lens-falloff{background:radial-gradient(ellipse at var(--cx) var(--cy),rgba(0,0,0,.04) 36%,rgba(0,0,0,.26) 100%)}
-:root[data-theme="light"] .lens-falloff{background:radial-gradient(ellipse at var(--cx) var(--cy),rgba(255,255,255,.06) 36%,rgba(255,255,255,.32) 100%)}
-.lens-sheet{position:absolute;left:0;top:0;overflow:hidden;border-radius:var(--r-card);background:rgba(12,12,14,.72);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);box-shadow:0 0 0 .5px rgba(255,255,255,.1),0 14px 44px rgba(0,0,0,.5);will-change:transform}
-:root[data-theme="light"] .lens-sheet{background:rgba(255,255,255,.8);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 14px 44px rgba(40,50,70,.14)}
-.lens-ghost{position:absolute;left:0;top:0;pointer-events:none}
-.lens-card{position:absolute;overflow:auto;overscroll-behavior:contain;outline:none;border-radius:var(--r-card);--surface-1:var(--pane);--plate:var(--pane);scrollbar-width:thin;scrollbar-color:var(--hair-2) transparent;will-change:transform}
-[data-theme] .lens-card:focus-visible{outline:none!important}
-.lens-content{padding:14px clamp(20px,3vw,32px) 32px}
-.lens-content .detail{position:relative}
-.lens-close{position:sticky;top:0;z-index:2;display:block;width:max-content;margin-left:auto;border-radius:var(--r-s)}
-.lens-content .specimen{margin:-8px 0 var(--s3)}
-.lens-content .specimen.readout{margin:var(--s5) 0 0}
-.lens-content .figcap{grid-template-columns:minmax(0,1fr)}
-.lens-content .detail > .meta{margin-top:0}
-.rowb.lifted{visibility:hidden}
-html:has(body.lensed){overflow:hidden}
-body.parted #lens{visibility:hidden;pointer-events:none}
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .lens-falloff{background:rgba(0,0,0,.5)}
-  :root[data-theme="light"] .lens-falloff{background:rgba(255,255,255,.6)}
-  .lens-sheet{background:#0c0c0e}
-  :root[data-theme="light"] .lens-sheet{background:#fff}
-}
+/* ---------- a memory open: its row, opened. At the start it's exactly the row, and log/unfold.js opens what's around the words ---------- */
+.rowb.unfolded{display:none}
+.unfold{min-width:0;padding:12px calc(var(--bleed) - 1px) 13px;border:1px solid transparent;margin-bottom:var(--s4)}
+.unfold.loose{margin-inline:calc(-1 * var(--bleed))}
+.unfold .detail{outline:none}
+[data-theme] .unfold .detail:focus-visible{outline:none!important}
+.unfold .specimen{margin:0}
+.unfold .specimen canvas{margin-bottom:var(--s3)}
+.unfold .meta{align-items:baseline}
+.unfold .words{margin-top:5px;max-width:none;font:400 var(--t-read-s)/1.55 var(--sans)}
+.unfold .changed{max-width:none}
+.unfold-close{margin-left:auto;padding:0;opacity:var(--open,1)}
 @media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.24s}
 </style>
@@ -393,15 +362,6 @@ body.parted #lens{visibility:hidden;pointer-events:none}
   </aside>
 </div>
 <dialog id="full"><img id="full-img" alt=""><div class="cap"><span id="full-cap"></span><button id="full-close" type="button">Close</button></div></dialog>
-<div id="lens" hidden>
-  <div class="lens-world">
-    <i class="lens-blur b0"></i><i class="lens-blur b1"></i><i class="lens-blur b2"></i>
-    <canvas class="lens-lights" aria-hidden="true"></canvas>
-    <i class="lens-falloff"></i>
-  </div>
-  <div class="lens-sheet"></div>
-  <div class="lens-card" role="dialog" aria-modal="true" aria-label="A memory" tabindex="-1"><div class="lens-content"></div></div>
-</div>
 <script type="module" src="log.js"></script>
 </body>
 </html>

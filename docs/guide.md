@@ -426,7 +426,7 @@ mind.
 - **The log**: its story down the page, its state in a drawer beside it. Its days,
   its memories (searchable), its beliefs, what its memory asks it, its
   journal, its quiet hours (what each one wrote and made), and its notes to
-  you. A memory opens where it is, as a card over its list.
+  you. A memory opens in its row, with its figure above its words.
 - **Notes**: each note it left you, with a box to reply. The ones that ask
   you something come first, with the box already open. There's also a box
   to leave it a note of your own. It wakes with what you write, once, in

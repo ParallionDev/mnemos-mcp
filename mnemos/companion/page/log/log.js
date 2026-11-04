@@ -3,7 +3,7 @@
  * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
-import { makeLens } from './lens.js';
+import { makeUnfold } from './unfold.js';
 import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent,
   visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -155,9 +155,8 @@ addEventListener('keydown', (e) => {
 /* ---------- the mind behind it all ----------
  * The notebook is glass over a mind that's already running: the whole mind page sits under the cards, softened right
  * out into the haze of light the floor is made of. It sleeps when nothing's happening, and a memory arriving lights it
- * even here. "Open the mind" only moves the cards out of the way, and the rail stays, floating over it: with no card
- * open the mind is simply what's there, and a tab brings its card back. On a phone, or where it can't be drawn, it's a
- * link. */
+ * even here. "Open the mind" moves the cards and the rail out of the way, and the mind has the whole window; its own
+ * link, or Escape, brings them back as they were. On a phone, or where it can't be drawn, it's a link. */
 let behind = null, mindHere = false, parted = false;
 function placeMind() {
   if (behind || !railed.matches) return;
@@ -168,34 +167,22 @@ function placeMind() {
   behind.setAttribute('aria-hidden', 'true');
   document.body.prepend(behind);
 }
-/* nothing behind whatever's in front can be reached: the cards under an open memory or the mind, the rail under a memory */
-function settleInert() {
-  const lensed = !!lens?.isOpen() && !parted;
-  document.querySelector('.page').inert = parted || lensed; $('drawer').inert = parted || lensed;
-  document.querySelector('.rail').inert = lensed;
-}
 function part(open, { hash = '', moved = false } = {}) {
   if (open === parted || (open && (!behind || !mindHere))) return;
   parted = open;
   if (open && floating()) drawer(false);
   if (open && !$('minds').hidden) showMinds(false);
   document.body.classList.toggle('parted', open);
-  settleInert();
+  for (const away of [document.querySelector('.rail'), document.querySelector('.page'), $('drawer')]) away.inert = open;
   behind.inert = !open;
-  $('to-mind').textContent = open ? 'Back to the log' : 'Open the mind';
-  showOpenTab();
   if (open) behind.removeAttribute('aria-hidden'); else behind.setAttribute('aria-hidden', 'true');
   behind.contentWindow.postMessage({ mnemos: open ? 'reveal' : 'cover', hash }, location.origin);
+  if (open) behind.focus(); else $('to-mind').focus({ preventScroll: true });
   if (open) {
     if (!moved) history.pushState({ mind: true }, '', `${location.pathname}${location.search}#mind`);
   } else if (!moved) {
     if (history.state?.mind) history.back(); else history.replaceState(null, '', location.pathname + location.search);
   }
-}
-// no card is open while the mind is showing; the tab says so, and the same tab brings its card back as it was left
-function showOpenTab() {
-  if (!room) return;
-  for (const b of $('tabs').querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', String(!parted && b.dataset.tab === room.s.tab));
 }
 function cardsBack() {
   if (history.state?.mind) history.replaceState(null, '', location.pathname + location.search);
@@ -215,16 +202,8 @@ document.addEventListener('click', (e) => {          // every way to the mind, a
   const a = e.target.closest?.('a[href]');
   if (!a || !mindHere || !railed.matches || e.metaKey || e.ctrlKey || e.shiftKey) return;
   const to = new URL(a.href);
-  if (to.pathname.endsWith('/mind/')) { e.preventDefault(); if (parted) part(false); else part(true, { hash: to.hash }); }
+  if (to.pathname.endsWith('/mind/')) { e.preventDefault(); part(true, { hash: to.hash }); }
 });
-$('tabs').addEventListener('click', (e) => {
-  const t = e.target.closest('[data-tab]');
-  if (!parted || !t) return;
-  const same = t.dataset.tab === room?.s.tab;
-  cardsBack();
-  if (same) e.stopPropagation();                     // it's the card that was open: back as it was, not back to its top
-}, true);
-$('sincebar').addEventListener('click', (e) => { if (parted && e.target.closest('[data-since]')) cardsBack(); }, true);
 railed.addEventListener('change', () => { if (railed.matches) { if (room) placeMind(); } else part(false); });
 
 function missing() {
@@ -245,7 +224,6 @@ function placeMarker(key, glide) {
   const track = $('track'), btn = $('tabs').querySelector(`[data-tab="${key}"]`), marker = $('marker');
   if (!btn) return;
   marker.classList.toggle('still', !glide || reduce);
-  showOpenTab();
   const r = btn.getBoundingClientRect(), base = track.getBoundingClientRect();    // fractional pixels, so it fits exactly
   $('tabs').setAttribute('aria-orientation', railed.matches ? 'vertical' : 'horizontal');
   marker.style.width = railed.matches ? '' : `${r.width}px`;
@@ -323,26 +301,32 @@ async function look() {
   tell({ agent: life.identity.agentId, who: life.identity, notes: life.notes || [], open: () => room?.go({ tab: 'notes' }) });
 }
 
-let lens = null;
 function leaveMemory() {
-  if (history.state?.lens) history.back(); else room.go({ memory: null });
+  if (history.state?.memory) history.back(); else room.go({ memory: null });
 }
 function start() {
-  lens = makeLens($('lens'), { leave: leaveMemory, changed: settleInert, list: $('body') });
+  const scroller = () => (railed.matches ? $('main') : document.scrollingElement);
+  const unfold = makeUnfold({
+    body: $('body'), scroller,
+    // what you can see of the list: the card, or a phone's window under its track
+    port: () => { if (railed.matches) { const r = $('main').getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; } return { top: Math.max(0, $('tabs').getBoundingClientRect().bottom), bottom: innerHeight }; },
+    settled: () => { if (room.listStale) room.render(); },
+    relaid: () => room.refresh(),
+  });
   room = new Room({
     tabsEl: $('tabs'), bodyEl: $('body'), tabs: TABS, sticky: false,
     ctx: () => ({ who: life.identity, life, mems, byId, since: V?.since || 0 }),
     hooks: {
-      lens, leave: leaveMemory,
-      // a memory opened from the list is one step back from it; one to another inside the card is still that one step
+      unfold, leave: leaveMemory,
+      // a memory opened from the list is one step back from it; one to another inside its row is still that one step
       route: (hash) => {
-        if (room.s.memory && !history.state?.lens && location.hash !== hash) history.pushState({ lens: true }, '', hash);
-        else history.replaceState(room.s.memory && history.state?.lens ? { lens: true } : null, '', hash);
+        if (room.s.memory && !history.state?.memory && location.hash !== hash) history.pushState({ memory: true }, '', hash);
+        else history.replaceState(room.s.memory && history.state?.memory ? { memory: true } : null, '', hash);
         document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true);
       },
       transition,
       // where the content starts when you change tab: in the rail, the top of the page; under the track, just below it
-      scroller: () => (railed.matches ? $('main') : document.scrollingElement),
+      scroller,
       top: () => (railed.matches ? 0 : $('tabs').getBoundingClientRect().top + scrollY - 8),
       // what you write on the page: a reply, an answer or a note, sent to `mnemos log` (and on to the memory) as yours
       send: async (request) => {
@@ -366,13 +350,13 @@ function start() {
     },
   });
   const r = parseRoute(location.hash, TABS);
-  room.s.tab = r?.tab || 'log'; room.s.memory = r?.memory && byId.has(r.memory) ? r.memory : null;
+  room.s.tab = r?.tab || (r?.memory ? 'memories' : 'log'); room.s.memory = r?.memory && byId.has(r.memory) ? r.memory : null;
   document.body.dataset.tab = room.s.tab;
   room.render();
   margin();
   placeMarker(room.s.tab, false);
   // Escape closes an open memory, unless it's being corrected: then it cancels that first, in the room
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && lens.isOpen() && !parted && !room.editing && !$('full').open) leaveMemory(); }, true);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && unfold.isOpen() && !parted && !room.editing && !$('full').open && !e.target.matches?.('input, textarea')) leaveMemory(); }, true);
   document.fonts.ready.then(() => placeMarker(room.s.tab, false));   // the labels' true width arrives with the font
   addEventListener('resize', () => placeMarker(room.s.tab, false));
   (window.requestIdleCallback || setTimeout)(placeMind);

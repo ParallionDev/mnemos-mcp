@@ -43,22 +43,11 @@ a{color:inherit}
 .own{font-family:var(--own)}
 .label{font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 
-.rail-clear{display:none}
-/* behind the notebook: covered, only the mind itself; its controls come up as the cards part */
-html.behind .hero,html.behind .regions,html.behind #loading{transition:opacity .55s var(--ease) .3s}
-html.behind.covered .hero,html.behind.covered .regions,html.behind.covered #loading{opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
-/* the notebook's rail floats over this page and says who it is, what's waiting and the facts, so they aren't said twice.
-   This window runs a rail's width past the right of the screen, which centres the mind in the open space, so what's
-   placed from the right comes in by that much (--rail matches the log's rail). What the hour left is read in the log. */
-html.behind{--rail:238px;--from-rail:262px}
-html.behind .house,html.behind #who-name,html.behind .who small.since,html.behind #to-log,html.behind #open-room,html.behind .foot .verify,html.behind .paper{display:none}
+/* the notebook's own name and facts stay with the notebook: here there's only the mind, and the way back to the log.
+   What the hour left is read in the log, and the sheet comes only when a cell is opened. */
+html.behind .house,html.behind #who-name,html.behind .who small.since,html.behind #open-room,html.behind .foot .verify,html.behind .paper{display:none}
 html.behind .who{margin-top:0}
 html.behind .who small:first-of-type{margin-top:2px}
-html.behind .hero .top{left:var(--from-rail);max-width:calc(100vw - var(--rail) - var(--from-rail) - 310px)}
-html.behind .hero .foot{left:var(--from-rail);max-width:min(560px,calc(100vw - var(--rail) - var(--from-rail) - 210px))}
-html.behind .hero .actions,html.behind .hero .left-cue{right:calc(var(--edge) + var(--rail))}
-html.behind .rail-clear{display:block;left:0;top:0;bottom:0;width:var(--rail);visibility:hidden}
-html.behind .room{right:calc(10px + var(--rail));width:min(var(--sheet),calc(100vw - 2 * var(--rail) - 30px))}
 @media (prefers-reduced-motion:reduce){html.behind .hero,html.behind .regions,html.behind #loading{transition:none}}
 
 /* ── its regions, named over the mind (mind.js places them each frame; only the ones shown take a hand) ── */
@@ -257,7 +246,7 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .close:hover{color:var(--ink-1)}
 .close:focus-visible{border-color:var(--focus);color:var(--ink-1)}
 .room-body{flex:1;overflow-y:auto;padding:var(--s4) 24px var(--s8);overscroll-behavior:contain;border-radius:0 0 var(--g-r) var(--g-r)}
-.room .tabs{margin-top:var(--s4)}
+.room .tabs{margin-top:var(--s4);gap:11px}
 dialog{margin:auto;border:0;border-radius:var(--r);background:var(--raised);padding:0;max-width:min(92vw,1100px);max-height:92vh;overflow:hidden;color:var(--ink-1)}
 dialog::backdrop{background:rgba(6,6,8,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 dialog img{display:block;max-width:min(92vw,1100px);max-height:calc(92vh - 46px);object-fit:contain}
@@ -337,7 +326,6 @@ dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:va
     </div>
     <div class="verify" id="verify"></div>
   </div>
-  <div class="ui rail-clear" aria-hidden="true"></div>
   <button class="ui recenter" id="recenter" type="button" tabindex="-1"><span class="mag" id="mag" aria-hidden="true"></span>Recenter</button>
   <div class="ui left-cue" id="left-cue" hidden>
     <button id="to-paper">What it left ↓</button>

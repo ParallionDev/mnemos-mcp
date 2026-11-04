@@ -4,7 +4,7 @@
  *
  *   new Room({ tabsEl, bodyEl, tabs, sticky, ctx, hooks })
  *     ctx()   → { who, life, mems, byId, heat?(id) }   who: the export's identity
- *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id), top?(), scroller?() }
+ *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id), top?(), scroller?(), unfold?, leave?() }
  */
 
 import { SHARED, esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
@@ -53,21 +53,21 @@ export class Room {
   go({ tab = this.s.tab, memory = null } = {}, keepPage = false) {
     if (this.editing && this.editing.id !== memory) this.editing = null;
     const from = this.s.tab, changed = tab !== this.s.tab || memory !== this.s.memory;
-    const lifting = this.hooks.lens && tab === from;   // a memory lifts out of the list: the list stays just as it is under it
+    const inPlace = this.hooks.unfold && tab === from;   // a memory opens in its row: the list stays as it is around it
     const apply = () => {
       this.s.tab = tab; this.s.memory = memory;
-      if (!keepPage && !lifting) this.s.shown = PAGE;
-      this.render(changed && !lifting);
+      if (!keepPage && !inPlace) this.s.shown = PAGE;
+      this.render(changed && !inPlace, inPlace);
       this.hooks.open?.(memory);
       this.hooks.route?.(this.hash());
     };
     // a page may choreograph the change (the log's marker glides and its content trades places); otherwise, at once
-    if (changed && !lifting && this.hooks.transition) this.hooks.transition(apply, from, tab); else apply();
+    if (changed && !inPlace && this.hooks.transition) this.hooks.transition(apply, from, tab); else apply();
   }
 
   /* ---------- drawing ---------- */
 
-  render(toTop = false) {
+  render(toTop = false, keepList = false) {
     this.tabsEl.innerHTML = this.tabs.map((k) => {
       const n = this.count(k);
       const fresh = k === 'notes' && this.unread() ? '<span class="unread" role="img" aria-label="new"></span>' : '';
@@ -82,42 +82,44 @@ export class Room {
     const a = document.activeElement, typingIn = a?.dataset?.draft ? [a.dataset.draft, a.selectionStart, a.selectionEnd] : null;
     const list = () => ({ log: () => this.logHTML(), memories: () => this.memoriesHTML(), beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(),
       journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML(), shared: () => this.sharedHTML(), settings: () => this.settingsHTML() }[this.s.tab]());
-    // with a lens, a memory opens over its list, which is left as it was; without one (the mind's sheet), it takes the list's place
-    const lens = this.hooks.lens, same = lens && open && lens.showing === this.s.memory, keep = same ? lens.content.parentElement.scrollTop : 0;
-    const drewList = !lens || this.listOf !== this.s.tab || !(open || lens.isOpen());
-    if (!lens) this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory) : list();
+    // in the notebook a memory opens in its row, and the list stays; in the mind's sheet, it takes the list's place
+    const fold = this.hooks.unfold, sameTab = this.listOf === this.s.tab;
+    const fresh = fold && open && fold.showing !== this.s.memory;
+    let into = null, wrote = !fold && open;
+    if (!fold) this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory) : list();
     else {
-      if (drewList) { this.bodyEl.innerHTML = list(); this.listOf = this.s.tab; this.listStale = false; }
-      if (open) { lens.prepare(this.origin); lens.content.innerHTML = this.memoryHTML(this.s.memory); }
+      if (!sameTab) fold.drop();
+      if (!sameTab || (!keepList && !fold.moving())) { fold.lift(); this.bodyEl.innerHTML = list(); this.listOf = this.s.tab; this.listStale = false; fold.rehome(); }
+      else if (!keepList) this.listStale = true;     // it's drawn once the rows have stopped moving
+      if (open) {
+        into = fold.ready(this.s.memory, this.origin);
+        const html = this.memoryHTML(this.s.memory);
+        // a live redraw that changes nothing leaves it alone: your place, your focus, what you've opened
+        if (into.written !== html) { into.innerHTML = html; into.written = html; wrote = true; }
+      }
     }
     if (this.s.tab === 'shared' && this.sending) {
       for (const control of this.bodyEl.querySelectorAll('button, input, textarea, select')) control.disabled = true;
     }
     this.restoreOpen();
     if (toTop) this.toTop(); else scroller.scrollTop = top;
-    const search = this.view.querySelector('#room-search');
+    const search = this.bodyEl.querySelector('#room-search');
     if (typing && search) { search.focus({ preventScroll: true }); search.setSelectionRange(...typing); }
-    const draft = typingIn && this.view.querySelector(`[data-draft="${CSS.escape(typingIn[0])}"]`);
+    const draft = typingIn && this.bodyEl.querySelector(`[data-draft="${CSS.escape(typingIn[0])}"]`);
     if (draft) { draft.focus({ preventScroll: true }); draft.setSelectionRange(typingIn[1], typingIn[2]); }
     // a key being typed is set back as a value, never written into the page
-    const key = this.jevKey && this.view.querySelector('[data-jev-key]');
-    if (key) { key.value = this.jevKey; const save = this.view.querySelector('[data-jev-save]'); if (save && this.sending !== 'jev') save.disabled = false; }
+    const key = this.jevKey && this.bodyEl.querySelector('[data-jev-key]');
+    if (key) { key.value = this.jevKey; const save = this.bodyEl.querySelector('[data-jev-save]'); if (save && this.sending !== 'jev') save.disabled = false; }
     this.watchReading();
-    const plate = open && this.view.querySelector('.specimen canvas');
-    if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }), again: lens && !same, wait: lens && !lens.isOpen() ? 160 : 0, tall: lens ? 176 : 0 });
-    if (lens) {
-      if (open) lens.arrive({ id: this.s.memory, from: this.origin, same, top: keep, ties: this.ctx().mems[byId.get(this.s.memory)].ties.map(([id, , w]) => ({ id, w })) });
-      else if (lens.isOpen()) {
-        const left = lens.showing;
-        lens.leave(() => this.bodyEl.querySelector(`[data-mem="${CSS.escape(left)}"]`), () => { if (this.listStale) this.render(); });
-      }
+    const plate = wrote && (into || this.bodyEl).querySelector('.specimen canvas');
+    if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }), again: fresh, wait: fresh ? 90 : 0 });
+    if (fold) {
+      if (open) fold.arrive(); else if (fold.isOpen()) fold.close();
       this.origin = null;
     }
-    const more = drewList && this.bodyEl.querySelector('.more-rows');
+    const more = this.bodyEl.querySelector('.more-rows');
     if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.viewRoot(), rootMargin: '400px' }).observe(more);
   }
-  /* where the words are showing: in the lens while a memory is open there, otherwise the page */
-  get view() { const { byId } = this.ctx(); return this.hooks.lens && this.s.memory && byId.has(this.s.memory) ? this.hooks.lens.content : this.bodyEl; }
   scroller() { return this.sticky ? this.bodyEl : (this.hooks.scroller?.() || document.scrollingElement); }
   viewRoot() { const s = this.scroller(); return s === document.scrollingElement ? null : s; }
   toTop() {
@@ -128,8 +130,7 @@ export class Room {
   }
   /* a live redraw waits while you're writing, so nothing you type is lost or jumps */
   refresh() {
-    if (this.view.contains(document.activeElement) && document.activeElement.matches('[data-draft], [data-jev-key]')) return;
-    if (this.hooks.lens?.isOpen()) this.listStale = true;     // the list under an open memory is redrawn when it closes
+    if (this.bodyEl.contains(document.activeElement) && document.activeElement.matches('[data-draft], [data-jev-key]')) return;
     this.render();
   }
 
@@ -272,7 +273,7 @@ export class Room {
     this.sending = null;
     if (answer?.result) this.drafts.delete('shared-new');
     else this.notices.set('shared-new', answer?.error || SHARED.failed);
-    this.render(); this.view.querySelector('[data-draft="shared-new"]')?.focus();
+    this.render(); this.bodyEl.querySelector('[data-draft="shared-new"]')?.focus();
   }
 
   /* ---------- memories ---------- */
@@ -289,11 +290,14 @@ export class Room {
       : s === 'easiest' ? b.acc - a.acc : s === 'oldest' ? t(a) - t(b) : t(b) - t(a));
   }
   row(m) {
+    return `<li><button class="rowb" data-mem="${esc(m.id)}"><div class="meta">${this.rowMeta(m)}</div>
+      <div class="words">${esc(m.content)}</div></button></li>`;
+  }
+  rowMeta(m) {
     const heat = this.ctx().heat, { who } = this.ctx();
     const tags = [m.lesson ? 'a lesson' : null, m.standing ? 'standing' : null, m.asked ? 'asked about' : null, m.state === 'dormant' ? 'gone quiet' : null,
       m.model && !sameModel(m.model, who.model) ? modelName(m.model) : null].filter(Boolean);
-    return `<li><button class="rowb" data-mem="${esc(m.id)}"><div class="meta">${this.isNew(m) ? '<span class="k new"><span class="unread" aria-hidden="true"></span>new</span>' : ''}<span>${shortDay(at(m.born))}</span>${tags.map((x) => `<span class="k2">${esc(x)}</span>`).join('')}${heat && heat(m.id) > 0.05 ? '<span class="warm">warm from its hours</span>' : ''}${m.recalls ? `<span>recalled ${m.recalls}×</span>` : ''}</div>
-      <div class="words">${esc(m.content)}</div></button></li>`;
+    return `${this.isNew(m) ? '<span class="k new"><span class="unread" aria-hidden="true"></span>new</span>' : ''}<span>${shortDay(at(m.born))}</span>${tags.map((x) => `<span class="k2">${esc(x)}</span>`).join('')}${heat && heat(m.id) > 0.05 ? '<span class="warm">warm from its hours</span>' : ''}${m.recalls ? `<span>recalled ${m.recalls}×</span>` : ''}`;
   }
   /* formed since the person was last here */
   isNew(m) { const since = this.ctx().since; return !!since && Date.parse(m.born) > since; }
@@ -315,36 +319,41 @@ export class Room {
     const asks = life.questions.asked.filter((q) => q.about === id), answers = life.questions.answered.filter((q) => q.about === id);
     const beliefs = life.beliefs.filter((b) => (b.supports || []).includes(id));
     const hours = life.hours.filter((h) => { const t = h.trail || {}; return [...(t.woke || []), ...(t.waiting || []), ...(t.reached || [])].includes(id); });
-    const sign = [signedBy(m, who), m.lesson ? 'a lesson' : null, m.standing ? 'standing: how it works every session' : null,
-      m.recalls ? `came back in logged recall ${plural(m.recalls, 'time')}` : null, `tied to ${plural(m.ties.length, 'other memory', 'other memories')}`,
-      m.state === 'dormant' ? 'gone quiet' : null].filter(Boolean).join(' · ');
+    const sign = [`${longDay(d)}, ${clock(d)}`, signedBy(m, who), m.standing ? 'standing: how it works every session' : null].filter(Boolean).join(' · ');
     const link = this.hooks.mindLink?.(id);
     const H = herbariumOf(mems), hi = byId.get(id), hc = H.cells[hi], n2 = (v) => (v ?? 0).toFixed(2);
     const readings = [['strength', n2(hc.strength)], ['stability', n2(hc.stability)], ['reach', n2(hc.accessibility)], ['links', hc.links], ['recalled', `${hc.accessCount}×`]];
-    const lensed = !!this.hooks.lens;
-    const caption = (tag) => `<${tag} class="figcap"><span class="life">${esc(lifeWords(H, hi, lifeOf(H, hi)))}</span>
-          <span class="readings">${readings.map(([k, v]) => `<span><i>${k}</i> ${v}</span>`).join('')}</span>
-          <details class="key"><summary>How to read the figure</summary><ul>
-            <li>Its size is how strongly it's kept. Round, it's a lesson; a drop is an experience, its front toward what it became.</li>
-            <li>A spine for each link, as long as the link is strong${hc.links > 64 ? ` (its strongest 64 of ${hc.links})` : ''}. Barred, it supports; barbed, it contradicts. The stalk joins an experience to its lesson.</li>
-            <li>A ring for each doubling of the times it came back. The centre grows as it settles. The threads around it reach as far as it's easy to reach.</li>
-            <li>Drawn dashed and hollow, it has gone quiet.</li></ul></details></${tag}>`;
-    return `<div class="detail">${lensed ? '<button class="back lens-close" data-back="1">Close</button>' : `<button class="back" data-back="1">← ${LABEL[this.s.tab] === 'Memories' ? 'All memories' : `Back to ${LABEL[this.s.tab].toLowerCase()}`}</button>`}
-      <figure class="specimen"><canvas role="img" aria-label="${esc(lifeWords(H, hi, lifeOf(H, hi)))}, drawn as a specimen"></canvas>${lensed ? '' : caption('figcaption')}</figure>
-      <div class="meta">${longDay(d)}, ${clock(d)} · ${esc(sign)}</div>
+    const folded = !!this.hooks.unfold;
+    const also = (key, label, html) => `<details class="also" data-key="${esc(`${id}:${key}`)}"><summary>${label}</summary>${html}</details>`;
+    return `<div class="detail"${folded ? ' tabindex="-1" role="group" aria-label="A memory"' : ''}>${folded ? '' : `<button class="back" data-back="1">← ${LABEL[this.s.tab] === 'Memories' ? 'All memories' : `Back to ${LABEL[this.s.tab].toLowerCase()}`}</button>`}
+      <figure class="specimen"><canvas role="img" aria-label="${esc(lifeWords(H, hi, lifeOf(H, hi)))}, drawn as a specimen"></canvas></figure>
+      ${folded ? `<div class="meta">${this.rowMeta(m)}<button class="back unfold-close" data-back="1">Close</button></div>` : ''}
       <div class="words">${esc(m.content)}</div>
+      <div class="unfold-rest"><div class="unfold-in">
       ${m.impact ? `<div class="changed"><span class="label">What it changed, in its words</span><p>${esc(m.impact)}</p></div>` : ''}
-      ${lensed ? `<div class="specimen readout">${caption('div')}</div>` : ''}
-      ${link ? `<a class="textlink mindlink" href="${esc(link)}">See it in the mind →</a>` : ''}
+      <div class="about">
+        <span class="life">${esc(lifeWords(H, hi, lifeOf(H, hi)))}</span>
+        <span class="readings">${readings.map(([k, v]) => `<span><i>${k}</i> ${v}</span>`).join('')}</span>
+        <span class="signed">${esc(sign)}${m.state === 'dormant' ? ' · gone quiet' : ''}</span>
+      </div>
       ${this.memActs(m)}
-      ${beliefs.length ? `<h3>A belief rests on it</h3><ul class="lines">${beliefs.map((b) => `<li><span class="a">${esc(b.text)}</span><span class="m">held at ${Math.round(b.confidence * 100)}%</span></li>`).join('')}</ul>` : ''}
-      ${hours.length ? `<h3>In its hours</h3><ul class="lines">${hours.map((h) => { const t = h.trail || {};
-        const how = (t.reached || []).includes(id) ? 'reached for it' : (t.waiting || []).includes(id) ? 'found it waiting, as a question' : 'woke with it in hand';
-        return `<li>${KIND[h.kind] || esc(h.kind)}, ${shortDay(at(h.start))} at ${clock(at(h.start))}: ${how}${h.practice ? ' (practice)' : ''}</li>`; }).join('')}</ul>` : ''}
-      ${asks.length ? `<h3>What its memory asks about it</h3><ul class="lines">${asks.map((q) => `<li>${esc(question(q.prompt))}<span class="m">${putTo(q.shown)}</span></li>`).join('')}</ul>` : ''}
-      ${answers.length ? `<h3>Its answers</h3><ul class="lines">${answers.map((q) => `<li>${esc(question(q.prompt))}<span class="a">${esc(q.answer)}</span></li>`).join('')}</ul>` : ''}
-      ${m.ties.length ? `<h3>Tied to</h3><ul class="rows">${m.ties.slice(0, 24).map(([tid, rel]) => { const t = mems[byId.get(tid)]; if (!t) return '';
-        return `<li><button class="rowb" data-mem="${esc(tid)}"><div class="meta"><span>${shortDay(at(t.born))}</span><span class="k">${RELATION[rel] || esc(rel)}</span></div><div class="words">${esc(t.content)}</div></button></li>`; }).join('')}</ul>${m.ties.length > 24 ? `<p class="count">and ${m.ties.length - 24} more</p>` : ''}` : ''}
+      <div class="alsos">
+        <details class="also key" data-key="${esc(`${id}:key`)}"><summary>How to read the figure</summary><ul>
+          <li>Its size is how strongly it's kept. Round, it's a lesson; a drop is an experience, its front toward what it became.</li>
+          <li>A spine for each link, as long as the link is strong${hc.links > 64 ? ` (its strongest 64 of ${hc.links})` : ''}. Barred, it supports; barbed, it contradicts. The stalk joins an experience to its lesson.</li>
+          <li>A ring for each doubling of the times it came back. The centre grows as it settles. The threads around it reach as far as it's easy to reach.</li>
+          <li>Drawn dashed and hollow, it has gone quiet.</li></ul></details>
+        ${link ? `<a class="textlink mindlink" href="${esc(link)}">See it in the mind →</a>` : ''}
+        ${beliefs.length ? also('beliefs', beliefs.length === 1 ? 'A belief rests on it' : `${beliefs.length} beliefs rest on it`, `<ul class="lines">${beliefs.map((b) => `<li><span class="a">${esc(b.text)}</span><span class="m">held at ${Math.round(b.confidence * 100)}%</span></li>`).join('')}</ul>`) : ''}
+        ${hours.length ? also('hours', 'In its hours', `<ul class="lines">${hours.map((h) => { const t = h.trail || {};
+          const how = (t.reached || []).includes(id) ? 'reached for it' : (t.waiting || []).includes(id) ? 'found it waiting, as a question' : 'woke with it in hand';
+          return `<li>${KIND[h.kind] || esc(h.kind)}, ${shortDay(at(h.start))} at ${clock(at(h.start))}: ${how}${h.practice ? ' (practice)' : ''}</li>`; }).join('')}</ul>`) : ''}
+        ${asks.length ? also('asks', 'What its memory asks about it', `<ul class="lines">${asks.map((q) => `<li>${esc(question(q.prompt))}<span class="m">${putTo(q.shown)}</span></li>`).join('')}</ul>`) : ''}
+        ${answers.length ? also('answers', 'Its answers', `<ul class="lines">${answers.map((q) => `<li>${esc(question(q.prompt))}<span class="a">${esc(q.answer)}</span></li>`).join('')}</ul>`) : ''}
+        ${m.ties.length ? also('ties', `Tied to ${plural(m.ties.length, 'other memory', 'other memories')}`, `<ul class="rows">${m.ties.slice(0, 24).map(([tid, rel]) => { const t = mems[byId.get(tid)]; if (!t) return '';
+          return `<li><button class="rowb" data-mem="${esc(tid)}"><div class="meta"><span>${shortDay(at(t.born))}</span><span class="k">${RELATION[rel] || esc(rel)}</span></div><div class="words">${esc(t.content)}</div></button></li>`; }).join('')}</ul>${m.ties.length > 24 ? `<p class="count">and ${m.ties.length - 24} more</p>` : ''}`) : ''}
+      </div>
+      </div></div>
     </div>`;
   }
 
@@ -649,7 +658,7 @@ export class Room {
 
   bind() {
     this.tabsEl.addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t) { this.s.qkind = 'all'; this.go({ tab: t.dataset.tab }); } });
-    for (const body of [this.bodyEl, this.hooks.lens?.content].filter(Boolean)) this.listen(body);
+    this.listen(this.bodyEl);
     // someone is here: only then does a note on screen count as read
     const here = () => { if (!this.present) { this.present = true; this.watchReading(); } };
     for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, here, { passive: true, once: true });
@@ -658,7 +667,7 @@ export class Room {
   listen(body) {
     body.addEventListener('click', (e) => {
       if (e.target.closest('[data-shared-add]')) return this.sharedAdd();
-      if (e.target.closest('[data-shared-more]')) { this.shared.shown += 50; this.render(); (this.view.querySelector('[data-shared-more]') || this.view.querySelector('[data-shared-add]'))?.focus(); return; }
+      if (e.target.closest('[data-shared-more]')) { this.shared.shown += 50; this.render(); (this.bodyEl.querySelector('[data-shared-more]') || this.bodyEl.querySelector('[data-shared-add]'))?.focus(); return; }
       const fold = e.target.closest('[data-fold]');
       if (fold) {
         const id = fold.dataset.fold, open = !this.whole.has(id);
@@ -671,7 +680,7 @@ export class Room {
       const open = e.target.closest('[data-reply]');
       if (open) {
         this.opened.add(open.dataset.reply); this.closed.delete(open.dataset.reply); this.render();
-        return this.view.querySelector(`[data-draft="${CSS.escape(open.dataset.reply)}"]`)?.focus();
+        return this.bodyEl.querySelector(`[data-draft="${CSS.escape(open.dataset.reply)}"]`)?.focus();
       }
       const cancel = e.target.closest('[data-cancel]');
       if (cancel) { const k = cancel.dataset.cancel; this.opened.delete(k); this.closed.add(k); this.drafts.delete(k); this.notices.delete(k); return this.render(); }
@@ -679,9 +688,9 @@ export class Room {
       const act = e.target.closest('[data-mem-act]');
       if (act) {
         this.editing = { id: act.dataset.id, mode: act.dataset.memAct }; this.render();
-        return this.view.querySelector(act.dataset.memAct === 'correct' ? '.fix .field' : '[data-mem-cancel]')?.focus();
+        return this.bodyEl.querySelector(act.dataset.memAct === 'correct' ? '.fix .field' : '[data-mem-cancel]')?.focus();
       }
-      if (e.target.closest('[data-mem-cancel]')) { const id = this.editing?.id; if (id) this.drafts.delete(`fix:${id}`); this.editing = null; this.render(); if (this.s.tab === 'shared' && id) this.view.querySelector(`[data-mem-act][data-id="${CSS.escape(id)}"]`)?.focus(); return; }
+      if (e.target.closest('[data-mem-cancel]')) { const id = this.editing?.id; if (id) this.drafts.delete(`fix:${id}`); this.editing = null; this.render(); if (this.s.tab === 'shared' && id) this.bodyEl.querySelector(`[data-mem-act][data-id="${CSS.escape(id)}"]`)?.focus(); return; }
       const fix = e.target.closest('[data-fix-save]');
       if (fix) { const id = fix.dataset.fixSave; return this.memChange(id, { command: 'correct', memory_id: id, text: (this.drafts.get(`fix:${id}`) || '').trim() }); }
       const yes = e.target.closest('[data-forget-yes]');
@@ -698,7 +707,7 @@ export class Room {
       if (e.target.closest('[data-jev-save]')) { const key = this.jevKey.trim(); return key ? this.jevSend({ key }) : undefined; }
       const pic = e.target.closest('[data-pic]'); if (pic) return this.hooks.picture?.(pic.dataset.pic, pic.dataset.cap);
       const m = e.target.closest('[data-mem]');
-      if (m && !m.disabled) { this.origin = this.bodyEl.contains(m) ? m : null; return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem }); }
+      if (m && !m.disabled) { this.origin = m; return this.go({ tab: this.s.tab === 'log' ? 'log' : this.s.tab, memory: m.dataset.mem }); }
       if (e.target.closest('[data-back]')) return this.hooks.leave ? this.hooks.leave() : this.go({ tab: this.s.tab, memory: null });
       const f = e.target.closest('[data-filter]'); if (f) { this.s.filter = f.dataset.filter; this.s.shown = PAGE; return this.render(); }
       const s = e.target.closest('[data-sort]'); if (s) { this.s.sort = s.dataset.sort; this.s.shown = PAGE; return this.render(); }
@@ -710,34 +719,34 @@ export class Room {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) {
         e.preventDefault();
         const k = e.target.dataset.draft;
-        if (k === 'shared-new') this.sharedAdd(); else if (k.startsWith('fix:')) this.view.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
+        if (k === 'shared-new') this.sharedAdd(); else if (k.startsWith('fix:')) this.bodyEl.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
       }
       if (e.key === 'Escape' && this.editing) { this.editing = null; this.render(); }
-      if (e.key === 'Enter' && e.target.dataset?.jevKey) { e.preventDefault(); this.view.querySelector('[data-jev-save]:not([disabled])')?.click(); }
+      if (e.key === 'Enter' && e.target.dataset?.jevKey) { e.preventDefault(); this.bodyEl.querySelector('[data-jev-save]:not([disabled])')?.click(); }
     });
     body.addEventListener('input', (e) => {
       if (e.target.dataset?.jevKey) {
         this.jevKey = e.target.value;
-        const save = this.view.querySelector('[data-jev-save]'); if (save) save.disabled = !this.jevKey.trim() || this.sending === 'jev';
+        const save = this.bodyEl.querySelector('[data-jev-save]'); if (save) save.disabled = !this.jevKey.trim() || this.sending === 'jev';
         return;
       }
       const time = e.target.dataset?.hoursTime;
       if (time) {
         // the field keeps its focus: only the Save button and the hint change while you set a time
         this.hours = { ...this.currentHours(), [time]: e.target.value };
-        const save = this.view.querySelector('[data-hours-save]'); if (save) save.disabled = false;
-        const hint = this.view.querySelector('.set .acts .hint'); if (hint) { hint.textContent = 'Not saved yet.'; hint.classList.remove('flag'); }
+        const save = this.bodyEl.querySelector('[data-hours-save]'); if (save) save.disabled = false;
+        const hint = this.bodyEl.querySelector('.set .acts .hint'); if (hint) { hint.textContent = 'Not saved yet.'; hint.classList.remove('flag'); }
         return;
       }
-      if (e.target.dataset?.sharedAuthor) { this.shared.author = e.target.value; this.shared.shown = 50; this.render(); this.view.querySelector('[data-shared-author]')?.focus(); return; }
+      if (e.target.dataset?.sharedAuthor) { this.shared.author = e.target.value; this.shared.shown = 50; this.render(); this.bodyEl.querySelector('[data-shared-author]')?.focus(); return; }
       const key = e.target.dataset?.draft;
       if (key) {
         this.drafts.set(key, e.target.value);
-        if (key === 'shared-new') { this.view.querySelector('[data-shared-add]').disabled = !e.target.value.trim() || !!this.sending; return; }
-        const send = this.view.querySelector(`[data-send="${CSS.escape(key)}"]`);
+        if (key === 'shared-new') { this.bodyEl.querySelector('[data-shared-add]').disabled = !e.target.value.trim() || !!this.sending; return; }
+        const send = this.bodyEl.querySelector(`[data-send="${CSS.escape(key)}"]`);
         if (send) send.disabled = !e.target.value.trim() || this.sending === key;
         if (key.startsWith('fix:')) {
-          const id = key.slice(4), m = this.s.tab === 'shared' ? this.ctx().life.shared.rows.find(m => m.id === id) : this.ctx().mems[this.ctx().byId.get(id)], save = this.view.querySelector('[data-fix-save]');
+          const id = key.slice(4), m = this.s.tab === 'shared' ? this.ctx().life.shared.rows.find(m => m.id === id) : this.ctx().mems[this.ctx().byId.get(id)], save = this.bodyEl.querySelector('[data-fix-save]');
           if (save && m) save.disabled = !e.target.value.trim() || e.target.value.trim() === m.content.trim();
         }
         return;

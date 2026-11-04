@@ -14,18 +14,18 @@
   isn't. The mind's page stays dark.
 - The notebook and the mind are one place. On a computer, the mind runs behind the
   notebook, softened into the light of its floor, and "Open the mind" moves the cards out
-  of the way instead of going to another page. The rail stays, floating over the mind, and
-  a tab brings its card back as you left it. The cards are very slightly see-through, and
+  and the rail out of the way instead of going to another page, so the mind has the whole
+  window, and the sheet comes only when you open a cell. "The log" or Esc brings it all back
+  as you left it. The cards are very slightly see-through, and
   covered, the mind goes on turning at a few frames a second, so something is moving behind
   the glass; asked for less motion, it holds still. On a phone, or where a browser can't
   draw it, it's still a link to its own page, which works as it did. The page's security policy now
   lets it hold itself in a frame, from its own address only.
-- A memory opens where it is, instead of replacing the list. The row opens into a card
-  around its own words, with its figure above them, and if the card needs room the list
-  moves with it. The page around it softens and stays the page, with a faint disc of light
-  for each memory tied to that one. Esc, the back button, Close or a click outside closes
-  it, back into its row with the list as you left it.
-  The mind's own sheet opens memories as it did.
+- A memory opens in its row, instead of replacing the list. Its words stay on the line they
+  were on: the whole text and what's known about it open below them, a much larger figure
+  opens above, and the rows around move out of the way. Opening another closes the first.
+  Esc, the back button or Close folds it back into its row.
+  The mind's own sheet shows the same memory, with the same larger figure, in the list's place.
 
 ## 0.6.2 (2026-11-04)
 
