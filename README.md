@@ -140,7 +140,7 @@ what each one turns on.
 <p>
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/notebook-dark.png">
-  <img alt="The page mnemos log opens, on a sample memory: its tabs down a left rail; the agent's day, with a note it left itself, a note for Alex, a memory it formed, and a dream at 3:30 am with the journal entry it wrote there; beside it, a drawer of its notes for Alex, two beliefs it holds at 40 and 45 percent, and the question its memory is asking it." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/notebook.png">
+  <img alt="The page mnemos log opens, on a sample memory: its tabs down a left rail, with Memories chosen; a searchable list of the agent's 25 memories; and, open beside the list, one lesson, that a data source's clock and units are claims to check, drawn as a figure joined to the two experiences it was kept from, with its strength, stability, reach, links and recalls, and buttons to correct it or let it go." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/notebook.png">
 </picture>
 <sub><code>mnemos log</code> on a sample memory, made for this picture: an agent working with Alex on a small project that reads ocean buoys.</sub>
 </p>
