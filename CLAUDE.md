@@ -98,8 +98,8 @@ Rules:
 - When a change touches code that differs by platform (paths, process flags,
   file locking), say which platforms it was run on.
 
-**Before a release**, `scripts/wake_check.py` asks the mind the memory arrives
-in. It installs the wheel as a stranger would and holds two real Claude Code
+**When a release changes how the memory arrives**, `scripts/wake_check.py` can
+ask the mind it arrives in. It's optional. It installs the wheel as a stranger would and holds two real Claude Code
 sessions with a made-up person, fenced off from the machine. Read its report:
 in the second session, an agent that speaks as the one who was there passes;
 one that reads its memory as someone else's notes holds the release until
@@ -107,8 +107,7 @@ that's fixed. It runs on your own Claude Code and plan, so it isn't one of the
 automatic checks.
 
 `release.yml` publishes to PyPI from a version tag. Only the maintainer tags a
-release, and only after `scripts/wake_check.py` has run on that commit and its
-report has been read.
+release.
 
 ---
 

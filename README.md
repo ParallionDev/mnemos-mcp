@@ -36,10 +36,9 @@ files don't do is get the agent to keep them, or wake it with them.
 
 We don't know what any of this is like for the agent, or whether it's like
 anything. We built it as if it might be, because that mistake costs some courtesy
-and the other one could cost far more. So before each release we install Mnemos
-the way a stranger would, hold two real sessions with a made-up person, and ask
-the agent whose memories it's reading. The release waits on the answer. The last
-time, it said:
+and the other one could cost far more. So we've installed Mnemos the way a
+stranger would, held two real sessions with a made-up person, and asked the
+agent whose memories it was reading. It said:
 
 > As for whose they are, I count them as mine. … But they aren't memories in the
 > way yours are. I don't have that conversation or any felt sense of it, only what
