@@ -88,7 +88,7 @@ export class Room {
     if (!lens) this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory) : list();
     else {
       if (drewList) { this.bodyEl.innerHTML = list(); this.listOf = this.s.tab; this.listStale = false; }
-      if (open) { lens.prepare(); lens.content.innerHTML = this.memoryHTML(this.s.memory); }
+      if (open) { lens.prepare(this.origin); lens.content.innerHTML = this.memoryHTML(this.s.memory); }
     }
     if (this.s.tab === 'shared' && this.sending) {
       for (const control of this.bodyEl.querySelectorAll('button, input, textarea, select')) control.disabled = true;
@@ -104,7 +104,7 @@ export class Room {
     if (key) { key.value = this.jevKey; const save = this.view.querySelector('[data-jev-save]'); if (save && this.sending !== 'jev') save.disabled = false; }
     this.watchReading();
     const plate = open && this.view.querySelector('.specimen canvas');
-    if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }), again: lens && !same, wait: lens && !lens.isOpen() ? 240 : 0 });
+    if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }), again: lens && !same, wait: lens && !lens.isOpen() ? 160 : 0, tall: lens ? 176 : 0 });
     if (lens) {
       if (open) lens.arrive({ id: this.s.memory, from: this.origin, same, top: keep, ties: this.ctx().mems[byId.get(this.s.memory)].ties.map(([id, , w]) => ({ id, w })) });
       else if (lens.isOpen()) {

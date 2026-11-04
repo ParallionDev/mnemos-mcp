@@ -328,7 +328,7 @@ function leaveMemory() {
   if (history.state?.lens) history.back(); else room.go({ memory: null });
 }
 function start() {
-  lens = makeLens($('lens'), { leave: leaveMemory, changed: settleInert });
+  lens = makeLens($('lens'), { leave: leaveMemory, changed: settleInert, list: $('body') });
   room = new Room({
     tabsEl: $('tabs'), bodyEl: $('body'), tabs: TABS, sticky: false,
     ctx: () => ({ who: life.identity, life, mems, byId, since: V?.since || 0 }),

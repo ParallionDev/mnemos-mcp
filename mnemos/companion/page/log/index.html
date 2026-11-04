@@ -316,30 +316,28 @@ dialog .cap button:hover{color:var(--ink-1)}
   .scroller{margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter)}
   .minds{min-width:0;width:calc(100vw - 32px)}
 }
-/* ---------- a memory up close: everything else falls out of focus, more the further from the card ----------
-   The blur is a stack of glass, each pane masked to open further out than the last, so focus falls away as it does in a
-   real lens. The rail, page and drawer are pushed outward as it pulls, the rail and drawer more than the page, which is
-   the stretch at the edge of a wide lens. log/lens.js moves the sheet and the words. */
-#lens{position:fixed;inset:0;z-index:30}
+/* ---------- a memory open: it opens where it is, and the page around it softens and stays the page ----------
+   Stacked glass, each pane starting further from the card than the last, so focus falls away gently. log/lens.js moves
+   the sheet and the words. */
+#lens{position:fixed;inset:0;z-index:30;--cx:50%;--cy:50%}
 #lens[hidden]{display:none}
-.lens-world{position:absolute;inset:0;cursor:zoom-out}
+.lens-world{position:absolute;inset:0}
 .lens-blur,.lens-falloff,.lens-lights{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block}
-.lens-blur{-webkit-backdrop-filter:blur(var(--b));backdrop-filter:blur(var(--b));-webkit-mask-image:radial-gradient(ellipse at center,transparent var(--from),#000 var(--to));mask-image:radial-gradient(ellipse at center,transparent var(--from),#000 var(--to))}
-.lens-blur.b0{--b:5px;-webkit-mask-image:none;mask-image:none}
-.lens-blur.b1{--b:9px;--from:30%;--to:52%}
-.lens-blur.b2{--b:16px;--from:44%;--to:72%}
-.lens-blur.b3{--b:28px;--from:60%;--to:96%}
-.lens-falloff{background:radial-gradient(ellipse at center,rgba(0,0,0,.08) 30%,rgba(0,0,0,.2) 62%,rgba(0,0,0,.52) 100%)}
-:root[data-theme="light"] .lens-falloff{background:radial-gradient(ellipse at center,rgba(255,255,255,.12) 30%,rgba(255,255,255,.24) 62%,rgba(255,255,255,.5) 100%)}
-.lens-sheet{position:absolute;left:0;top:0;overflow:hidden;border-radius:var(--r-card);background:rgba(8,8,10,.66);-webkit-backdrop-filter:blur(34px);backdrop-filter:blur(34px);box-shadow:0 0 0 .5px rgba(255,255,255,.1),0 30px 90px rgba(0,0,0,.6);will-change:transform}
-:root[data-theme="light"] .lens-sheet{background:rgba(255,255,255,.72);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 30px 80px rgba(40,50,70,.18)}
+.lens-blur{-webkit-backdrop-filter:blur(var(--b));backdrop-filter:blur(var(--b));-webkit-mask-image:radial-gradient(ellipse at var(--cx) var(--cy),transparent var(--from),#000 var(--to));mask-image:radial-gradient(ellipse at var(--cx) var(--cy),transparent var(--from),#000 var(--to))}
+.lens-blur.b0{--b:1.5px;-webkit-mask-image:none;mask-image:none}
+.lens-blur.b1{--b:3px;--from:36%;--to:64%}
+.lens-blur.b2{--b:6px;--from:58%;--to:96%}
+.lens-falloff{background:radial-gradient(ellipse at var(--cx) var(--cy),rgba(0,0,0,.04) 36%,rgba(0,0,0,.26) 100%)}
+:root[data-theme="light"] .lens-falloff{background:radial-gradient(ellipse at var(--cx) var(--cy),rgba(255,255,255,.06) 36%,rgba(255,255,255,.32) 100%)}
+.lens-sheet{position:absolute;left:0;top:0;overflow:hidden;border-radius:var(--r-card);background:rgba(12,12,14,.72);-webkit-backdrop-filter:blur(30px);backdrop-filter:blur(30px);box-shadow:0 0 0 .5px rgba(255,255,255,.1),0 14px 44px rgba(0,0,0,.5);will-change:transform}
+:root[data-theme="light"] .lens-sheet{background:rgba(255,255,255,.8);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 14px 44px rgba(40,50,70,.14)}
 .lens-ghost{position:absolute;left:0;top:0;pointer-events:none}
 .lens-card{position:absolute;overflow:auto;overscroll-behavior:contain;outline:none;border-radius:var(--r-card);--surface-1:var(--pane);--plate:var(--pane);scrollbar-width:thin;scrollbar-color:var(--hair-2) transparent;will-change:transform}
 [data-theme] .lens-card:focus-visible{outline:none!important}
-.lens-content{padding:18px clamp(20px,5vw,44px) 44px}
+.lens-content{padding:14px clamp(20px,3vw,32px) 32px}
 .lens-content .detail{position:relative}
 .lens-close{position:sticky;top:0;z-index:2;display:block;width:max-content;margin-left:auto;border-radius:var(--r-s)}
-.lens-content .specimen{margin:-8px 0 var(--s4)}
+.lens-content .specimen{margin:-8px 0 var(--s3)}
 .lens-content .specimen.readout{margin:var(--s5) 0 0}
 .lens-content .figcap{grid-template-columns:minmax(0,1fr)}
 .lens-content .detail > .meta{margin-top:0}
@@ -347,22 +345,10 @@ dialog .cap button:hover{color:var(--ink-1)}
 html:has(body.lensed){overflow:hidden}
 body.parted #lens{visibility:hidden;pointer-events:none}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .lens-falloff{background:rgba(0,0,0,.72)}
-  :root[data-theme="light"] .lens-falloff{background:rgba(255,255,255,.8)}
-  .lens-sheet{background:#0a0a0c}
+  .lens-falloff{background:rgba(0,0,0,.5)}
+  :root[data-theme="light"] .lens-falloff{background:rgba(255,255,255,.6)}
+  .lens-sheet{background:#0c0c0e}
   :root[data-theme="light"] .lens-sheet{background:#fff}
-}
-@media (min-width:760px){
-  .rail{transition:transform .72s var(--glide)}
-  body.lensed:not(.parted) .rail{transform:translateX(-14px) scale(1.1,1.04);transform-origin:50% 50%}
-  body.lensed:not(.parted) .page{transform:scale(1.055)}
-  body.lensed:not(.parted) .drawer{transform:translateX(16px) scale(1.1,1.04)}
-  body.lensed:not(.parted) #behind{filter:blur(22px) brightness(.74) saturate(1.2);transform:scale(1.1)}
-  :root[data-theme="light"] body.lensed:not(.parted) #behind{filter:blur(22px) invert(1) grayscale(1) brightness(1.02)}
-}
-@media (prefers-reduced-motion:reduce){
-  .rail,body.lensed:not(.parted) .rail,body.lensed:not(.parted) .page,body.lensed:not(.parted) .drawer,body.lensed:not(.parted) #behind{transition:none}
-  body.lensed:not(.parted) .rail,body.lensed:not(.parted) .page,body.lensed:not(.parted) .drawer{transform:none}
 }
 @media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.24s}
@@ -409,7 +395,7 @@ body.parted #lens{visibility:hidden;pointer-events:none}
 <dialog id="full"><img id="full-img" alt=""><div class="cap"><span id="full-cap"></span><button id="full-close" type="button">Close</button></div></dialog>
 <div id="lens" hidden>
   <div class="lens-world">
-    <i class="lens-blur b0"></i><i class="lens-blur b1"></i><i class="lens-blur b2"></i><i class="lens-blur b3"></i>
+    <i class="lens-blur b0"></i><i class="lens-blur b1"></i><i class="lens-blur b2"></i>
     <canvas class="lens-lights" aria-hidden="true"></canvas>
     <i class="lens-falloff"></i>
   </div>
