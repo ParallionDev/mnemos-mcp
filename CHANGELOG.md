@@ -12,6 +12,12 @@
   The state that was in the right margin is now a drawer that opens and closes: a second
   card beside the page when there's room, floating over it as frosted glass when there
   isn't. The mind's page stays dark.
+- The notebook and the mind are one place. On a computer, the mind runs behind the
+  notebook, softened into the light of its floor, and "Open the mind" moves the cards out
+  of the way instead of going to another page; they come back as you left them. It draws
+  only when something's happening. On a phone, or where a browser can't draw it, it's
+  still a link to its own page, which works as it did. The page's security policy now
+  lets it hold itself in a frame, from its own address only.
 
 ## 0.6.2 (2026-11-04)
 

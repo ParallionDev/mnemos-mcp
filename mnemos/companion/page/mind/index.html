@@ -43,6 +43,11 @@ a{color:inherit}
 .own{font-family:var(--own)}
 .label{font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
 
+/* behind the notebook: covered, only the mind itself; its controls come up as the cards part */
+html.behind .hero,html.behind .regions,html.behind #loading{transition:opacity .55s var(--ease) .3s}
+html.behind.covered .hero,html.behind.covered .regions,html.behind.covered #loading{opacity:0;pointer-events:none;transition:opacity .2s var(--ease)}
+@media (prefers-reduced-motion:reduce){html.behind .hero,html.behind .regions,html.behind #loading{transition:none}}
+
 /* ── its regions, named over the mind (mind.js places them each frame; only the ones shown take a hand) ── */
 .regions{position:fixed;inset:0;z-index:2;pointer-events:none}
 .region{all:unset;position:absolute;left:0;top:0;display:flex;align-items:baseline;gap:7px;height:26px;padding:0 10px;border-radius:999px;cursor:pointer;

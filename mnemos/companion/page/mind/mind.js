@@ -31,6 +31,30 @@ import { tell, telling } from '../shared/tell.js';
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* Behind the notebook. The log's page holds this one, whole and running, as what's under its cards (?behind): covered,
+ * it shows no controls and turns no more than something happening asks of it, so a memory arriving still lights it;
+ * when the cards part it's simply there, and "the log" brings them back. Opened by itself it's the same page. */
+const behind = params.has('behind');
+let covered = behind;
+const toNotebook = (what) => { if (behind) parent.postMessage({ mnemos: what }, location.origin); };
+if (behind) {
+  document.documentElement.classList.add('behind', 'covered');
+  addEventListener('message', (e) => {
+    if (e.source !== parent || e.origin !== location.origin) return;
+    if (e.data?.mnemos === 'reveal') {
+      covered = false; document.documentElement.classList.remove('covered');
+      try { if (e.data.hash) { history.replaceState(null, '', location.pathname + location.search + e.data.hash); fromHash(); } stir(); } catch { /* still arriving: it shows itself when it's ready */ }
+    } else if (e.data?.mnemos === 'cover') {
+      covered = true; document.documentElement.classList.add('covered');
+      try { if (sheetOpen) closeRoom(); letGo(); } catch { /* still arriving */ }
+    }
+  });
+  document.addEventListener('click', (e) => {          // every way back to the log is the cards returning
+    const a = e.target.closest?.('a[href]');
+    if (a && !e.metaKey && !e.ctrlKey && !e.shiftKey && new URL(a.href).pathname.endsWith('/log/')) { e.preventDefault(); toNotebook('cover'); }
+  }, true);
+  toNotebook('here');
+}
 const FOV = (26 * Math.PI) / 180;
 const LIVE_EVERY = 20_000;                     // life.json is small; memories.json is read again only when it changes
 const DIM = 0.3;                               // the mind at rest: present, not lit (the damask's sheen)
@@ -69,6 +93,7 @@ if (!params.has('pixels')) LENS.pixels = store.get(PIXELS_KEY) || LENS.pixels;
 function cannotDraw(why) {
   $('loading').innerHTML = `<span>${why} Everything in it is in <a class="textlink" href="${esc(withAgent('../log/'))}">the log</a>.</span>`;
   $('ask').remove(); $('open-room').remove(); $('to-log').href = withAgent('../log/');
+  toNotebook('cannot');
 }
 
 document.fonts.add(await new FontFace('Mono', 'url(../fonts/jetbrains-mono-nl.woff)', { weight: '400' }).load());
@@ -821,6 +846,7 @@ function standAside() {
   dropNear(); if (leaving) { leaving.tissue.dispose(); leaving = null; }
   tissue?.dispose(); tissue = null; post?.dispose(); post = null;
   document.body.classList.add('set-aside');      // and what belongs to it: its region names, the way back to centre
+  toNotebook('cannot');
   const note = document.createElement('div');
   note.className = 'aside'; note.setAttribute('role', 'status');
   note.innerHTML = `<span>This computer’s graphics can’t move the mind smoothly. Everything in it is in <a class="textlink" href="${esc(withAgent('../log/'))}">the log</a>.</span>`;
@@ -878,7 +904,7 @@ canvas.addEventListener('webglcontextrestored', async () => {
 function frame(now) {
   if (!heroSeen || lost || aside) { looping = false; pacing = null; return; }
   if (pacing && askPace(now)) return;
-  const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
+  const turning = !reduce && !covered && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
@@ -1251,7 +1277,7 @@ function bindTrace() {
 
 // the same visit the log keeps (../shared/words.js): moving between the two is one visit, so what's new stays new
 let V = null, lastVisit = 0;
-const keepVisit = () => V?.keep();
+const keepVisit = () => { if (!covered) V?.keep(); };
 addEventListener('pagehide', keepVisit);
 document.addEventListener('visibilitychange', () => { if (document.hidden) keepVisit(); else { look(); wake(); } });
 function sayNew() {
@@ -1394,7 +1420,7 @@ function bindPage() {
   $('to-paper').addEventListener('click', () => $('paper').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth' }));
   $('to-log').href = withAgent('../log/');
   addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); else letGo(); return; }
+    if (e.key === 'Escape' && !$('full').open) { if (sheetOpen) closeRoom(); else if (behind && tracePicked < 0) toNotebook('cover'); else letGo(); return; }
     if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '')) { e.preventDefault(); $('ask-q').focus(); }
   });
   addEventListener('hashchange', fromHash);
@@ -1413,7 +1439,7 @@ async function look(now = false) {
       if (!next.missing) {
         const asks = waiting(next.notes || []).length;
         document.title = `${asks ? `(${asks}) ` : ''}${next.identity.name} · the mind`;
-        tell({ agent: next.identity.agentId, who: next.identity, notes: next.notes || [], open: () => openRoom({ tab: 'notes' }) });
+        if (!behind) tell({ agent: next.identity.agentId, who: next.identity, notes: next.notes || [], open: () => openRoom({ tab: 'notes' }) });
       }
     } catch { /* the next look tries again */ }
     return;
@@ -1457,7 +1483,7 @@ async function look(now = false) {
   renderPaper();
   if (sheetOpen) room.refresh();
   updateFrame(); sayNew();
-  tell({ agent: L.identity.agentId, who: L.identity, notes: L.notes || [], open: () => openRoom({ tab: 'notes' }) });
+  if (!behind) tell({ agent: L.identity.agentId, who: L.identity, notes: L.notes || [], open: () => openRoom({ tab: 'notes' }) });
 }
 
 /* ---------- live: what comes to mind, as it comes ----------

@@ -127,6 +127,8 @@ function margin() {
   $('glance').innerHTML = glanceHTML();
 }
 
+const railed = matchMedia('(min-width: 760px)');   // wide enough for the rail (index.html); otherwise, the track
+
 /* ---------- the drawer: its state, beside the page when there's room, over it when there isn't ---------- */
 const DRAWER = 'mnemos-drawer', beside = matchMedia('(min-width: 1240px)');
 const leftOpen = () => { try { return localStorage.getItem(DRAWER) !== 'closed'; } catch { return true; } };
@@ -149,6 +151,54 @@ addEventListener('keydown', (e) => {
   if (railed.matches && e.target === document.body && [' ', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) $('main').focus({ preventScroll: true });
 });
 
+/* ---------- the mind behind it all ----------
+ * The notebook is glass over a mind that's already running: the whole mind page sits under the cards, softened right
+ * out into the haze of light the floor is made of. It sleeps when nothing's happening, and a memory arriving lights it
+ * even here. "Open the mind" only moves the cards out of the way. On a phone, or where it can't be drawn, it's a link. */
+let behind = null, mindHere = false, parted = false;
+function placeMind() {
+  if (behind || !railed.matches) return;
+  behind = document.createElement('iframe');
+  const src = new URL(withAgent('../mind/'), location.href);
+  src.searchParams.set('behind', '1');
+  Object.assign(behind, { id: 'behind', title: 'The mind', src: src.href, inert: true, tabIndex: -1 });
+  behind.setAttribute('aria-hidden', 'true');
+  document.body.prepend(behind);
+}
+function part(open, { hash = '', moved = false } = {}) {
+  if (open === parted || (open && (!behind || !mindHere))) return;
+  parted = open;
+  if (open && floating()) drawer(false);
+  if (open && !$('minds').hidden) showMinds(false);
+  document.body.classList.toggle('parted', open);
+  document.querySelector('.shell').inert = open;
+  behind.inert = !open;
+  if (open) behind.removeAttribute('aria-hidden'); else behind.setAttribute('aria-hidden', 'true');
+  behind.contentWindow.postMessage({ mnemos: open ? 'reveal' : 'cover', hash }, location.origin);
+  if (open) {
+    if (!moved) history.pushState({ mind: true }, '', `${location.pathname}${location.search}#mind`);
+    behind.focus();
+  } else {
+    if (!moved) { if (history.state?.mind) history.back(); else history.replaceState(null, '', location.pathname + location.search); }
+    $('to-mind').focus({ preventScroll: true });
+  }
+}
+addEventListener('message', (e) => {
+  if (!behind || e.source !== behind.contentWindow || e.origin !== location.origin) return;
+  const said = e.data?.mnemos;
+  if (said === 'here') { mindHere = true; if (location.hash === '#mind') part(true, { moved: true }); }
+  if (said === 'cover') part(false);
+  if (said === 'cannot') { mindHere = false; if (!parted) { behind.remove(); behind = null; } }
+});
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && parted) part(false); });
+document.addEventListener('click', (e) => {          // every way to the mind, an opened memory's too
+  const a = e.target.closest?.('a[href]');
+  if (!a || !mindHere || !railed.matches || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  const to = new URL(a.href);
+  if (to.pathname.endsWith('/mind/')) { e.preventDefault(); part(true, { hash: to.hash }); }
+});
+railed.addEventListener('change', () => { if (railed.matches) { if (room) placeMind(); } else part(false); });
+
 function missing() {
   const who = life.identity;
   $('name').textContent = who.name;
@@ -163,7 +213,6 @@ function missing() {
 /* ---------- the track: its marker glides to the open tab; the content trades places as it goes ---------- */
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const railed = matchMedia('(min-width: 760px)');   // wide enough for the rail (index.html); otherwise, the track
 function placeMarker(key, glide) {
   const track = $('track'), btn = $('tabs').querySelector(`[data-tab="${key}"]`), marker = $('marker');
   if (!btn) return;
@@ -284,6 +333,7 @@ function start() {
   placeMarker(room.s.tab, false);
   document.fonts.ready.then(() => placeMarker(room.s.tab, false));   // the labels' true width arrives with the font
   addEventListener('resize', () => placeMarker(room.s.tab, false));
+  (window.requestIdleCallback || setTimeout)(placeMind);
   $('tabs').addEventListener('keydown', (e) => {   // the arrows follow the tabs: down the rail, across a phone
     const [back, next] = railed.matches ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
     if (e.key !== back && e.key !== next) return;
@@ -295,8 +345,11 @@ function start() {
 }
 
 addEventListener('hashchange', () => {
+  if (location.hash === '#mind') { part(true, { moved: true }); return; }
+  if (parted) part(false, { moved: true });
   const r = parseRoute(location.hash, TABS);
-  if (room && r) room.go({ tab: r.tab || room.s.tab, memory: r.memory || null });
+  // coming back to where the cards already are leaves them just as they were
+  if (room && r && !(r.tab === room.s.tab && (r.memory || null) === (room.s.memory || null))) room.go({ tab: r.tab || room.s.tab, memory: r.memory || null });
 });
 addEventListener('keydown', (e) => {
   if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '') && room) {

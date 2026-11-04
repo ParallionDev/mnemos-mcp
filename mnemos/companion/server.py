@@ -74,8 +74,8 @@ PICTURE_TYPES = {
 # The page asks nothing of anywhere but here; the browser holds it to that.
 PAGE_POLICY = (
     "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; font-src 'self'; connect-src 'self'; "
-    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; "
+    "base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
 )
 # A picture the hours made is shown, never run (an SVG can carry a script).
 PICTURE_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox"

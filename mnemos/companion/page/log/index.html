@@ -24,8 +24,8 @@ button{font:inherit;color:inherit}
 a{color:inherit}
 .shell{position:relative;padding:28px var(--gutter) 0}
 :root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:332px;--gap:10px;--r-card:14px;
-  --ground:#000;--card:#000;--on-ground:#191919;--on-ground-2:#222}
-:root[data-theme="light"]{--ground:#f3f3f3;--card:#fff;--on-ground:#fff;--on-ground-2:#fafafa}
+  --ground:#060608;--veil:rgba(6,6,8,.62);--card:#000;--on-ground:rgba(255,255,255,.07);--on-ground-2:rgba(255,255,255,.12)}
+:root[data-theme="light"]{--ground:#f3f3f3;--veil:#f3f3f3;--card:#fff;--on-ground:#fff;--on-ground-2:#fafafa}
 /* the floor's small type stays AA on the floor's own grey */
 :root[data-theme="light"] .rail{--ink-4:#696969}
 
@@ -65,7 +65,7 @@ a{color:inherit}
 .seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--on-ground)}
 .seg button{all:unset;display:grid;place-items:center;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--ink-3);transition:color var(--quick),background var(--quick)}
 .seg button:hover{color:var(--ink-1)}
-.seg button[aria-pressed="true"]{color:var(--ink-1);background:#2c2c2c}
+.seg button[aria-pressed="true"]{color:var(--ink-1);background:var(--on-ground-2)}
 :root[data-theme="light"] .seg{background:rgba(0,0,0,.055)}
 :root[data-theme="light"] .seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .seg svg{display:block}
@@ -216,8 +216,6 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .page{position:relative;flex:1;min-width:0;display:flex;margin:0;padding:0;border-radius:var(--r-card);background:none}
   main{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;border-radius:var(--r-card)}
   :root[data-theme="light"] main{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
-  /* in the dark the card is the floor's own black, so it's known only by its edge */
-  :root:not([data-theme="light"]) :is(main,.drawer){box-shadow:0 0 0 1px rgba(255,255,255,.09)}
   .story{--drift:12px;width:100%;max-width:980px;margin-inline:auto;padding:var(--s5) 60px 72px}
   #body{padding-top:var(--s2)}
   #body.leaving{transform:translateY(calc(var(--dir,0) * var(--drift) * -.55))}
@@ -239,8 +237,31 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .drawer-in{display:flex;flex-direction:column;width:var(--drawer);height:100%}
   .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--gap) 0 var(--s4);color:var(--ink-3);font:400 var(--t-label)/1.3 var(--mono)}
   .drawer-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s3) var(--s4) var(--s5)}
-  body.ready .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s .48s}
-  body.ready.drawer-open .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s}
+  body.ready .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s .48s,transform .78s var(--glide)}
+  body.ready.drawer-open .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s,transform .78s var(--glide)}
+
+  /* the mind, whole and running, under everything: softened right out into the haze of light the floor is made of,
+     and brought to focus as the cards move out of its way. The cards keep their place and their scroll while they're
+     gone, and come back the way they left. */
+  #behind{position:fixed;inset:0;z-index:0;width:100%;height:100%;border:0;pointer-events:none;filter:blur(22px) brightness(.46) saturate(1.15);transform:scale(1.05);
+    transition:filter .95s var(--glide),transform .95s var(--glide)}
+  body.parted #behind{pointer-events:auto;filter:none;transform:none}
+  .shell{position:relative;z-index:1}
+  .shell::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--veil);transition:opacity .7s var(--glide)}
+  body.parted .shell{pointer-events:none}
+  body.parted .shell::before{opacity:0}
+  .rail{transition:transform .78s var(--glide)}
+  .page{transition:transform .78s var(--glide) .03s}
+  body.parted .rail{transform:translateX(calc(-100% - 24px))}
+  body.parted .page,body.parted .drawer{transform:translateX(100vw)}
+}
+@media (min-width:760px) and (prefers-reduced-motion:reduce){
+  #behind{transition:filter .2s linear}
+  .rail,.page{transition:none}
+  .shell{transition:opacity .2s linear}
+  .shell::before{transition:none}
+  body.parted .shell{opacity:0}
+  body.parted .rail,body.parted .page,body.parted .drawer{transform:none}
 }
 /* too tight to sit beside the page: the same drawer floats over it, one sheet of frosted, flat glass */
 @media (min-width:760px) and (max-width:1239px){
