@@ -6,9 +6,12 @@
   white, following the system until you pick one with the switch. What the page
   measures (times, dates, counts, models, how firmly something is held) is set in mono,
   on one grid; what the agent wrote is left to be read. Fewer cards: a plate only for
-  what is an object in its own right. The tabs now run down a rail on the left that
-  stays in place as you read, and across the top on a phone; the arrow keys move
-  through them. The mind's page stays dark.
+  what is an object in its own right. The name and tabs sit directly on the floor as a
+  rail down the left, with the page as one card lying on it, the only thing that
+  scrolls; on a phone the tabs run across the top. The arrow keys move through the tabs.
+  The state that was in the right margin is now a drawer that opens and closes: a second
+  card beside the page when there's room, floating over it as frosted glass when there
+  isn't. The mind's page stays dark.
 
 ## 0.6.2 (2026-11-04)
 

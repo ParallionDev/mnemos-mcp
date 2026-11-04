@@ -125,12 +125,29 @@ function margin() {
   m.innerHTML = marginHTML();
   if (keep) m.querySelector('details[data-key="carrying"]')?.setAttribute('open', '');
   $('glance').innerHTML = glanceHTML();
-  fit();
 }
-// the margin stays in view as you read only when all of it fits the window; otherwise it scrolls with the page,
-// so nothing at its foot is ever out of reach
-function fit() { const m = $('margin'); m.classList.toggle('stick', m.offsetHeight + 72 <= innerHeight); }
-addEventListener('resize', fit);
+
+/* ---------- the drawer: its state, beside the page when there's room, over it when there isn't ---------- */
+const DRAWER = 'mnemos-drawer', beside = matchMedia('(min-width: 1240px)');
+const leftOpen = () => { try { return localStorage.getItem(DRAWER) !== 'closed'; } catch { return true; } };
+function drawer(open, { keep = false, focus = false } = {}) {
+  document.body.classList.toggle('drawer-open', open);
+  $('drawer-toggle').setAttribute('aria-expanded', String(open));
+  if (keep && beside.matches) { try { localStorage.setItem(DRAWER, open ? 'open' : 'closed'); } catch { /* it lasts as long as the page */ } }
+  if (focus) (open ? $('drawer-close') : $('drawer-toggle')).focus({ preventScroll: true });
+}
+const floating = () => railed.matches && !beside.matches && document.body.classList.contains('drawer-open');
+drawer(beside.matches && leftOpen());
+requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add('ready')));   // it doesn't slide open as the page arrives
+beside.addEventListener('change', () => drawer(beside.matches && leftOpen()));
+$('drawer-toggle').addEventListener('click', () => drawer(true, { keep: true, focus: true }));
+$('drawer-close').addEventListener('click', () => drawer(false, { keep: true, focus: true }));
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && floating() && !$('full').open) drawer(false, { focus: true }); });
+document.addEventListener('click', (e) => { if (floating() && e.isTrusted && !e.target.closest('#drawer, #drawer-toggle, #full')) drawer(false); });
+// the card scrolls itself, so the keys that scroll a page go to it whenever nothing else has them
+addEventListener('keydown', (e) => {
+  if (railed.matches && e.target === document.body && [' ', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) $('main').focus({ preventScroll: true });
+});
 
 function missing() {
   const who = life.identity;
@@ -146,7 +163,7 @@ function missing() {
 /* ---------- the track: its marker glides to the open tab; the content trades places as it goes ---------- */
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const railed = matchMedia('(min-width: 860px)');   // wide enough for the rail (index.html); otherwise, the track
+const railed = matchMedia('(min-width: 760px)');   // wide enough for the rail (index.html); otherwise, the track
 function placeMarker(key, glide) {
   const track = $('track'), btn = $('tabs').querySelector(`[data-tab="${key}"]`), marker = $('marker');
   if (!btn) return;
@@ -236,6 +253,7 @@ function start() {
       route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
       transition,
       // where the content starts when you change tab: in the rail, the top of the page; under the track, just below it
+      scroller: () => (railed.matches ? $('main') : document.scrollingElement),
       top: () => (railed.matches ? 0 : $('tabs').getBoundingClientRect().top + scrollY - 8),
       // what you write on the page: a reply, an answer or a note, sent to `mnemos log` (and on to the memory) as yours
       send: async (request) => {
@@ -289,9 +307,9 @@ for (const el of [$('margin'), $('glance')]) el.addEventListener('click', (e) =>
   const pic = e.target.closest('[data-pic]');
   if (pic) { $('full-img').src = pic.dataset.pic; $('full-img').alt = pic.dataset.cap; $('full-cap').textContent = pic.dataset.cap; $('full').showModal(); return; }
   const q = e.target.closest('[data-qkind]');
-  if (q) { room.s.qkind = q.dataset.qkind; room.go({ tab: 'questions' }); return; }
+  if (q) { room.s.qkind = q.dataset.qkind; room.go({ tab: 'questions' }); if (floating()) drawer(false); return; }
   const g = e.target.closest('[data-goto]');
-  if (g) room.go({ tab: g.dataset.goto });
+  if (g) { room.go({ tab: g.dataset.goto }); if (floating()) drawer(false); }
 });
 $('full-close').addEventListener('click', () => $('full').close());
 $('full').addEventListener('click', (e) => { if (e.target === $('full')) $('full').close(); });
@@ -322,7 +340,7 @@ $('sincebar').addEventListener('click', (e) => {
   if (go === 'new') { room.s.filter = 'new'; room.s.sort = 'newest'; room.go({ tab: 'memories' }); }
   else room.go({ tab: go });
   const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
-  if (railed.matches) scrollTo({ top: 0, behavior }); else nav?.scrollIntoView({ block: 'start', behavior });
+  if (railed.matches) $('main').scrollTo({ top: 0, behavior }); else nav?.scrollIntoView({ block: 'start', behavior });
 });
 
 /* ---------- the minds on this machine ---------- */

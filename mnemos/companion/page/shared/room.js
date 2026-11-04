@@ -4,7 +4,7 @@
  *
  *   new Room({ tabsEl, bodyEl, tabs, sticky, ctx, hooks })
  *     ctx()   → { who, life, mems, byId, heat?(id) }   who: the export's identity
- *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id), top?() }
+ *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id), top?(), scroller?() }
  */
 
 import { SHARED, esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
@@ -98,13 +98,15 @@ export class Room {
     const plate = open && this.bodyEl.querySelector('.specimen canvas');
     if (plate) mountLife(plate, herbariumOf(this.ctx().mems), byId.get(this.s.memory), { open: (id) => this.go({ memory: id }) });
     const more = this.bodyEl.querySelector('.more-rows');
-    if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.sticky ? this.bodyEl : null, rootMargin: '400px' }).observe(more);
+    if (more) new IntersectionObserver(([e], o) => { if (e.isIntersecting) { o.disconnect(); this.s.shown += 80; this.render(); } }, { root: this.viewRoot(), rootMargin: '400px' }).observe(more);
   }
-  scroller() { return this.sticky ? this.bodyEl : document.scrollingElement; }
+  scroller() { return this.sticky ? this.bodyEl : (this.hooks.scroller?.() || document.scrollingElement); }
+  viewRoot() { const s = this.scroller(); return s === document.scrollingElement ? null : s; }
   toTop() {
     if (this.sticky) { this.bodyEl.scrollTop = 0; return; }
     const y = this.hooks.top ? this.hooks.top() : this.tabsEl.getBoundingClientRect().top + scrollY - 8;
-    if (scrollY > y) scrollTo({ top: y });
+    const s = this.scroller();
+    if (s.scrollTop > y) s.scrollTop = y;
   }
   /* a live redraw waits while you're writing, so nothing you type is lost or jumps */
   refresh() { if (!this.bodyEl.contains(document.activeElement) || !document.activeElement.matches('[data-draft], [data-jev-key]')) this.render(); }
@@ -441,7 +443,7 @@ export class Room {
     if (!this.hooks.read || !this.present || document.visibilityState !== 'visible') return;
     const notes = this.bodyEl.querySelectorAll('[data-unread]');
     if (!notes.length) return;
-    const root = this.sticky ? this.bodyEl : null;
+    const root = this.viewRoot();
     this.reading = new IntersectionObserver((entries) => {
       const view = root ? root.clientHeight : innerHeight;
       for (const e of entries) {

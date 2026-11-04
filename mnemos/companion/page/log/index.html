@@ -9,18 +9,30 @@
 <link rel="stylesheet" href="../shared/fonts.css">
 <link rel="stylesheet" href="../shared/room.css">
 <style>
-/* The log: a mind's days, and everything it holds, on one page made to sit beside a conversation. Who it is and what
-   it holds in the rail on the left; its story in the middle; its state in the margin, on one long plate (notes for you, beliefs, what its memory asks, what it carries
-   forward, what it made). Narrow, beside a chat, the margin folds into a short summary at the top of the log. True
-   black or white, following the system until someone picks one (shared/theme.js). Served by `mnemos log` on this
-   machine only; its typefaces are bundled (../shared/fonts.css), so it asks nothing of the network. */
+/* The log: a mind's days, and everything it holds, on one page made to sit beside a conversation. Two levels: the
+   floor, which is also the rail (who it is and what it holds), and one card lying on it, the main surface, where its
+   story is read and the only thing that scrolls. Its state (notes for you, beliefs, what its memory asks, what it
+   carries forward, what it made) is in a drawer: a second card beside the main one when there's room, the same drawer
+   floating over it as frosted glass when there isn't. On a phone the floor holds the name and the tabs, the card runs
+   to the screen's edges, and the state folds into a short summary at the top of the log. True black or white,
+   following the system until someone picks one (shared/theme.js). Served by `mnemos log` on this machine only; its
+   typefaces are bundled (../shared/fonts.css), so it asks nothing of the network. */
 *{box-sizing:border-box;margin:0;padding:0}
-html{background:var(--floor);color:var(--ink-1)}
-body{font:400 var(--t-body)/1.5 var(--sans);-webkit-font-smoothing:antialiased;background:var(--floor)}
+html{background:var(--ground);color:var(--ink-1)}
+body{font:400 var(--t-body)/1.5 var(--sans);-webkit-font-smoothing:antialiased;background:var(--ground)}
 button{font:inherit;color:inherit}
 a{color:inherit}
-.shell{position:relative;max-width:1180px;margin:0 auto;padding:28px var(--gutter) 96px}
-:root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px}
+.shell{position:relative;padding:28px var(--gutter) 0}
+:root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:332px;--gap:10px;--r-card:14px;
+  --ground:#000;--card:#111;--on-ground:#191919;--on-ground-2:#222}
+:root[data-theme="light"]{--ground:#f3f3f3;--card:#fff;--on-ground:#fff;--on-ground-2:#fafafa}
+/* the floor's small type stays AA on the floor's own grey */
+:root[data-theme="light"] .rail{--ink-4:#696969}
+/* on the card, every surface is one step up from the card, so a plate on it still reads as a plate. Light needs no
+   change: its card is the white the light tokens were made for. */
+:root:not([data-theme="light"]) :is(main,.drawer){--floor:var(--card);--surface-1:#191919;--surface-2:#222;--surface-3:#2c2c2c;--surface-4:#363636;
+  --raised:var(--surface-2);--raised-2:var(--surface-3);--plate:var(--surface-1);--plate-hover:var(--surface-2);--plate-press:var(--surface-3);--control:var(--surface-2);
+  --ink-4:#8a8a8a;--fig-paper:var(--card)}
 
 /* who, and how warm: the name, one line, then the facts you can check, in the instrument's voice */
 .who{min-width:0;margin-top:var(--s4)}
@@ -55,23 +67,24 @@ a{color:inherit}
 @media (prefers-reduced-motion:reduce){.pick .chev{transition:none}}
 /* what stays in reach: the page's look, and the way to the mind */
 .head-r{position:absolute;top:calc(28px - 13px);right:var(--gutter);display:flex;align-items:center;gap:var(--s2)}
-.seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--surface-1)}
+.seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--on-ground)}
 .seg button{all:unset;display:grid;place-items:center;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--ink-3);transition:color var(--quick),background var(--quick)}
 .seg button:hover{color:var(--ink-1)}
-.seg button[aria-pressed="true"]{color:var(--ink-1);background:var(--surface-3)}
+.seg button[aria-pressed="true"]{color:var(--ink-1);background:#2c2c2c}
+:root[data-theme="light"] .seg{background:rgba(0,0,0,.055)}
 :root[data-theme="light"] .seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .seg svg{display:block}
-.to-mind{all:unset;flex:none;cursor:pointer;padding:9px 13px;border-radius:var(--r-s);background:var(--surface-1);
+.to-mind{all:unset;flex:none;cursor:pointer;padding:9px 13px;border-radius:var(--r-s);background:var(--on-ground);
   font:500 var(--t-small)/1.1 var(--sans);color:var(--ink-1);transition:background var(--quick)}
-.to-mind:hover{background:var(--surface-2)}
-.to-mind:active{background:var(--surface-3)}
+.to-mind:hover{background:var(--on-ground-2)}
+.to-mind:active{background:var(--on-ground)}
 .verify{margin-top:var(--s3);display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-3);font:400 var(--t-micro)/1.5 var(--mono);letter-spacing:-.005em}
 .verify .flag{color:var(--ink-1)}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:7px;vertical-align:1px}
 .verify.stale .fresh{color:var(--ink-1)}
 
 /* since you were last here: one quiet plate, what's new and where it lives; what's waiting on you leads, with its dot */
-.sincebar{margin-top:var(--s5);width:fit-content;max-width:100%;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px var(--s4);padding:9px 14px 10px;border-radius:var(--r);background:var(--plate)}
+.sincebar{margin-top:var(--s5);width:fit-content;max-width:100%;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px var(--s4);padding:9px 14px 10px;border-radius:var(--r);background:var(--on-ground)}
 .sincebar[hidden]{display:none}
 .sincebar .when{color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono)}
 .sincebar .go{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;color:var(--ink-1);font-size:var(--t-body);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
@@ -81,14 +94,14 @@ a{color:inherit}
 
 /* the categories stay in reach as you read: what passes under them is frosted right out, flat, with no edge of its own */
 .nav{position:sticky;top:0;z-index:4;margin:var(--s4) calc(-1 * var(--gutter)) 0;padding:var(--s2) var(--gutter)}
-.nav::before{content:"";position:absolute;inset:0 0 -14px;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--floor) 76%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+.nav::before{content:"";position:absolute;inset:0 0 -14px;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--ground) 76%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
   -webkit-mask-image:linear-gradient(#000 calc(100% - 14px),transparent);mask-image:linear-gradient(#000 calc(100% - 14px),transparent)}
 /* the categories ride in one track; a marker glides to the open one (iOS's settling curve), while the content below
    trades places in the same direction. The content itself stays on the floor. */
 .scroller{overflow-x:auto;scrollbar-width:none;padding:0}
 .scroller::-webkit-scrollbar{display:none}
-.track{position:relative;display:inline-flex;padding:3px;border-radius:var(--r);background:var(--surface-1)}
-.marker{position:absolute;top:3px;bottom:3px;left:0;width:0;border-radius:7px;background:var(--surface-3);pointer-events:none;
+.track{position:relative;display:inline-flex;padding:3px;border-radius:var(--r);background:var(--on-ground)}
+.marker{position:absolute;top:3px;bottom:3px;left:0;width:0;border-radius:7px;background:var(--on-ground);pointer-events:none;
   transition:transform .48s var(--glide),width .48s var(--glide),height .48s var(--glide)}
 :root[data-theme="light"] .marker{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .marker.still{transition:none}
@@ -97,20 +110,21 @@ a{color:inherit}
 .nav .tab[aria-selected="true"]{color:var(--ink-1)}
 .nav .tab[aria-selected="true"] small{color:var(--ink-3)}
 
-/* the story on the measure, the state in the margin */
-.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:56px}
-.story{min-width:0;--drift:18px}
+/* the card: the page's one main surface. On a phone it runs to the screen's edges and the page scrolls; wide enough,
+   it lies on the floor and scrolls itself (below). */
+.page{margin:var(--s4) calc(-1 * var(--gutter)) 0;padding:0 var(--gutter);border-radius:var(--r-card) var(--r-card) 0 0;background:var(--card)}
+main{background:var(--card)}
+[data-theme] main:focus-visible{outline:none!important}
+.story{min-width:0;--drift:8px;padding-bottom:72px}
 #body{min-height:60vh;will-change:opacity,transform}
 /* the content trades places: out a little away from where you're going, in from that side, as the marker arrives */
 #body.leaving{opacity:0;transform:translateX(calc(var(--dir,0) * var(--drift) * -.55));transition:opacity .15s cubic-bezier(.4,0,1,1),transform .15s cubic-bezier(.4,0,1,1)}
 #body.entering{opacity:0;transform:translateX(calc(var(--dir,0) * var(--drift)))}
 #body.settle{transition:opacity .42s cubic-bezier(.2,.7,.2,1),transform .5s var(--glide)}
-/* the story and the margin start on one line, whichever tab is open */
 #body{padding-top:var(--s5)}
-/* the margin: the mind's state on one long plate, read like an instrument's side panel; its sections set apart by space */
-.margin{margin-top:var(--s5);align-self:start;display:flex;flex-direction:column;gap:var(--s6);padding:var(--s4) var(--s4) var(--s5);border-radius:var(--r);background:var(--plate)}
-/* it stays in view while you read, but only when the whole of it fits the window (set by log.js) */
-.margin.stick{position:sticky;top:68px}
+/* the drawer: the mind's state, read like an instrument's side panel; its sections set apart by space */
+.margin{display:flex;flex-direction:column;gap:var(--s6)}
+.drawer,.drawer-toggle{display:none}
 /* before its memory has been read, nothing stands empty */
 .margin:empty,.verify:empty{display:none}
 .nav:has(.tabs:empty){visibility:hidden}
@@ -152,71 +166,94 @@ a{color:inherit}
 /* the margin's own section steps aside when its whole tab is open, so nothing shows twice */
 body[data-tab="beliefs"] .margin [data-for="beliefs"],body[data-tab="questions"] .margin [data-for="questions"],
 body[data-tab="notes"] .margin [data-for="notes"]{display:none}
-/* narrow, beside a chat: no margin; its state as a short summary at the top of the log */
+/* on a phone there's no drawer; its state is a short summary at the top of the log */
 .glance{display:none}
 .glance .g{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;gap:var(--s3);width:100%;padding:9px 0;
   color:var(--ink-1);font-size:var(--t-body);transition:color var(--quick)}
 .glance .g span:last-child{color:var(--ink-3);font:400 var(--t-micro)/1.7 var(--mono);text-align:right;overflow-wrap:anywhere}
 .glance .g:hover{color:var(--ink-2)}
 .glance .g:active{color:var(--ink-3)}
-@media (max-width:1239px){
-  .cols{grid-template-columns:minmax(0,1fr)}
-  .story{--drift:8px}            /* inside the page's own margin, beside a chat */
-  .margin{display:none}
+@media (max-width:759px){
   body[data-tab="log"] .glance{display:block;margin:var(--s4) calc(-1 * var(--bleed)) 0;padding:var(--s1) var(--bleed);border-radius:var(--r);background:var(--plate)}
 }
 
-/* wide enough, the rail: one plate floating at the page's edge, the same material as the margin and on the same top
-   line. Who it is, then what it holds, each with its count on one column, then the facts and controls at its foot.
-   The marker glides down it as it glides along the track, and the content trades places the same way. The page itself
-   starts at the days. Narrower than this the rail's contents simply stack, and the categories ride in the track. */
+/* wide enough: the floor is the rail. Who it is, then what it holds, each with its count on one column, then the facts
+   and controls at its foot, all directly on the floor. The main card
+   lies beside it, holds its own scrolling, and starts at the days. The marker glides down the rail, and the content
+   trades places the same way. */
 .rail{display:contents}
-@media (min-width:860px){
-  .shell{display:grid;grid-template-columns:244px minmax(0,1fr);column-gap:44px;max-width:1560px;padding:14px 14px 96px}
-  main{min-width:0}
-  .rail{position:sticky;top:14px;z-index:6;align-self:start;display:flex;flex-direction:column;height:calc(100dvh - 28px);min-height:0;padding:var(--s4) var(--s4) 14px;border-radius:var(--r);background:var(--plate)}
+@media (min-width:760px){
+  html,body{height:100%;overflow:hidden}
+  .shell{display:flex;max-width:none;height:100dvh;margin:0;padding:var(--gap) var(--gap) var(--gap) 0}
+  .rail{position:relative;z-index:6;flex:none;width:238px;display:flex;flex-direction:column;min-height:0;padding:14px 12px 6px 20px}
   .rail .house{order:1}
   .rail .who{order:2;margin-top:var(--s4)}
   .rail .sincebar{order:3;margin:var(--s4) 0 0;width:auto;flex-direction:column;align-items:flex-start;gap:6px;padding:0;background:none;border-radius:0}
   .rail .sincebar .go{align-items:baseline;font-size:var(--t-small);line-height:1.4}
   .rail .sincebar .go .unread{flex:none;transform:translateY(-1px)}
-  .rail .nav{order:4;position:static;flex:0 1 auto;min-height:48px;margin:calc(var(--s5) - 12px) -8px 0;padding:12px 0 22px;overflow-y:auto;-webkit-mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);scrollbar-width:none}
+  .rail .nav{order:4;position:static;flex:0 1 auto;min-height:48px;margin:calc(var(--s5) - 12px) 0 0 -8px;padding:12px 0 22px;overflow-y:auto;-webkit-mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);scrollbar-width:none}
   .rail .nav::-webkit-scrollbar{display:none}
   .rail .nav::before{display:none}
   .rail .verify{order:5;margin-top:auto;padding:var(--s4) 0 0;flex-direction:column;gap:3px}
   .rail .head-r{order:6;position:static;margin-top:var(--s3);justify-content:space-between}
 
   .pick{font-size:21px;gap:7px}
+  .pick:not([disabled]):hover{background:var(--on-ground)}
   .state-line{align-items:flex-start;margin-top:6px}
   .state{font-size:var(--t-body);line-height:1.4;text-wrap:balance}
   .dot{align-self:flex-start;margin-top:6px}
-  .seg{background:var(--surface-2)}
   .seg button{width:27px;height:27px}
-  .seg button[aria-pressed="true"]{background:var(--surface-4)}
-  .to-mind{background:var(--surface-2);padding:9px 11px}
-  .to-mind:hover{background:var(--surface-3)}
-  .to-mind:active{background:var(--surface-4)}
+  .to-mind{padding:9px 11px}
 
   .scroller{overflow:visible}
   .track{display:block;padding:0;border-radius:0;background:none}
   .marker{top:0;bottom:auto;left:0;right:0;width:auto;height:0;border-radius:7px}
   .nav .tabs{display:block}
   .nav .tab{box-sizing:border-box;position:relative;display:flex;align-items:baseline;gap:var(--s2);width:100%;padding:7px 8px 8px;transition:color .3s var(--ease),background var(--quick)}
-  .nav .tab:hover:not([aria-selected="true"]){background:var(--hair)}
+  .nav .tab:hover:not([aria-selected="true"]){background:var(--on-ground)}
   [data-theme] .nav .tab:focus-visible{outline-offset:-2px}
   .nav .tab small{order:2;margin-left:auto}
-  /* what's new hangs in the row's own margin, so the words keep one edge */
   .nav .tab .unread{order:1;align-self:center;margin:0}
   /* settings aren't something it holds: a little apart */
   .nav .tab[data-tab="settings"]{margin-top:var(--s3)}
 
-  #body{padding-top:var(--s4)}
-  .margin{margin-top:0}
-  .margin.stick{top:14px}
-  body[data-tab="log"] .glance{margin-top:0}
-  .story{--drift:12px}
+  /* the main card */
+  .page{position:relative;flex:1;min-width:0;display:flex;margin:0;padding:0;border-radius:var(--r-card);background:none}
+  main{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;border-radius:var(--r-card)}
+  :root[data-theme="light"] main{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
+  .story{--drift:12px;width:100%;max-width:980px;margin-inline:auto;padding:var(--s5) 60px 72px}
+  #body{padding-top:var(--s2)}
   #body.leaving{transform:translateY(calc(var(--dir,0) * var(--drift) * -.55))}
   #body.entering{transform:translateY(calc(var(--dir,0) * var(--drift)))}
+
+  /* the one control that opens the drawer, in the card's corner; what passes under it is softened */
+  .drawer-toggle,.drawer-close{all:unset;box-sizing:border-box;display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:var(--r-s);color:var(--ink-3);cursor:pointer;transition:color var(--quick),background var(--quick)}
+  .drawer-toggle{position:absolute;z-index:3;top:var(--gap);right:var(--gap);background:color-mix(in srgb,var(--card) 72%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .drawer-toggle:hover,.drawer-close:hover{color:var(--ink-1);background:var(--plate-hover,var(--on-ground))}
+  .drawer-toggle:active,.drawer-close:active{color:var(--ink-2)}
+  .drawer-toggle svg,.drawer-close svg{display:block}
+  body.drawer-open .drawer-toggle{visibility:hidden}
+
+  /* the drawer: a second card on the floor. It opens to the side and the main card makes room, its contents at their
+     full width the whole way, so nothing in it rewraps as it moves. */
+  .drawer{display:block;flex:none;width:0;margin-left:0;overflow:hidden;visibility:hidden;border-radius:var(--r-card);background:var(--card)}
+  :root[data-theme="light"] .drawer{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
+  body.drawer-open .drawer{width:var(--drawer);margin-left:var(--gap);visibility:visible}
+  .drawer-in{display:flex;flex-direction:column;width:var(--drawer);height:100%}
+  .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--gap) 0 var(--s4);color:var(--ink-3);font:400 var(--t-label)/1.3 var(--mono)}
+  .drawer-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s3) var(--s4) var(--s5)}
+  body.ready .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s .48s}
+  body.ready.drawer-open .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s}
+}
+/* too tight to sit beside the page: the same drawer floats over it, one sheet of frosted, flat glass */
+@media (min-width:760px) and (max-width:1239px){
+  .story{padding-inline:clamp(28px,5vw,52px)}
+  .drawer,body.drawer-open .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0}
+  .drawer{transform:translateX(calc(100% + 2 * var(--gap)));background:color-mix(in srgb,var(--card) 74%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.28)}
+  :root[data-theme="light"] .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
+  body.drawer-open .drawer{transform:none}
+  body.ready .drawer{transition:transform .48s var(--glide),visibility 0s .48s}
+  body.ready.drawer-open .drawer{transition:transform .48s var(--glide),visibility 0s}
 }
 
 .promise{margin-top:var(--s8);color:var(--ink-4);font-size:var(--t-small);line-height:1.55;max-width:62ch}
@@ -233,7 +270,7 @@ dialog .cap button:hover{color:var(--ink-1)}
 
 @media (max-width:560px){
   :root{--gutter:16px}
-  .shell{padding:18px var(--gutter) 72px}
+  .shell{padding:18px var(--gutter) 0}
   .head-r{top:7px}
   .pick{font-size:23px}
   .seg button{width:32px;height:32px}
@@ -242,7 +279,7 @@ dialog .cap button:hover{color:var(--ink-1)}
   .scroller{margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter)}
   .minds{min-width:0;width:calc(100vw - 32px)}
 }
-@media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind{transition:none}}
+@media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.24s}
 </style>
 </head>
@@ -267,16 +304,22 @@ dialog .cap button:hover{color:var(--ink-1)}
       <a class="to-mind" id="to-mind" href="../mind/" title="Its whole memory, every memory a cell and every link a fibre, live">Open the mind</a>
     </div>
   </header>
-  <main>
-    <div class="cols">
+  <div class="page">
+    <button class="drawer-toggle" id="drawer-toggle" type="button" aria-expanded="false" aria-controls="drawer" aria-label="Open its state, at a glance" title="Its state, at a glance"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.25"/></svg></button>
+    <main id="main" tabindex="-1">
       <div class="story">
         <div class="glance" id="glance" aria-label="Its state, at a glance"></div>
         <section id="body" aria-live="polite"></section>
+        <p class="promise" id="promise">Straight from its memory, on this machine only. It keeps nothing but what you write here, a note, a reply or an answer, and which of its notes you’ve read. The page speaks of the mind in the third person; only its own words say “I”.</p>
       </div>
-      <aside class="margin" id="margin" aria-label="Its state, at a glance"></aside>
+    </main>
+  </div>
+  <aside class="drawer" id="drawer" aria-label="Its state, at a glance">
+    <div class="drawer-in">
+      <div class="drawer-h"><span>At a glance</span><button class="drawer-close" id="drawer-close" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.25"/></svg></button></div>
+      <div class="drawer-body"><div class="margin" id="margin"></div></div>
     </div>
-    <p class="promise" id="promise">Straight from its memory, on this machine only. It keeps nothing but what you write here, a note, a reply or an answer, and which of its notes you’ve read. The page speaks of the mind in the third person; only its own words say “I”.</p>
-  </main>
+  </aside>
 </div>
 <dialog id="full"><img id="full-img" alt=""><div class="cap"><span id="full-cap"></span><button id="full-close" type="button">Close</button></div></dialog>
 <script type="module" src="log.js"></script>
