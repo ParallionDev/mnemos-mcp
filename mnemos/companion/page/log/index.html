@@ -9,8 +9,8 @@
 <link rel="stylesheet" href="../shared/fonts.css">
 <link rel="stylesheet" href="../shared/room.css">
 <style>
-/* The log: a mind's days, and everything it holds, on one page made to sit beside a conversation. Its story on the
-   left; its state in the margin, on the one long plate (notes for you, beliefs, what its memory asks, what it carries
+/* The log: a mind's days, and everything it holds, on one page made to sit beside a conversation. Who it is and what
+   it holds in the rail on the left; its story in the middle; its state in the margin, on one long plate (notes for you, beliefs, what its memory asks, what it carries
    forward, what it made). Narrow, beside a chat, the margin folds into a short summary at the top of the log. True
    black or white, following the system until someone picks one (shared/theme.js). Served by `mnemos log` on this
    machine only; its typefaces are bundled (../shared/fonts.css), so it asks nothing of the network. */
@@ -19,12 +19,11 @@ html{background:var(--floor);color:var(--ink-1)}
 body{font:400 var(--t-body)/1.5 var(--sans);-webkit-font-smoothing:antialiased;background:var(--floor)}
 button{font:inherit;color:inherit}
 a{color:inherit}
-main{max-width:1180px;margin:0 auto;padding:28px 28px 96px}
+.shell{position:relative;max-width:1180px;margin:0 auto;padding:28px var(--gutter) 96px}
 :root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px}
 
 /* who, and how warm: the name, one line, then the facts you can check, in the instrument's voice */
-.top{display:flex;justify-content:space-between;align-items:center;gap:var(--s4)}
-.who{min-width:0;margin-top:var(--s2)}
+.who{min-width:0;margin-top:var(--s4)}
 .house{font:400 10px/1 "Silkscreen",monospace;letter-spacing:.18em;color:var(--ink-4)}
 .state-line{display:flex;align-items:baseline;gap:8px;margin-top:var(--s2)}
 .state{color:var(--ink-2);font-size:var(--t-read);line-height:1.35}
@@ -54,8 +53,8 @@ main{max-width:1180px;margin:0 auto;padding:28px 28px 96px}
 .minds .mn{font:450 var(--t-body)/1.3 var(--sans);white-space:nowrap}
 .minds .mm{color:var(--ink-3);font:400 var(--t-micro)/1.3 var(--mono);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.pick .chev{transition:none}}
-/* what stays in reach at the top: the page's look, and the way to the mind */
-.head-r{flex:none;display:flex;align-items:center;gap:var(--s2)}
+/* what stays in reach: the page's look, and the way to the mind */
+.head-r{position:absolute;top:calc(28px - 13px);right:var(--gutter);display:flex;align-items:center;gap:var(--s2)}
 .seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--surface-1)}
 .seg button{all:unset;display:grid;place-items:center;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--ink-3);transition:color var(--quick),background var(--quick)}
 .seg button:hover{color:var(--ink-1)}
@@ -90,7 +89,7 @@ main{max-width:1180px;margin:0 auto;padding:28px 28px 96px}
 .scroller::-webkit-scrollbar{display:none}
 .track{position:relative;display:inline-flex;padding:3px;border-radius:var(--r);background:var(--surface-1)}
 .marker{position:absolute;top:3px;bottom:3px;left:0;width:0;border-radius:7px;background:var(--surface-3);pointer-events:none;
-  transition:transform .48s var(--glide),width .48s var(--glide)}
+  transition:transform .48s var(--glide),width .48s var(--glide),height .48s var(--glide)}
 :root[data-theme="light"] .marker{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .marker.still{transition:none}
 .nav .tabs{position:relative;z-index:1;gap:0;overflow:visible}
@@ -160,11 +159,64 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
 .glance .g span:last-child{color:var(--ink-3);font:400 var(--t-micro)/1.7 var(--mono);text-align:right;overflow-wrap:anywhere}
 .glance .g:hover{color:var(--ink-2)}
 .glance .g:active{color:var(--ink-3)}
-@media (max-width:980px){
+@media (max-width:1239px){
   .cols{grid-template-columns:minmax(0,1fr)}
   .story{--drift:8px}            /* inside the page's own margin, beside a chat */
   .margin{display:none}
   body[data-tab="log"] .glance{display:block;margin:var(--s4) calc(-1 * var(--bleed)) 0;padding:var(--s1) var(--bleed);border-radius:var(--r);background:var(--plate)}
+}
+
+/* wide enough, the rail: one plate floating at the page's edge, the same material as the margin and on the same top
+   line. Who it is, then what it holds, each with its count on one column, then the facts and controls at its foot.
+   The marker glides down it as it glides along the track, and the content trades places the same way. The page itself
+   starts at the days. Narrower than this the rail's contents simply stack, and the categories ride in the track. */
+.rail{display:contents}
+@media (min-width:860px){
+  .shell{display:grid;grid-template-columns:244px minmax(0,1fr);column-gap:44px;max-width:1560px;padding:14px 14px 96px}
+  main{min-width:0}
+  .rail{position:sticky;top:14px;z-index:6;align-self:start;display:flex;flex-direction:column;height:calc(100dvh - 28px);min-height:0;padding:var(--s4) var(--s4) 14px;border-radius:var(--r);background:var(--plate)}
+  .rail .house{order:1}
+  .rail .who{order:2;margin-top:var(--s4)}
+  .rail .sincebar{order:3;margin:var(--s4) 0 0;width:auto;flex-direction:column;align-items:flex-start;gap:6px;padding:0;background:none;border-radius:0}
+  .rail .sincebar .go{align-items:baseline;font-size:var(--t-small);line-height:1.4}
+  .rail .sincebar .go .unread{flex:none;transform:translateY(-1px)}
+  .rail .nav{order:4;position:static;flex:0 1 auto;min-height:48px;margin:calc(var(--s5) - 12px) -8px 0;padding:12px 0 22px;overflow-y:auto;-webkit-mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);scrollbar-width:none}
+  .rail .nav::-webkit-scrollbar{display:none}
+  .rail .nav::before{display:none}
+  .rail .verify{order:5;margin-top:auto;padding:var(--s4) 0 0;flex-direction:column;gap:3px}
+  .rail .head-r{order:6;position:static;margin-top:var(--s3);justify-content:space-between}
+
+  .pick{font-size:21px;gap:7px}
+  .state-line{align-items:flex-start;margin-top:6px}
+  .state{font-size:var(--t-body);line-height:1.4;text-wrap:balance}
+  .dot{align-self:flex-start;margin-top:6px}
+  .seg{background:var(--surface-2)}
+  .seg button{width:27px;height:27px}
+  .seg button[aria-pressed="true"]{background:var(--surface-4)}
+  .to-mind{background:var(--surface-2);padding:9px 11px}
+  .to-mind:hover{background:var(--surface-3)}
+  .to-mind:active{background:var(--surface-4)}
+
+  .scroller{overflow:visible}
+  .track{display:block;padding:0;border-radius:0;background:none}
+  .marker{top:0;bottom:auto;left:0;right:0;width:auto;height:0;border-radius:7px}
+  .nav .tabs{display:block}
+  .nav .tab{box-sizing:border-box;position:relative;display:flex;align-items:baseline;gap:var(--s2);width:100%;padding:7px 8px 8px;transition:color .3s var(--ease),background var(--quick)}
+  .nav .tab:hover:not([aria-selected="true"]){background:var(--hair)}
+  [data-theme] .nav .tab:focus-visible{outline-offset:-2px}
+  .nav .tab small{order:2;margin-left:auto}
+  /* what's new hangs in the row's own margin, so the words keep one edge */
+  .nav .tab .unread{order:1;align-self:center;margin:0}
+  /* settings aren't something it holds: a little apart */
+  .nav .tab[data-tab="settings"]{margin-top:var(--s3)}
+
+  #body{padding-top:var(--s4)}
+  .margin{margin-top:0}
+  .margin.stick{top:14px}
+  body[data-tab="log"] .glance{margin-top:0}
+  .story{--drift:12px}
+  #body.leaving{transform:translateY(calc(var(--dir,0) * var(--drift) * -.55))}
+  #body.entering{transform:translateY(calc(var(--dir,0) * var(--drift)))}
 }
 
 .promise{margin-top:var(--s8);color:var(--ink-4);font-size:var(--t-small);line-height:1.55;max-width:62ch}
@@ -181,7 +233,8 @@ dialog .cap button:hover{color:var(--ink-1)}
 
 @media (max-width:560px){
   :root{--gutter:16px}
-  main{padding:18px var(--gutter) 72px}
+  .shell{padding:18px var(--gutter) 72px}
+  .head-r{top:7px}
   .pick{font-size:23px}
   .seg button{width:32px;height:32px}
   .to-mind{padding:11px 13px}
@@ -194,37 +247,37 @@ dialog .cap button:hover{color:var(--ink-1)}
 </style>
 </head>
 <body>
-<main>
-  <header class="head">
-    <div class="top">
-      <div class="house">Mnemos</div>
-      <div class="head-r">
-        <div class="seg" id="look" role="group" aria-label="The page’s look">
-          <button type="button" data-look="auto" aria-pressed="false" aria-label="Follow the system" title="Follow the system"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.75" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 1.25a4.75 4.75 0 0 1 0 9.5z" fill="currentColor"/></svg></button>
-          <button type="button" data-look="light" aria-pressed="false" aria-label="Light" title="Light"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.75" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
-          <button type="button" data-look="dark" aria-pressed="false" aria-label="Dark" title="Dark"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5.35" fill="currentColor"/></svg></button>
-        </div>
-        <a class="to-mind" id="to-mind" href="../mind/" title="Its whole memory, every memory a cell and every link a fibre, live">Open the mind</a>
-      </div>
-    </div>
+<div class="shell">
+  <header class="rail">
+    <div class="house">Mnemos</div>
     <div class="who">
       <div class="pick-wrap"><button class="name pick" id="pick" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="minds" disabled><span id="name">&nbsp;</span><svg class="chev" id="chev" viewBox="0 0 10 6" width="10" height="6" aria-hidden="true" hidden><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <div class="minds" id="minds" hidden><div class="minds-h">The minds on this machine</div><ul id="minds-list"></ul></div></div>
       <div class="state-line"><span class="dot cold" id="dot" aria-hidden="true"></span><div class="state" id="state">Reading its memory…</div></div>
     </div>
-  </header>
-  <div class="verify" id="verify" aria-live="polite"></div>
-  <section class="sincebar" id="sincebar" aria-label="Since you were last here" hidden></section>
-  <nav class="nav" aria-label="What it holds"><div class="scroller" id="scroller"><div class="track" id="track"><span class="marker" id="marker" aria-hidden="true"></span><div class="tabs" role="tablist" id="tabs"></div></div></div></nav>
-  <div class="cols">
-    <div class="story">
-      <div class="glance" id="glance" aria-label="Its state, at a glance"></div>
-      <section id="body" aria-live="polite"></section>
+    <div class="verify" id="verify" aria-live="polite"></div>
+    <section class="sincebar" id="sincebar" aria-label="Since you were last here" hidden></section>
+    <nav class="nav" aria-label="What it holds"><div class="scroller" id="scroller"><div class="track" id="track"><span class="marker" id="marker" aria-hidden="true"></span><div class="tabs" role="tablist" id="tabs"></div></div></div></nav>
+    <div class="head-r">
+      <div class="seg" id="look" role="group" aria-label="The page’s look">
+        <button type="button" data-look="auto" aria-pressed="false" aria-label="Follow the system" title="Follow the system"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.75" fill="none" stroke="currentColor" stroke-width="1.2"/><path d="M6 1.25a4.75 4.75 0 0 1 0 9.5z" fill="currentColor"/></svg></button>
+        <button type="button" data-look="light" aria-pressed="false" aria-label="Light" title="Light"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.75" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button type="button" data-look="dark" aria-pressed="false" aria-label="Dark" title="Dark"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5.35" fill="currentColor"/></svg></button>
+      </div>
+      <a class="to-mind" id="to-mind" href="../mind/" title="Its whole memory, every memory a cell and every link a fibre, live">Open the mind</a>
     </div>
-    <aside class="margin" id="margin" aria-label="Its state, at a glance"></aside>
-  </div>
-  <p class="promise" id="promise">Straight from its memory, on this machine only. It keeps nothing but what you write here, a note, a reply or an answer, and which of its notes you’ve read. The page speaks of the mind in the third person; only its own words say “I”.</p>
-</main>
+  </header>
+  <main>
+    <div class="cols">
+      <div class="story">
+        <div class="glance" id="glance" aria-label="Its state, at a glance"></div>
+        <section id="body" aria-live="polite"></section>
+      </div>
+      <aside class="margin" id="margin" aria-label="Its state, at a glance"></aside>
+    </div>
+    <p class="promise" id="promise">Straight from its memory, on this machine only. It keeps nothing but what you write here, a note, a reply or an answer, and which of its notes you’ve read. The page speaks of the mind in the third person; only its own words say “I”.</p>
+  </main>
+</div>
 <dialog id="full"><img id="full-img" alt=""><div class="cap"><span id="full-cap"></span><button id="full-close" type="button">Close</button></div></dialog>
 <script type="module" src="log.js"></script>
 </body>

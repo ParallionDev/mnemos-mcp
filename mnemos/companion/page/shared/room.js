@@ -4,7 +4,7 @@
  *
  *   new Room({ tabsEl, bodyEl, tabs, sticky, ctx, hooks })
  *     ctx()   → { who, life, mems, byId, heat?(id) }   who: the export's identity
- *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id) }
+ *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id), top?() }
  */
 
 import { SHARED, esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
@@ -103,7 +103,7 @@ export class Room {
   scroller() { return this.sticky ? this.bodyEl : document.scrollingElement; }
   toTop() {
     if (this.sticky) { this.bodyEl.scrollTop = 0; return; }
-    const y = this.tabsEl.getBoundingClientRect().top + scrollY - 8;
+    const y = this.hooks.top ? this.hooks.top() : this.tabsEl.getBoundingClientRect().top + scrollY - 8;
     if (scrollY > y) scrollTo({ top: y });
   }
   /* a live redraw waits while you're writing, so nothing you type is lost or jumps */

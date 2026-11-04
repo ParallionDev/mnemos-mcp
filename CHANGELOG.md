@@ -3,10 +3,12 @@
 ## Unreleased
 
 - The notebook (`mnemos log`) has a new look, and does what it did. True black and
-  white, following the system until you pick one with the switch at the top. What the
-  page measures (times, dates, counts, models, how firmly something is held) is set in
-  mono, on one grid; what the agent wrote is left to be read. Fewer cards: a plate only
-  for what is an object in its own right. The mind's page stays dark.
+  white, following the system until you pick one with the switch. What the page
+  measures (times, dates, counts, models, how firmly something is held) is set in mono,
+  on one grid; what the agent wrote is left to be read. Fewer cards: a plate only for
+  what is an object in its own right. The tabs now run down a rail on the left that
+  stays in place as you read, and across the top on a phone; the arrow keys move
+  through them. The mind's page stays dark.
 
 ## 0.6.2 (2026-11-04)
 

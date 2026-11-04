@@ -146,13 +146,22 @@ function missing() {
 /* ---------- the track: its marker glides to the open tab; the content trades places as it goes ---------- */
 
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const railed = matchMedia('(min-width: 860px)');   // wide enough for the rail (index.html); otherwise, the track
 function placeMarker(key, glide) {
   const track = $('track'), btn = $('tabs').querySelector(`[data-tab="${key}"]`), marker = $('marker');
   if (!btn) return;
   marker.classList.toggle('still', !glide || reduce);
   const r = btn.getBoundingClientRect(), base = track.getBoundingClientRect();    // fractional pixels, so it fits exactly
-  marker.style.width = `${r.width}px`;
-  marker.style.transform = `translateX(${r.left - base.left}px)`;
+  $('tabs').setAttribute('aria-orientation', railed.matches ? 'vertical' : 'horizontal');
+  marker.style.width = railed.matches ? '' : `${r.width}px`;
+  marker.style.height = railed.matches ? `${r.height}px` : '';
+  marker.style.transform = railed.matches ? `translateY(${r.top - base.top}px)` : `translateX(${r.left - base.left}px)`;
+  if (railed.matches) {                        // in a short window the list scrolls on its own, and the open tab stays clear of its fades
+    const list = btn.closest('.nav'), box = list.getBoundingClientRect();
+    const by = Math.max(0, r.bottom - box.bottom + 24) || Math.min(0, r.top - box.top - 14);
+    if (by) list.scrollBy({ top: by, behavior: glide && !reduce ? 'smooth' : 'auto' });
+    return;
+  }
   if (glide) btn.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
   else {                                       // on arriving at a tab past the edge of a narrow screen, it's still in view
     const view = $('scroller'), edge = 16;
@@ -226,6 +235,8 @@ function start() {
     hooks: {
       route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
       transition,
+      // where the content starts when you change tab: in the rail, the top of the page; under the track, just below it
+      top: () => (railed.matches ? 0 : $('tabs').getBoundingClientRect().top + scrollY - 8),
       // what you write on the page: a reply, an answer or a note, sent to `mnemos log` (and on to the memory) as yours
       send: async (request) => {
         const r = await fetch(withAgent('../act'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request) });
@@ -255,6 +266,14 @@ function start() {
   placeMarker(room.s.tab, false);
   document.fonts.ready.then(() => placeMarker(room.s.tab, false));   // the labels' true width arrives with the font
   addEventListener('resize', () => placeMarker(room.s.tab, false));
+  $('tabs').addEventListener('keydown', (e) => {   // the arrows follow the tabs: down the rail, across a phone
+    const [back, next] = railed.matches ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+    if (e.key !== back && e.key !== next) return;
+    const tabs = [...$('tabs').querySelectorAll('[role="tab"]')], at = tabs.indexOf(document.activeElement);
+    if (at < 0) return;
+    e.preventDefault();
+    tabs[(at + (e.key === next ? 1 : -1) + tabs.length) % tabs.length].focus();
+  });
 }
 
 addEventListener('hashchange', () => {
@@ -302,7 +321,8 @@ $('sincebar').addEventListener('click', (e) => {
   const go = b.dataset.since;
   if (go === 'new') { room.s.filter = 'new'; room.s.sort = 'newest'; room.go({ tab: 'memories' }); }
   else room.go({ tab: go });
-  document.querySelector('.nav')?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  if (railed.matches) scrollTo({ top: 0, behavior }); else nav?.scrollIntoView({ block: 'start', behavior });
 });
 
 /* ---------- the minds on this machine ---------- */
