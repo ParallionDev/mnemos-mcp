@@ -36,7 +36,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
  * when the cards part it's simply there, and "the log" brings them back. Opened by itself it's the same page. */
 const behind = params.has('behind');
 let covered = behind;
-const toNotebook = (what) => { if (behind) parent.postMessage({ mnemos: what }, location.origin); };
+const toNotebook = (what, more = {}) => { if (behind) parent.postMessage({ mnemos: what, ...more }, location.origin); };
 if (behind) {
   document.documentElement.classList.add('behind', 'covered');
   addEventListener('message', (e) => {
@@ -47,9 +47,10 @@ if (behind) {
     } else if (e.data?.mnemos === 'cover') {
       covered = true; document.documentElement.classList.add('covered');
       try { if (sheetOpen) closeRoom(); letGo(); } catch { /* still arriving */ }
-    }
+    } else if (e.data?.mnemos === 'ask') $('ask-q')?.focus();
   });
   document.addEventListener('click', (e) => {          // every way back to the log is the cards returning
+    if (e.target.closest?.('#to-paper')) { e.stopPropagation(); toNotebook('cover', { tab: 'hours' }); return; }   // what it left is read in the log
     const a = e.target.closest?.('a[href]');
     if (a && !e.metaKey && !e.ctrlKey && !e.shiftKey && new URL(a.href).pathname.endsWith('/log/')) { e.preventDefault(); toNotebook('cover'); }
   }, true);

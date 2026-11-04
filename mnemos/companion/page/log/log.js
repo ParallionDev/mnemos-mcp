@@ -154,7 +154,9 @@ addEventListener('keydown', (e) => {
 /* ---------- the mind behind it all ----------
  * The notebook is glass over a mind that's already running: the whole mind page sits under the cards, softened right
  * out into the haze of light the floor is made of. It sleeps when nothing's happening, and a memory arriving lights it
- * even here. "Open the mind" only moves the cards out of the way. On a phone, or where it can't be drawn, it's a link. */
+ * even here. "Open the mind" only moves the cards out of the way, and the rail stays, floating over it: with no card
+ * open the mind is simply what's there, and a tab brings its card back. On a phone, or where it can't be drawn, it's a
+ * link. */
 let behind = null, mindHere = false, parted = false;
 function placeMind() {
   if (behind || !railed.matches) return;
@@ -171,23 +173,34 @@ function part(open, { hash = '', moved = false } = {}) {
   if (open && floating()) drawer(false);
   if (open && !$('minds').hidden) showMinds(false);
   document.body.classList.toggle('parted', open);
-  document.querySelector('.shell').inert = open;
+  document.querySelector('.page').inert = open; $('drawer').inert = open;
   behind.inert = !open;
+  $('to-mind').textContent = open ? 'Back to the log' : 'Open the mind';
+  showOpenTab();
   if (open) behind.removeAttribute('aria-hidden'); else behind.setAttribute('aria-hidden', 'true');
   behind.contentWindow.postMessage({ mnemos: open ? 'reveal' : 'cover', hash }, location.origin);
   if (open) {
     if (!moved) history.pushState({ mind: true }, '', `${location.pathname}${location.search}#mind`);
-    behind.focus();
-  } else {
-    if (!moved) { if (history.state?.mind) history.back(); else history.replaceState(null, '', location.pathname + location.search); }
-    $('to-mind').focus({ preventScroll: true });
+  } else if (!moved) {
+    if (history.state?.mind) history.back(); else history.replaceState(null, '', location.pathname + location.search);
   }
+}
+// no card is open while the mind is showing; the tab says so, and the same tab brings its card back as it was left
+function showOpenTab() {
+  if (!room) return;
+  for (const b of $('tabs').querySelectorAll('[data-tab]')) b.setAttribute('aria-selected', String(!parted && b.dataset.tab === room.s.tab));
+}
+function cardsBack() {
+  if (history.state?.mind) history.replaceState(null, '', location.pathname + location.search);
+  part(false, { moved: true });
 }
 addEventListener('message', (e) => {
   if (!behind || e.source !== behind.contentWindow || e.origin !== location.origin) return;
   const said = e.data?.mnemos;
   if (said === 'here') { mindHere = true; if (location.hash === '#mind') part(true, { moved: true }); }
-  if (said === 'cover') part(false);
+  if (said === 'cover') {
+    if (e.data.tab) { cardsBack(); room?.go({ tab: e.data.tab }); } else part(false);
+  }
   if (said === 'cannot') { mindHere = false; if (!parted) { behind.remove(); behind = null; } }
 });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && parted) part(false); });
@@ -195,8 +208,16 @@ document.addEventListener('click', (e) => {          // every way to the mind, a
   const a = e.target.closest?.('a[href]');
   if (!a || !mindHere || !railed.matches || e.metaKey || e.ctrlKey || e.shiftKey) return;
   const to = new URL(a.href);
-  if (to.pathname.endsWith('/mind/')) { e.preventDefault(); part(true, { hash: to.hash }); }
+  if (to.pathname.endsWith('/mind/')) { e.preventDefault(); if (parted) part(false); else part(true, { hash: to.hash }); }
 });
+$('tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab]');
+  if (!parted || !t) return;
+  const same = t.dataset.tab === room?.s.tab;
+  cardsBack();
+  if (same) e.stopPropagation();                     // it's the card that was open: back as it was, not back to its top
+}, true);
+$('sincebar').addEventListener('click', (e) => { if (parted && e.target.closest('[data-since]')) cardsBack(); }, true);
 railed.addEventListener('change', () => { if (railed.matches) { if (room) placeMind(); } else part(false); });
 
 function missing() {
@@ -217,6 +238,7 @@ function placeMarker(key, glide) {
   const track = $('track'), btn = $('tabs').querySelector(`[data-tab="${key}"]`), marker = $('marker');
   if (!btn) return;
   marker.classList.toggle('still', !glide || reduce);
+  showOpenTab();
   const r = btn.getBoundingClientRect(), base = track.getBoundingClientRect();    // fractional pixels, so it fits exactly
   $('tabs').setAttribute('aria-orientation', railed.matches ? 'vertical' : 'horizontal');
   marker.style.width = railed.matches ? '' : `${r.width}px`;
@@ -352,6 +374,7 @@ addEventListener('hashchange', () => {
   if (room && r && !(r.tab === room.s.tab && (r.memory || null) === (room.s.memory || null))) room.go({ tab: r.tab || room.s.tab, memory: r.memory || null });
 });
 addEventListener('keydown', (e) => {
+  if (e.key === '/' && parted) { e.preventDefault(); behind.focus(); behind.contentWindow.postMessage({ mnemos: 'ask' }, location.origin); return; }
   if (e.key === '/' && !/INPUT|TEXTAREA/.test(document.activeElement?.tagName || '') && room) {
     e.preventDefault(); room.go({ tab: 'memories' }); requestAnimationFrame(() => $('room-search')?.focus());
   }

@@ -14,8 +14,8 @@
   isn't. The mind's page stays dark.
 - The notebook and the mind are one place. On a computer, the mind runs behind the
   notebook, softened into the light of its floor, and "Open the mind" moves the cards out
-  of the way instead of going to another page; they come back as you left them. It draws
-  only when something's happening. On a phone, or where a browser can't draw it, it's
+  of the way instead of going to another page. The rail stays, floating over the mind, and
+  a tab brings its card back as you left it. It draws only when something's happening. On a phone, or where a browser can't draw it, it's
   still a link to its own page, which works as it did. The page's security policy now
   lets it hold itself in a frame, from its own address only.
 
