@@ -19,25 +19,22 @@
    typefaces are bundled (../shared/fonts.css), so it asks nothing of the network. */
 *{box-sizing:border-box;margin:0;padding:0}
 html{background:var(--ground);color:var(--ink-1)}
-body{font:400 var(--t-body)/1.5 var(--sans);-webkit-font-smoothing:antialiased;background:var(--ground)}
+body{font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;-webkit-font-smoothing:antialiased;background:var(--ground)}
 button{font:inherit;color:inherit}
 a{color:inherit}
 .shell{position:relative;padding:28px var(--gutter) 0}
-:root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:332px;--rail-w:238px;--gap:10px;--r-card:14px;
+:root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:424px;--rail-w:238px;--gap:10px;--r-card:14px;
   --ground:#060606;--veil:rgba(6,6,8,.5);--card:rgba(0,0,0,.45);--pane:rgba(255,255,255,.024);--on-ground:rgba(255,255,255,.07);--on-ground-2:rgba(255,255,255,.12)}
 :root[data-theme="light"]{--ground:#f3f3f3;--veil:rgba(243,243,243,.7);--card:rgba(255,255,255,.64);--pane:rgba(0,0,0,.048);--on-ground:#fff;--on-ground-2:#fafafa}
 /* one tone besides the card: a plate on the card is the floor's own tone, as if the card were cut away to show it (in
    the dark, what the floor measures with the mind's haze under its veil) */
 :is(main,.drawer){--surface-1:var(--pane);--plate:var(--pane)}
-main .rowb:hover{background:var(--plate-hover)}
-/* the floor's small type stays AA on the floor's own grey */
-:root[data-theme="light"] .rail{--ink-4:#696969}
 
 /* who, and how warm: the name, one line, then the facts you can check, in the instrument's voice */
 .who{min-width:0;margin-top:var(--s4)}
 .house{font:400 10px/1 "Silkscreen",monospace;letter-spacing:.18em;color:var(--ink-4)}
 .state-line{display:flex;align-items:baseline;gap:8px;margin-top:var(--s2)}
-.state{color:var(--ink-2);font-size:var(--t-read);line-height:1.35}
+.state{color:var(--ink-2);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em}
 .state b{font-weight:500;color:var(--ink-1)}
 /* the warmth, as one point of light: as bright as the mind still is, a hollow ring once it's cold */
 .dot{flex:none;align-self:center;width:8px;height:8px;border-radius:50%;--k:0;
@@ -47,7 +44,7 @@ main .rowb:hover{background:var(--plate-hover)}
 /* the minds on this machine: the name opens a short list, each a mind with its own memory */
 .pick-wrap{position:relative}
 .pick{all:unset;display:inline-flex;align-items:center;gap:9px;border-radius:var(--r-s);padding:2px 8px;margin-left:-8px;cursor:default;
-  font:500 26px/1.15 var(--display);letter-spacing:-.022em;color:var(--ink-1);transition:background var(--quick)}
+  font:600 20px/24px var(--display);letter-spacing:-.015em;color:var(--ink-1);transition:background var(--quick)}
 .pick:not([disabled]){cursor:pointer}
 .pick:not([disabled]):hover{background:var(--surface-1)}
 .pick .chev{color:var(--ink-3);transition:transform var(--quick)}
@@ -56,13 +53,13 @@ main .rowb:hover{background:var(--plate-hover)}
 .minds{position:absolute;z-index:10;top:calc(100% + 6px);left:-8px;min-width:320px;max-width:min(360px,calc(100vw - 32px));padding:6px;border-radius:12px;
   background:color-mix(in srgb,var(--raised) 78%,transparent);-webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);box-shadow:0 0 0 1px var(--hair),0 16px 40px rgba(0,0,0,.28)}
 .minds[hidden]{display:none}
-.minds-h{padding:7px 10px 8px;color:var(--ink-4);font:400 var(--t-micro)/1.3 var(--mono)}
+.minds-h{padding:7px 10px 8px;color:var(--ink-4);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
 .minds ul{list-style:none;margin:0;padding:0}
 .minds a{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s4);padding:8px 10px;border-radius:var(--r-s);color:var(--ink-2);text-decoration:none;transition:background var(--quick)}
 .minds a:hover{background:var(--hair);color:var(--ink-1)}
 .minds a[aria-current="page"]{color:var(--ink-1);background:var(--hair)}
-.minds .mn{font:450 var(--t-body)/1.3 var(--sans);white-space:nowrap}
-.minds .mm{color:var(--ink-3);font:400 var(--t-micro)/1.3 var(--mono);white-space:nowrap}
+.minds .mn{font:450 var(--t-body)/20px var(--sans);letter-spacing:-.006em;white-space:nowrap}
+.minds .mm{color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;white-space:nowrap}
 @media (prefers-reduced-motion:reduce){.pick .chev{transition:none}}
 /* what stays in reach: the page's look, and the way to the mind */
 .head-r{position:absolute;top:calc(28px - 13px);right:var(--gutter);display:flex;align-items:center;gap:var(--s2)}
@@ -74,10 +71,10 @@ main .rowb:hover{background:var(--plate-hover)}
 :root[data-theme="light"] .seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .seg svg{display:block}
 .to-mind{all:unset;flex:none;cursor:pointer;padding:9px 13px;border-radius:var(--r-s);background:var(--on-ground);
-  font:500 var(--t-small)/1.1 var(--sans);color:var(--ink-1);transition:background var(--quick)}
+  font:500 var(--t-small)/18px var(--sans);letter-spacing:-.003em;color:var(--ink-1);transition:background var(--quick)}
 .to-mind:hover{background:var(--on-ground-2)}
 .to-mind:active{background:var(--on-ground)}
-.verify{margin-top:var(--s3);display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-3);font:400 var(--t-micro)/1.5 var(--mono);letter-spacing:-.005em}
+.verify{margin-top:var(--s3);display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
 .verify .flag{color:var(--ink-1)}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:7px;vertical-align:1px}
 .verify.stale .fresh{color:var(--ink-1)}
@@ -85,11 +82,11 @@ main .rowb:hover{background:var(--plate-hover)}
 /* since you were last here: one quiet plate, what's new and where it lives; what's waiting on you leads, with its dot */
 .sincebar{margin-top:var(--s5);width:fit-content;max-width:100%;display:flex;flex-wrap:wrap;align-items:baseline;gap:4px var(--s4);padding:9px 14px 10px;border-radius:var(--r);background:var(--on-ground)}
 .sincebar[hidden]{display:none}
-.sincebar .when{color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono)}
-.sincebar .go{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;color:var(--ink-1);font-size:var(--t-body);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.sincebar .when{color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
+.sincebar .go{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;color:var(--ink-1);font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .sincebar .go:hover{border-bottom-color:var(--ink-3)}
 .sincebar .go .unread{margin:0}
-.sincebar .quiet{color:var(--ink-3);font-size:var(--t-body)}
+.sincebar .quiet{color:var(--ink-3);font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em}
 
 /* the categories stay in reach as you read: what passes under them is frosted right out, flat, with no edge of its own */
 .nav{position:sticky;top:0;z-index:4;margin:var(--s4) calc(-1 * var(--gutter)) 0;padding:var(--s2) var(--gutter)}
@@ -122,54 +119,52 @@ main{background:var(--card)}
 #body.settle{transition:opacity .42s cubic-bezier(.2,.7,.2,1),transform .5s var(--glide)}
 #body{padding-top:var(--s5)}
 /* the drawer: the mind's state, read like an instrument's side panel; its sections set apart by space */
-.margin{display:flex;flex-direction:column;gap:var(--s6)}
+.margin{display:flex;flex-direction:column;gap:var(--s5)}
 .drawer,.drawer-toggle{display:none}
 /* before its memory has been read, nothing stands empty */
 .margin:empty,.verify:empty{display:none}
 .nav:has(.tabs:empty){visibility:hidden}
 
 .m-h{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin-bottom:var(--s3)}
-.m-h .label{color:var(--ink-2)}
-.m-h .textlink{all:unset;flex:none;white-space:nowrap;cursor:pointer;color:var(--ink-3);font:400 var(--t-micro)/1.3 var(--mono);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.m-h .label{font-weight:500;color:var(--ink-2)}
+.m-h .textlink{all:unset;flex:none;white-space:nowrap;cursor:pointer;color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .m-h .textlink:hover{color:var(--ink-1)}
 .m-h .textlink:active{color:var(--ink-2)}
 .m-item + .m-item{margin-top:var(--s4)}
-.m-item .text{font:400 var(--t-body)/1.5 var(--sans);color:var(--ink-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
-.m-item .text.two{-webkit-line-clamp:2;font:450 var(--t-body)/1.45 var(--sans);letter-spacing:-.003em}  /* a belief: one statement, a touch heavier */
-.m-item .by{margin-top:5px;color:var(--ink-4);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.01em}
-.m-item .q{color:var(--ink-4);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.01em}
-.m-item .ask{margin-top:4px;color:var(--ink-2);font-size:var(--t-small);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.m-item .a{margin-top:4px;font:400 var(--t-body)/1.5 var(--sans);color:var(--ink-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.m-item .lead{color:var(--ink-2);font-size:var(--t-small);line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.m-empty{color:var(--ink-3);font-size:var(--t-small);line-height:1.5}
-.strength{margin-top:7px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:var(--s3);color:var(--ink-3);font:400 var(--t-micro)/1 var(--mono);letter-spacing:-.01em}
+.m-item .text{font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;color:var(--ink-2);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.m-item .text.two{-webkit-line-clamp:2}
+.m-item .by{margin-top:5px;color:var(--ink-4);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
+.m-item .q{color:var(--ink-4);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
+.m-item .ask{margin-top:4px;color:var(--ink-2);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-item .a{margin-top:4px;font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;color:var(--ink-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.m-item .lead{color:var(--ink-2);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.m-empty{color:var(--ink-3);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em}
+.strength{margin-top:7px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:var(--s3);color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
 .held.thin{display:block;margin:0;height:2px;max-width:none;background:var(--hair);box-shadow:none}
-.held.thin i{height:2px}
+.held.thin i{height:2px;background:var(--ink-4)}
 /* what its memory asks: a small table, the count then its kind, every number on one column */
 .m-counts{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:var(--s2);margin-inline:-6px}
 .m-count{all:unset;box-sizing:border-box;cursor:pointer;grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:baseline;padding:4px 6px;border-radius:6px;transition:background var(--quick)}
-.m-count b{font:400 var(--t-small)/1.3 var(--mono);text-align:right;color:var(--ink-1)}
-.m-count span{color:var(--ink-3);font-size:var(--t-small);line-height:1.3}
+.m-count b{font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;text-align:right;color:var(--ink-1)}
+.m-count span{color:var(--ink-3);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em}
 .m-count:hover{background:var(--plate-hover)}
 .m-count:active{background:var(--plate-press)}
 .m-counts + .m-item{margin-top:var(--s4)}
-.m-item details summary{list-style:none;cursor:pointer;display:inline-block;margin-top:6px;color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.m-item details summary{list-style:none;cursor:pointer;display:inline-block;margin-top:6px;color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .m-item details summary::-webkit-details-marker{display:none}
-.m-item details summary::before{content:"+ "}
-.m-item details[open] summary::before{content:"\2212 "}
 .m-item details summary:hover{color:var(--ink-1)}
-.m-item details .plain{margin-top:var(--s2);color:var(--ink-2);font-size:var(--t-small);line-height:1.6;white-space:pre-wrap;max-height:320px;overflow:auto;overflow-wrap:anywhere}
+.m-item details .plain{margin-top:var(--s2);color:var(--ink-2);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;white-space:pre-wrap;max-height:320px;overflow:auto;overflow-wrap:anywhere}
 .m-thumbs{display:flex;gap:var(--s2)}
 .m-thumbs .thumb{width:calc((100% - 2 * var(--s2)) / 3);height:auto;aspect-ratio:1}
-.m-cap{margin-top:var(--s2);color:var(--ink-4);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.01em;overflow-wrap:anywhere}
+.m-cap{margin-top:var(--s2);color:var(--ink-4);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;overflow-wrap:anywhere}
 /* the margin's own section steps aside when its whole tab is open, so nothing shows twice */
 body[data-tab="beliefs"] .margin [data-for="beliefs"],body[data-tab="questions"] .margin [data-for="questions"],
 body[data-tab="notes"] .margin [data-for="notes"]{display:none}
 /* on a phone there's no drawer; its state is a short summary at the top of the log */
 .glance{display:none}
 .glance .g{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:space-between;gap:var(--s3);width:100%;padding:9px 0;
-  color:var(--ink-1);font-size:var(--t-body);transition:color var(--quick)}
-.glance .g span:last-child{color:var(--ink-3);font:400 var(--t-micro)/1.7 var(--mono);text-align:right;overflow-wrap:anywhere}
+  color:var(--ink-1);font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;transition:color var(--quick)}
+.glance .g span:last-child{color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;text-align:right;overflow-wrap:anywhere}
 .glance .g:hover{color:var(--ink-2)}
 .glance .g:active{color:var(--ink-3)}
 @media (max-width:759px){
@@ -188,7 +183,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .rail .house{order:1}
   .rail .who{order:2;margin-top:var(--s4)}
   .rail .sincebar{order:3;margin:var(--s4) 0 0;width:auto;flex-direction:column;align-items:flex-start;gap:6px;padding:0;background:none;border-radius:0}
-  .rail .sincebar .go{align-items:baseline;font-size:var(--t-small);line-height:1.4}
+  .rail .sincebar .go{align-items:baseline;font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em}
   .rail .sincebar .go .unread{flex:none;transform:translateY(-1px)}
   .rail .nav{order:4;position:static;flex:0 1 auto;min-height:48px;margin:calc(var(--s5) - 12px) 0 0 -8px;padding:12px 0 22px;overflow-y:auto;-webkit-mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);mask-image:linear-gradient(transparent,#000 12px,#000 calc(100% - 22px),transparent);scrollbar-width:none}
   .rail .nav::-webkit-scrollbar{display:none}
@@ -196,10 +191,10 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .rail .verify{order:5;margin-top:auto;padding:var(--s4) 0 0;flex-direction:column;gap:3px}
   .rail .head-r{order:6;position:static;margin-top:var(--s3);justify-content:space-between}
 
-  .pick{font-size:21px;gap:7px}
+  .pick{gap:6px}
   .pick:not([disabled]):hover{background:var(--on-ground)}
   .state-line{align-items:flex-start;margin-top:6px}
-  .state{font-size:var(--t-body);line-height:1.4;text-wrap:balance}
+  .state{font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;text-wrap:balance}
   .dot{align-self:flex-start;margin-top:6px}
   .seg button{width:27px;height:27px}
   .to-mind{padding:9px 11px}
@@ -220,7 +215,11 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .page{position:relative;flex:1;min-width:0;display:flex;margin:0;padding:0;border-radius:var(--r-card);background:none}
   main{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;border-radius:var(--r-card)}
   :root[data-theme="light"] main{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
-  .story{--drift:12px;width:100%;max-width:980px;margin-inline:auto;padding:var(--s5) 60px 72px}
+  .story{--drift:12px;width:100%;max-width:716px;margin-inline:auto;padding:var(--s5) 38px 72px}
+  body[data-tab="log"] .story{max-width:804px}
+  /* with the drawer shut, the column keeps clear of where a memory will float in, if there's room to */
+  body:not(.drawer-open) .story{margin-right:0;margin-left:max(0px,min(calc((100vw - 248px - 716px) / 2),calc(100vw - 248px - 716px - var(--drawer) - 24px)))}
+  body:not(.drawer-open)[data-tab="log"] .story{margin-left:max(0px,min(calc((100vw - 248px - 804px) / 2),calc(100vw - 248px - 804px - var(--drawer) - 24px)))}
   #body{padding-top:var(--s2)}
   #body.leaving{transform:translateY(calc(var(--dir,0) * var(--drift) * -.55))}
   #body.entering{transform:translateY(calc(var(--dir,0) * var(--drift)))}
@@ -239,7 +238,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   :root[data-theme="light"] .drawer{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
   body.drawer-open .drawer{width:var(--drawer);margin-left:var(--gap);visibility:visible}
   .drawer-in{display:flex;flex-direction:column;width:var(--drawer);height:100%}
-  .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--gap) 0 var(--s4);color:var(--ink-3);font:400 var(--t-label)/1.3 var(--mono)}
+  .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--gap) 0 var(--s4);color:var(--ink-3);font:400 var(--t-label)/16px var(--sans);letter-spacing:0}
   .drawer-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s3) var(--s4) var(--s5)}
   body.ready .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s .48s,transform .78s var(--glide)}
   body.ready.drawer-open .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s,transform .78s var(--glide)}
@@ -273,8 +272,9 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   body.parted .page,body.parted .drawer{transform:none;opacity:0}
 }
 /* too tight to sit beside the page: the same drawer floats over it, one sheet of frosted, flat glass */
-@media (min-width:760px) and (max-width:1239px){
-  .story{padding-inline:clamp(28px,5vw,52px)}
+@media (min-width:760px) and (max-width:1319px){
+  /* the pane floats over the right edge here, so the column keeps to the left, and always did: nothing has to move */
+  .story,body[data-tab="log"] .story{margin-left:0;padding-inline:clamp(24px,4vw,38px)}
   .drawer,body.drawer-open .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0}
   .drawer{transform:translateX(calc(100% + 2 * var(--gap)));background:color-mix(in srgb,var(--card) 74%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.28)}
   :root[data-theme="light"] .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
@@ -284,16 +284,16 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   body.ready.drawer-open .drawer{transition:transform .48s var(--glide),visibility 0s}
 }
 
-.promise{margin-top:var(--s8);color:var(--ink-4);font-size:var(--t-small);line-height:1.55;max-width:62ch}
+.promise{margin-top:var(--s8);color:var(--ink-4);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;max-width:62ch}
 .missing{margin-top:var(--s7);max-width:56ch;color:var(--ink-2)}
-.missing code{font:400 12px/1.5 var(--mono);color:var(--ink-1)}
+.missing code{font:400 12px/1.5 var(--sans);color:var(--ink-1)}
 .missing p + p{margin-top:var(--s3)}
 
 dialog{margin:auto;border:0;border-radius:var(--r);background:var(--floor);padding:0;max-width:min(94vw,1100px);max-height:92vh;overflow:hidden;color:var(--ink-1);box-shadow:0 0 0 1px var(--hair)}
 dialog::backdrop{background:color-mix(in srgb,var(--floor) 82%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 dialog img{display:block;max-width:min(94vw,1100px);max-height:calc(92vh - 46px);object-fit:contain}
-dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);background:var(--plate)}
-dialog .cap button{all:unset;cursor:pointer;color:var(--ink-2);font:450 var(--t-small)/1.2 var(--sans);padding:3px 8px;border-radius:6px;transition:color var(--quick)}
+dialog .cap{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:var(--s3) var(--s4);color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;background:var(--plate)}
+dialog .cap button{all:unset;cursor:pointer;color:var(--ink-2);font:450 var(--t-small)/18px var(--sans);letter-spacing:-.003em;padding:3px 8px;border-radius:6px;transition:color var(--quick)}
 dialog .cap button:hover{color:var(--ink-1)}
 
 @media (max-width:560px){
@@ -307,18 +307,43 @@ dialog .cap button:hover{color:var(--ink-1)}
   .scroller{margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter)}
   .minds{min-width:0;width:calc(100vw - 32px)}
 }
-/* ---------- a memory open: its row, opened. At the start it's exactly the row, and log/unfold.js opens what's around the words ---------- */
-.rowb.unfolded{display:none}
-.unfold{min-width:0;padding:12px calc(var(--bleed) - 1px) 13px;border:1px solid transparent;margin-bottom:var(--s4)}
-.unfold.loose{margin-inline:calc(-1 * var(--bleed))}
-.unfold .detail{outline:none}
-[data-theme] .unfold .detail:focus-visible{outline:none!important}
-.unfold .specimen{margin:0}
-.unfold .specimen canvas{margin-bottom:var(--s3)}
-.unfold .meta{align-items:baseline}
-.unfold .words{margin-top:5px;max-width:none;font:400 var(--t-read-s)/1.55 var(--sans)}
-.unfold .changed{max-width:none}
-.unfold-close{margin-left:auto;padding:0;opacity:var(--open,1)}
+/* ---------- a memory open: in the pane beside the list, which doesn't move (log/pane.js) ---------- */
+.pane{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;outline:none;scrollbar-width:thin;scrollbar-color:var(--hair-2) transparent}
+.pane[hidden]{display:none}
+[data-theme] .pane:focus-visible{outline:none!important}
+body.reading .drawer-h,body.reading .drawer-body{display:none}
+.pane .detail{padding-bottom:var(--s6)}
+.pane .detail > :not(.pane-h):not(.specimen):not(.alsos){margin-inline:20px}
+.pane .specimen{margin:var(--s1) 0 var(--s5)}
+/* the search and filters stay in reach down a long list, and what scrolls under them goes soft */
+@media (min-width:760px){
+  #body > .tools,#body > .shared-list > .tools{position:sticky;top:0;z-index:2;margin-inline:calc(-1 * var(--bleed));padding:var(--s3) var(--bleed);margin-top:calc(-1 * var(--s3))}
+  #body > .tools::before,#body > .shared-list > .tools::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;opacity:0;transition:opacity var(--quick);background:color-mix(in srgb,var(--ground) 68%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
+  #body > .tools.stuck::before,#body > .shared-list > .tools.stuck::before{opacity:1}
+  #body > .shared-list > .tools{margin-bottom:var(--s2)}
+}
+.pane-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:var(--s3);min-height:44px;padding:0 8px 0 20px}
+.pane-h::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--ground) 68%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
+.pane-acts{flex:none;display:flex;gap:2px}
+.icon-b{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;color:var(--ink-3);cursor:pointer;transition:color var(--quick),background var(--quick)}
+.icon-b:hover{color:var(--ink-1);background:var(--hover)}
+.icon-b:active{background:var(--selected)}
+.icon-b[disabled]{color:var(--hair-2);background:none;cursor:default}
+.icon-b svg{display:block}
+.pane .alsos{margin-inline:12px}
+/* no room beside the list, or the drawer's shut: the same pane floats over the list's edge, on frosted glass */
+@media (min-width:760px){
+  body.peek .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0;visibility:visible;overflow:hidden;transform:none;transition:none;
+    background:color-mix(in srgb,var(--ground) 86%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.5)}
+  :root[data-theme="light"] body.peek .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
+  body.peek .drawer-toggle{visibility:hidden}
+}
+/* a phone: it covers the page, and Close is back */
+@media (max-width:759px){
+  body.reading .drawer{display:block;position:fixed;inset:0;z-index:30;background:var(--floor)}
+  body.reading .drawer-in{display:flex;flex-direction:column;height:100%}
+  html:has(body.reading){overflow:hidden}
+}
 @media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.24s}
 </style>
@@ -358,6 +383,7 @@ dialog .cap button:hover{color:var(--ink-1)}
     <div class="drawer-in">
       <div class="drawer-h"><span>At a glance</span><button class="drawer-close" id="drawer-close" type="button" aria-label="Close" title="Close"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M10 3v10" fill="none" stroke="currentColor" stroke-width="1.25"/></svg></button></div>
       <div class="drawer-body"><div class="margin" id="margin"></div></div>
+      <div class="pane" id="pane" tabindex="-1" role="region" aria-label="A memory" hidden></div>
     </div>
   </aside>
 </div>

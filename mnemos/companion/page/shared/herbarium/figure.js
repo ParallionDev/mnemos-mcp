@@ -90,7 +90,7 @@ export function composeFamily(model, family, box, { kMax = 230, pad = 18, dir = 
     }
     return st;
   });
-  return { family, nodes, stalks, K, box, G, cols, vertical, across: MIN * K, arched: skipInfo.size > 0 };
+  return { family, nodes, stalks, K, box, G, cols, vertical };
 }
 
 /* draw the life, at progress 0..1 (the plate engraving itself, experience first) */

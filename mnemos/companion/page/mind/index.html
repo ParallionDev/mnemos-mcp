@@ -15,14 +15,14 @@
 :root{
   --floor:#060608;--raised:#0b0b0e;--raised-2:#101014;
   /* the same readable greys as the shared room: every grey that carries words passes WCAG AA for small text */
-  --ink-1:rgba(236,239,244,.94);--ink-2:rgba(236,239,244,.7);--ink-3:rgba(236,239,244,.57);--ink-4:rgba(236,239,244,.5);
+  --ink-1:rgba(236,239,244,.94);--ink-2:rgba(236,239,244,.68);--ink-3:rgba(236,239,244,.55);--ink-4:rgba(236,239,244,.55);--hover:rgba(255,255,255,.05);--selected:rgba(255,255,255,.09);
   --hair:rgba(255,255,255,.08);--hair-2:rgba(255,255,255,.14);--focus:rgba(255,255,255,.5);--lit:inset 0 1px 0 rgba(255,255,255,.045);
   --paper:#FAF8F5;--paper-2:#F3F0EB;--paper-3:#ECE8E2;--p-ink-1:rgba(20,22,26,.92);--p-ink-2:rgba(20,22,26,.74);--p-ink-3:rgba(20,22,26,.66);--p-ink-4:rgba(20,22,26,.6);
   --p-hair:rgba(20,22,26,.1);--p-hair-2:rgba(20,22,26,.18);--p-focus:rgba(20,22,26,.6);
   --signal:#6d93c9;
   --display:"Inter Tight",system-ui,sans-serif;--sans:"Inter",system-ui,sans-serif;--own:"Newsreader",Georgia,serif;--house:"Silkscreen",monospace;
   --mono:"JetBrains Mono",ui-monospace,monospace;
-  --t-temp:46px;--t-h2:40px;--t-name:24px;--t-own-xl:22px;--t-own:19px;--t-own-s:16.5px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11px;
+  --t-temp:46px;--t-h2:40px;--t-name:24px;--t-own-xl:22px;--t-own:19px;--t-own-s:16.5px;--t-body:14px;--t-small:13px;--t-micro:12px;--t-label:12px;
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;--s9:112px;
   --edge:30px;--sheet:560px;--r:14px;--r-s:8px;
   --quick:.18s;--calm:.45s;--slow:.9s;--ease:cubic-bezier(.2,.7,.2,1);--sheet-ease:cubic-bezier(.32,.72,0,1);
@@ -243,10 +243,11 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .room-top h2{font:300 20px/1.2 var(--display);letter-spacing:-.01em}
 .room-top h2:focus{outline:none}                 /* focus is placed here so keys land in the room; it isn't a control */
 .close{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);padding:4px 8px;border:1px solid transparent;border-radius:6px;transition:color var(--quick),border-color var(--quick)}
+.room-top .close{margin-right:-9px}
 .close:hover{color:var(--ink-1)}
 .close:focus-visible{border-color:var(--focus);color:var(--ink-1)}
 .room-body{flex:1;overflow-y:auto;padding:var(--s4) 24px var(--s8);overscroll-behavior:contain;border-radius:0 0 var(--g-r) var(--g-r)}
-.room .tabs{margin-top:var(--s4);gap:11px}
+.room .tabs{margin-top:var(--s4);gap:12px}
 dialog{margin:auto;border:0;border-radius:var(--r);background:var(--raised);padding:0;max-width:min(92vw,1100px);max-height:92vh;overflow:hidden;color:var(--ink-1)}
 dialog::backdrop{background:rgba(6,6,8,.72);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 dialog img{display:block;max-width:min(92vw,1100px);max-height:calc(92vh - 46px);object-fit:contain}

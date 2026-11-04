@@ -21,11 +21,19 @@
   the glass; asked for less motion, it holds still. On a phone, or where a browser can't
   draw it, it's still a link to its own page, which works as it did. The page's security policy now
   lets it hold itself in a frame, from its own address only.
-- A memory opens in its row, instead of replacing the list. Its words stay on the line they
-  were on: the whole text and what's known about it open below them, a much larger figure
-  opens above, and the rows around move out of the way. Opening another closes the first.
-  Esc, the back button or Close folds it back into its row.
+- A memory opens beside the list, and the list doesn't move. Where the drawer is open, the
+  memory takes the drawer's place; elsewhere the drawer floats in over the list's right edge;
+  on a phone it covers the screen. The row stays marked, the up and down arrows walk the list
+  with the memory following, and Esc, the back button or Close puts it away and returns you to
+  the row, at the same scroll position. The figure is much larger and its box fits the drawing.
   The mind's own sheet shows the same memory, with the same larger figure, in the list's place.
+- The notebook's type was redone: five sizes on one rhythm and three inks, in place of
+  seven sizes a pixel apart and four greys that nobody could tell apart. Monospace only for
+  the numbers that are read as readings, the serif only for titles the mind wrote. Lists hold
+  two lines at a readable length. The search and filters stay in reach down a long list. Questions
+  show the memory they're about, not the same prompt 186 times. A reply waits as one quiet
+  line, with its buttons coming when you write. Shared uses the same search and order as
+  Memories.
 
 ## 0.6.2 (2026-11-04)
 

@@ -19,7 +19,7 @@ const figureColors = (el) => {
 };
 const MOST_SPINES = 64;                       // a memory tied to hundreds is drawn with its strongest; the words say how many
 const MOST_KIN = 7;                           // a life drawn in the room: the memory and the nearest six of its family
-const ENGRAVE = 1100;                         // ms for a specimen to engrave itself, experience first
+const ENGRAVE = 800;                          // ms for a specimen to engrave itself, experience first
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- the memory as the herbarium reads it ---------- */
@@ -81,30 +81,40 @@ export function lifeWords(model, i, life) {
 /* ---------- in the reading room: the life, engraved once ---------- */
 
 const engraved = new Set();                   // a life already engraved isn't engraved again when the room redraws
-export function mountLife(canvas, model, i, { open, again = false, wait = 0 } = {}) {
+export function mountLife(canvas, model, i, { open, again = false, instant = false } = {}) {
   const life = lifeOf(model, i);
   const box = canvas.parentElement.getBoundingClientRect();
-  // the figure is the memory's face: as large as the window lets it be, in a box no bigger than the figure itself
-  const w = Math.round(box.width), most = Math.round(Math.max(240, Math.min(440, innerHeight * 0.48, w * 0.86)));
-  const compose = (height) => composeFamily(model, life, { w, h: height }, { kMax: most * 0.38, pad: 14 });
-  let fig = compose(most), h = most;
-  if (!fig.arched) { h = Math.min(most, Math.ceil(fig.across) + 28); fig = compose(h); }
+  // the figure is the memory's face: as large as the window lets it be
+  const w = Math.round(box.width), most = Math.round(Math.max(240, Math.min(480, innerHeight * 0.5, w)));
   const dpr = Math.min(devicePixelRatio || 1, 2);
+  const colors = figureColors(canvas);
+  const fig = composeFamily(model, life, { w, h: most }, { kMax: most * 0.43, pad: 8 });
+  // and its box is the figure's own, measured from the drawing, so there's no dead space round a smaller one
+  const probe = document.createElement('canvas');
+  probe.width = w; probe.height = most;
+  const pc = probe.getContext('2d', { willReadFrequently: true });
+  drawFamily(pc, fig, { ...colors, t: 0, progress: 1, hover: i });
+  const ink = pc.getImageData(0, 0, w, most).data;
+  let top = 0, bottom = most;
+  const inked = (y) => { for (let x = 0, at = y * w * 4 + 3; x < w; x++, at += 4) if (ink[at] > 12) return true; return false; };
+  while (top < most - 1 && !inked(top)) top++;
+  while (bottom > top + 1 && !inked(bottom - 1)) bottom--;
+  const crop = Math.max(0, top - 4), h = Math.min(most - crop, bottom - top + 8);
   canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = `${h}px`;
-  const ctx = canvas.getContext('2d'), colors = figureColors(canvas);
-  if (again) engraved.delete(model.cells[i].id);   // opened afresh in its row, it's drawn afresh, as the row opens round it
-  let hover = null, start = engraved.has(model.cells[i].id) || reduce ? -1e9 : performance.now() + wait, raf = 0;
+  const ctx = canvas.getContext('2d');
+  if (again) engraved.delete(model.cells[i].id);   // opened afresh, it's drawn afresh
+  let hover = null, start = instant || engraved.has(model.cells[i].id) || reduce ? -1e9 : performance.now(), raf = 0;
   engraved.add(model.cells[i].id);
   const draw = (now) => {
     const progress = Math.max(0, Math.min(1, (now - start) / ENGRAVE));
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, -crop * dpr); ctx.clearRect(0, crop, w, h);
     drawFamily(ctx, fig, { ...colors, t: 0, progress, hover: hover ?? i });
     raf = progress < 1 && canvas.isConnected ? requestAnimationFrame(draw) : 0;
   };
   draw(performance.now());
   if (life.nodes.length < 2) return;
   // the others in its life open from the figure
-  const at = (e) => { const r = canvas.getBoundingClientRect(); return pickFamily(fig, e.clientX - r.left, e.clientY - r.top).body; };
+  const at = (e) => { const r = canvas.getBoundingClientRect(); return pickFamily(fig, e.clientX - r.left, e.clientY - r.top + crop).body; };
   canvas.addEventListener('pointermove', (e) => {
     const n = at(e), next = n != null && n !== i ? n : null;
     canvas.style.cursor = next != null ? 'pointer' : '';

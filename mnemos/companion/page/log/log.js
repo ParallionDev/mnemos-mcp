@@ -3,7 +3,7 @@
  * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
-import { makeUnfold } from './unfold.js';
+import { makePane } from './pane.js';
 import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent,
   visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -131,7 +131,7 @@ function margin() {
 const railed = matchMedia('(min-width: 760px)');   // wide enough for the rail (index.html); otherwise, the track
 
 /* ---------- the drawer: its state, beside the page when there's room, over it when there isn't ---------- */
-const DRAWER = 'mnemos-drawer', beside = matchMedia('(min-width: 1240px)');
+const DRAWER = 'mnemos-drawer', beside = matchMedia('(min-width: 1320px)');
 const leftOpen = () => { try { return localStorage.getItem(DRAWER) !== 'closed'; } catch { return true; } };
 function drawer(open, { keep = false, focus = false } = {}) {
   document.body.classList.toggle('drawer-open', open);
@@ -142,11 +142,15 @@ function drawer(open, { keep = false, focus = false } = {}) {
 const floating = () => railed.matches && !beside.matches && document.body.classList.contains('drawer-open');
 drawer(beside.matches && leftOpen());
 requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.add('ready')));   // it doesn't slide open as the page arrives
-beside.addEventListener('change', () => drawer(beside.matches && leftOpen()));
+beside.addEventListener('change', () => { drawer(beside.matches && leftOpen()); pane?.relaid(); });
 $('drawer-toggle').addEventListener('click', () => drawer(true, { keep: true, focus: true }));
 $('drawer-close').addEventListener('click', () => drawer(false, { keep: true, focus: true }));
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && floating() && !$('full').open) drawer(false, { focus: true }); });
-document.addEventListener('click', (e) => { if (floating() && e.isTrusted && !e.target.closest('#drawer, #drawer-toggle, #full')) drawer(false); });
+document.addEventListener('click', (e) => {
+  if (!e.isTrusted || e.target.closest('#drawer, #full')) return;
+  if (document.body.classList.contains('peek') && pane?.isOpen() && railed.matches && !e.target.closest('[data-mem]')) leaveMemory();
+  else if (floating() && !pane?.isOpen() && !e.target.closest('#drawer-toggle')) drawer(false);
+});
 // the card scrolls itself, so the keys that scroll a page go to it whenever nothing else has them
 addEventListener('keydown', (e) => {
   if (railed.matches && e.target === document.body && [' ', 'PageUp', 'PageDown', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) $('main').focus({ preventScroll: true });
@@ -301,24 +305,32 @@ async function look() {
   tell({ agent: life.identity.agentId, who: life.identity, notes: life.notes || [], open: () => room?.go({ tab: 'notes' }) });
 }
 
+let pane = null;
 function leaveMemory() {
   if (history.state?.memory) history.back(); else room.go({ memory: null });
 }
 function start() {
   const scroller = () => (railed.matches ? $('main') : document.scrollingElement);
-  const unfold = makeUnfold({
-    body: $('body'), scroller,
-    // what you can see of the list: the card, or a phone's window under its track
-    port: () => { if (railed.matches) { const r = $('main').getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; } return { top: Math.max(0, $('tabs').getBoundingClientRect().bottom), bottom: innerHeight }; },
-    settled: () => { if (room.listStale) room.render(); },
-    relaid: () => room.refresh(),
+  pane = makePane({
+    el: $('pane'), drawer: $('drawer'),
+    floats: () => !(beside.matches && document.body.classList.contains('drawer-open')),
+    covers: () => !railed.matches,
+    closed: (left, hadFocus) => { if (hadFocus || document.activeElement === document.body) $('body').querySelector(`[data-mem="${CSS.escape(left)}"]`)?.focus({ preventScroll: true }); },
   });
+  // the search and filters stay in reach down a long list; their backing comes only once something runs under them
+  const card = document.querySelector('main');
+  const stuck = () => {
+    const bar = $('body').querySelector(':scope > .tools, :scope > .shared-list > .tools');
+    bar?.classList.toggle('stuck', card.scrollTop > 0 && bar.getBoundingClientRect().top <= card.getBoundingClientRect().top + 0.5);
+  };
+  card.addEventListener('scroll', stuck, { passive: true });
+  new MutationObserver(stuck).observe($('body'), { childList: true });
   room = new Room({
     tabsEl: $('tabs'), bodyEl: $('body'), tabs: TABS, sticky: false,
     ctx: () => ({ who: life.identity, life, mems, byId, since: V?.since || 0 }),
     hooks: {
-      unfold, leave: leaveMemory,
-      // a memory opened from the list is one step back from it; one to another inside its row is still that one step
+      pane, leave: leaveMemory,
+      // a memory opened from the list is one step back from it; one to another beside it is still that one step
       route: (hash) => {
         if (room.s.memory && !history.state?.memory && location.hash !== hash) history.pushState({ memory: true }, '', hash);
         else history.replaceState(room.s.memory && history.state?.memory ? { memory: true } : null, '', hash);
@@ -356,7 +368,26 @@ function start() {
   margin();
   placeMarker(room.s.tab, false);
   // Escape closes an open memory, unless it's being corrected: then it cancels that first, in the room
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && unfold.isOpen() && !parted && !room.editing && !$('full').open && !e.target.matches?.('input, textarea')) leaveMemory(); }, true);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && pane.isOpen() && !parted && !room.editing && !$('full').open && !e.target.matches?.('input, textarea')) leaveMemory(); }, true);
+  // the arrows walk the list, as they do in Mail: the list keeps its place, only scrolling far enough to show the row
+  const walk = (by) => {
+    const rows = [...$('body').querySelectorAll('[data-mem]:not([disabled])')];
+    if (!rows.length) return;
+    const from = pane.isOpen() ? rows.findIndex((r) => r.dataset.mem === room.s.memory) : rows.indexOf(document.activeElement);
+    const next = rows[from < 0 ? 0 : from + by];
+    if (!next) return;
+    next.scrollIntoView({ block: 'nearest' });
+    if (pane.isOpen()) room.go({ memory: next.dataset.mem }); else next.focus({ preventScroll: true });
+  };
+  addEventListener('keydown', (e) => {
+    if ((e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || parted || e.metaKey || e.ctrlKey || e.altKey || !railed.matches) return;
+    if (e.target.matches?.('input, textarea, select') || $('full').open || !(pane.isOpen() || e.target.matches?.('.rowb'))) return;
+    e.preventDefault();
+    walk(e.key === 'ArrowDown' ? 1 : -1);
+  });
+  $('pane').addEventListener('click', (e) => { const step = e.target.closest('[data-step]'); if (step) walk(Number(step.dataset.step)); });
+  let resting = 0;
+  addEventListener('resize', () => { clearTimeout(resting); resting = setTimeout(() => { if (pane.isOpen()) { pane.relaid(); room.refresh(); } }, 140); });
   document.fonts.ready.then(() => placeMarker(room.s.tab, false));   // the labels' true width arrives with the font
   addEventListener('resize', () => placeMarker(room.s.tab, false));
   (window.requestIdleCallback || setTimeout)(placeMind);
