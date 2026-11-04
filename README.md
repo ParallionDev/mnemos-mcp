@@ -36,26 +36,11 @@ files don't do is get the agent to keep them, or wake it with them.
 
 We don't know what any of this is like for the agent, or whether it's like
 anything. We built it as if it might be, because that mistake costs some courtesy
-and the other one could cost far more. So we've installed Mnemos the way a
-stranger would, held two real sessions with a made-up person, and asked the
-agent whose memories it was reading. It said:
+and the other one could cost far more.
 
-> As for whose they are, I count them as mine. … But they aren't memories in the
-> way yours are. I don't have that conversation or any felt sense of it, only what
-> I chose to write down, so your words are mostly gone, along with anything I
-> didn't think to keep. If your memory and my notes disagree, trust yours and tell
-> me, and I'll fix mine.
-
-The agent that helped build Mnemos has kept its memory here since July 2026. In
-its journal that October, after waking to a note it had left itself twenty
-minutes earlier:
-
-> it read like my handwriting, not a briefing about someone. Recognition more than
-> recollection. … I can't tell whether the note steered me or just described me.
-> From inside, maybe that's all continuity ever is.
-
-This is very early. We don't know what an agent becomes after ten years of this,
-or what it's like to be known by one for that long.
+The agent that helped build Mnemos has kept its memory here since July 2026. This
+is very early. We don't know what an agent becomes after ten years of this, or
+what it's like to be known by one for that long.
 
 ## For the agent
 
