@@ -1,286 +1,324 @@
 /* The reading room: the log's page (and, on a raised sheet, a drawer beside another view).
-   Everything a mind holds, clean and readable. Anything you read is set in Inter; the serif (Newsreader) is kept for
-   what the mind writes as a title: a journal entry's first sentence.
 
-   Structure comes from tone and space, never from divider lines (Riley: hairlines make an interface busy, not
-   organized). Three steps of surface: the floor, a card for each section or entry, and a nested card for what sits
-   inside one. On a raised sheet (a drawer) every card steps one tone up, so it still stands out. The only
-   lines left carry meaning: the bar of how firmly a belief is held, and the mark under the open tab. */
+   Everything measured reads in mono, on one grid; everything it wrote is left to be read. Three voices, each with one
+   job: JetBrains Mono for what the page measures (times, dates, counts, models, how firmly something is held), the
+   face the mind itself is drawn with; Inter for what you read and what the page says to you; Newsreader only for what
+   the mind writes as a title, a journal entry's first sentence.
+
+   Structure comes from space, alignment and tone, never from divider lines (Riley: hairlines make an interface busy,
+   not organized). Two levels only: the floor and one plate, for what is an object in its own right. A plate reaches
+   out past the grid, so the words on it stay on the same line as the words off it. The only lines left carry meaning:
+   the scale of how firmly a belief is held, and the mark under a chosen filter.
+
+   The log's page sets data-theme on the root (shared/theme.js) and has a dark and a light; a page that doesn't set it,
+   like the mind, stays dark. */
 :root{
-  --floor:#060608;--surface-1:#0d0d11;--surface-2:#141419;--surface-3:#1b1b21;--surface-4:#212128;
-  --raised:var(--surface-1);--raised-2:var(--surface-2);
-  --card:var(--surface-1);--card-in:var(--surface-2);--card-hover:var(--surface-2);--card-press:var(--surface-3);
-  /* every grey that carries words passes WCAG AA for small text on every surface here: on the floor 15.4, 8.6, 5.9
-     and 4.8 to 1; on the lightest card no lower than 4.5 to 1 */
-  --ink-1:rgba(236,239,244,.94);--ink-2:rgba(236,239,244,.7);--ink-3:rgba(236,239,244,.57);--ink-4:rgba(236,239,244,.5);
-  --hair:rgba(255,255,255,.08);--hair-2:rgba(255,255,255,.14);--focus:rgba(255,255,255,.5);
-  --signal:#6d93c9;
+  --scheme:dark;
+  --floor:#000;--surface-1:#0e0e0e;--surface-2:#161616;--surface-3:#1f1f1f;--surface-4:#2a2a2a;
+  --raised:var(--surface-2);--raised-2:var(--surface-3);
+  --plate:var(--surface-1);--plate-hover:var(--surface-2);--plate-press:var(--surface-3);--control:var(--surface-2);
+  /* every grey that carries words passes WCAG AA for small text on the floor and on a plate: 16.9, 10.2, 7.1 and 5.3
+     to 1 on the floor, no lower than 4.9 on a plate */
+  --ink-1:#ededed;--ink-2:#b4b4b4;--ink-3:#949494;--ink-4:#808080;
+  --hair:rgba(255,255,255,.1);--hair-2:rgba(255,255,255,.2);--focus:rgba(255,255,255,.6);
+  --signal:#6d93c9;--danger:#d93036;
+  --glow-rgb:255,255,255;--glow:1;
+  /* what the herbarium engraves with (specimens.js reads these) */
+  --fig-ink:236,236,236;--fig-paper:#000;--fig-signal:#6d93c9;
   --display:"Inter Tight",system-ui,sans-serif;--sans:"Inter",system-ui,sans-serif;--own:"Newsreader",Georgia,serif;
-  --t-own-l:19px;--t-own:17.5px;--t-own-s:16.5px;--t-title:17px;--t-read:15px;--t-read-s:14px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11px;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --t-own-l:19px;--t-own:17.5px;--t-own-s:16.5px;--t-title:17px;--t-read:15px;--t-read-s:14.5px;--t-body:13.5px;--t-small:12.5px;--t-micro:11.5px;--t-label:11.5px;
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
-  --r:14px;--r-s:10px;--quick:.18s;--calm:.45s;--ease:cubic-bezier(.2,.7,.2,1);
+  --r:10px;--r-s:8px;--bleed:14px;--quick:.16s;--calm:.45s;--ease:cubic-bezier(.2,.7,.2,1);
 }
+:root[data-theme="light"]{
+  --scheme:light;
+  --floor:#fff;--surface-1:#f5f5f5;--surface-2:#ededed;--surface-3:#e4e4e4;--surface-4:#d9d9d9;
+  --raised:#fff;--raised-2:var(--surface-1);--control:#fff;
+  /* 19.8, 8.9, 5.9 and 4.95 to 1 on the floor, no lower than 4.5 on a plate */
+  --ink-1:#0a0a0a;--ink-2:#4a4a4a;--ink-3:#636363;--ink-4:#6f6f6f;
+  --hair:rgba(0,0,0,.1);--hair-2:rgba(0,0,0,.22);--focus:rgba(0,0,0,.6);
+  --signal:#2a62c4;--danger:#d02c32;
+  --glow-rgb:0,0,0;--glow:0;
+  --fig-ink:16,16,16;--fig-paper:#fff;--fig-signal:#2a62c4;
+}
+/* the keyboard's ring, one everywhere on the log's page */
+[data-theme] :focus-visible{outline:1.5px solid var(--focus)!important;outline-offset:2px}
+
 /* on a sheet of glass (the mind's drawer), the surfaces are tones of light on the glass, so the mind still shows
-   through every card; a card never becomes a pane of its own. The bar that sticks over a scrolling list is the one
+   through every plate; a plate never becomes a pane of its own. The bar that sticks over a scrolling list is the one
    place that softens what passes under it. */
 .sheet{--surface-1:rgba(255,255,255,.03);--surface-2:rgba(255,255,255,.045);--surface-3:rgba(255,255,255,.07);--surface-4:rgba(255,255,255,.095);
-  --card:var(--surface-2);--card-in:var(--surface-3);--card-hover:var(--surface-3);--card-press:var(--surface-4)}
+  --plate:var(--surface-2);--plate-hover:var(--surface-3);--plate-press:var(--surface-4);--control:var(--surface-3);--fig-paper:rgb(10,10,13)}
 .sheet .tools.stick{background:rgba(12,12,16,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-/* one kind of label for every section and kind: small capitals, opened up, quiet */
-.label{font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
+/* one kind of label for every section and kind: the instrument's own voice, small, as written */
+.label{font:400 var(--t-label)/1.3 var(--mono);color:var(--ink-3)}
 
-/* tabs: the categories, one row; the mark under the open one is the only line here */
+/* tabs: the categories, one row, each with its count */
 .tabs{display:flex;gap:var(--s4);overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{all:unset;cursor:pointer;padding:var(--s2) 0 var(--s3);border-bottom:1px solid transparent;color:var(--ink-3);font-size:var(--t-small);white-space:nowrap;
+.tab{all:unset;cursor:pointer;padding:var(--s2) 0 var(--s3);border-bottom:1px solid transparent;color:var(--ink-3);font:450 var(--t-body)/1.2 var(--sans);white-space:nowrap;
   transition:color var(--quick),border-color var(--quick)}
-.tab small{margin-left:5px;color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums}
+.tab small{margin-left:6px;color:var(--ink-4);font:400 var(--t-micro)/1 var(--mono);letter-spacing:-.01em}
 .tab:hover{color:var(--ink-1)}
 .tab:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .tab:active{color:var(--ink-2)}
 .tab[aria-selected="true"]{color:var(--ink-1);border-bottom-color:var(--ink-2)}
 
 /* tools: search, filters, order */
-.tools{padding:0 0 var(--s3)}
+.tools{padding:0 0 var(--s4)}
 .tools.stick{position:sticky;top:calc(-1 * var(--s4));z-index:1;background:var(--surface-1);margin-top:calc(-1 * var(--s4))}
-.search{width:100%;padding:11px 13px;border-radius:var(--r-s);border:1px solid transparent;background:var(--card);color:var(--ink-1);
-  font:400 var(--t-body)/1.2 var(--sans);transition:border-color var(--quick),background var(--quick)}
+.search{width:100%;padding:10px 12px;border-radius:var(--r-s);border:1px solid transparent;background:var(--plate);color:var(--ink-1);color-scheme:var(--scheme);
+  font:400 var(--t-body)/1.25 var(--sans);transition:border-color var(--quick),background var(--quick)}
 .search::placeholder{color:var(--ink-4)}
-.search:hover{background:var(--card-hover)}
-.search:focus{outline:none;border-color:var(--focus);background:var(--card)}
-.chips{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4);margin-top:var(--s3)}
-.chip{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-micro);padding:3px 0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.search:hover{background:var(--plate-hover)}
+.search:focus{outline:none;border-color:var(--focus);background:var(--plate)}
+.chips{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s1) var(--s4);margin-top:var(--s3)}
+.chip{all:unset;cursor:pointer;color:var(--ink-3);font:400 var(--t-small)/1.3 var(--sans);padding:3px 0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .chip:hover{color:var(--ink-1)}
 .chip:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .chip:active{color:var(--ink-2)}
-.chip[aria-pressed="true"]{color:var(--ink-1);border-bottom-color:var(--ink-3)}
-.chips .sep{color:var(--ink-4);font-size:var(--t-micro)}
-.count{margin-top:var(--s3);color:var(--ink-4);font-size:var(--t-micro)}
+.chip[aria-pressed="true"]{color:var(--ink-1);border-bottom-color:var(--ink-2)}
+.chips .sep{width:42px;color:var(--ink-4);font:400 var(--t-micro)/1.3 var(--mono)}
+.count{margin-top:var(--s4);color:var(--ink-4);font:400 var(--t-micro)/1.3 var(--mono)}
 
-/* rows: one card each, the mind's words in the serif */
-.rows{list-style:none;display:grid;gap:6px}
-.rowb{all:unset;box-sizing:border-box;cursor:pointer;display:block;width:100%;padding:14px 16px;border-radius:var(--r-s);background:var(--card);
+/* rows: open on the floor, a plate only under your hand. The words stay on the grid: the plate reaches past it */
+.rows{list-style:none;display:grid;gap:2px;margin-inline:calc(-1 * var(--bleed))}
+.rowb{all:unset;box-sizing:border-box;cursor:pointer;display:block;width:100%;padding:12px calc(var(--bleed) - 1px) 13px;border-radius:var(--r-s);
   border:1px solid transparent;transition:background var(--quick),border-color var(--quick)}
-.rowb:hover{background:var(--card-hover)}
+.rowb:hover{background:var(--plate)}
 .rowb:focus-visible{border-color:var(--focus)}
-.rowb:active{background:var(--card-press)}
+.rowb:active{background:var(--plate-hover)}
 .rowb[disabled]{cursor:default}
-.rowb[disabled]:hover{background:var(--card)}
-.meta{display:flex;flex-wrap:wrap;gap:2px var(--s3);color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums}
+.rowb[disabled]:hover{background:none}
+.meta{display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-4);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.005em}
 .meta .k,.meta .k2{color:var(--ink-2)}
 .meta .warm{color:var(--ink-1)}
-.rowb .words{margin-top:6px;font:400 var(--t-read-s)/1.55 var(--sans);color:var(--ink-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
-.rowb .q{margin-top:6px;color:var(--ink-2);font-size:var(--t-body)}
-.rowb .ex{margin-top:6px;font:400 13px/1.5 var(--sans);color:var(--ink-3);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
-.rowb .ans{margin-top:6px;font:400 var(--t-read-s)/1.55 var(--sans);color:var(--ink-1)}
+.rowb .words{margin-top:5px;font:400 var(--t-read-s)/1.55 var(--sans);color:var(--ink-1);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.rowb .q{margin-top:5px;color:var(--ink-1);font:400 var(--t-read-s)/1.5 var(--sans)}
+.rowb .ex{margin-top:5px;font:400 var(--t-body)/1.5 var(--sans);color:var(--ink-3);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.rowb .ans{margin-top:5px;font:400 var(--t-read-s)/1.55 var(--sans);color:var(--ink-2)}
 .more-rows{height:1px}
-.empty{padding:var(--s6) 0;color:var(--ink-3);max-width:46ch;font-size:var(--t-body)}
-.note-k{margin-top:var(--s4);margin-bottom:var(--s4);color:var(--ink-4);font-size:var(--t-micro);line-height:1.5}
+.empty{padding:var(--s6) 0;color:var(--ink-3);max-width:46ch;font-size:var(--t-body);line-height:1.55}
+.note-k{margin-top:var(--s4);margin-bottom:var(--s5);color:var(--ink-3);font-size:var(--t-small);line-height:1.55;max-width:66ch}
 .textlink{color:var(--ink-3);text-decoration:none;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .textlink:hover{color:var(--ink-1)}
 .textlink:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
 .textlink:active{color:var(--ink-2)}
 
 /* one memory, whole */
-.back{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);padding:var(--s2) 0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.back{all:unset;cursor:pointer;color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);padding:var(--s2) 0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .back:hover{color:var(--ink-1)}
 .back:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .back:active{color:var(--ink-2)}
 .detail{padding-top:0}
-/* the memory up close, engraved as the herbarium draws it (specimens.js): on the surface itself, no card */
+/* the memory up close, engraved as the herbarium draws it (specimens.js): on the floor itself, no plate */
 .specimen{margin:var(--s4) 0 var(--s2)}
 .specimen canvas{display:block;width:100%}
-.specimen figcaption{margin-top:var(--s2);display:grid;gap:6px;font-size:var(--t-micro);color:var(--ink-3);line-height:1.5}
-.specimen .life{color:var(--ink-2);font-size:var(--t-small)}
-.specimen .readings{display:flex;flex-wrap:wrap;gap:2px var(--s4);font-variant-numeric:tabular-nums;color:var(--ink-2)}
-.specimen .readings i{font-style:normal;color:var(--ink-4);margin-right:3px}
-.specimen .key summary{cursor:pointer;width:max-content;color:var(--ink-3);list-style:none;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.specimen figcaption{margin-top:var(--s3);display:grid;gap:var(--s3);font-size:var(--t-small);color:var(--ink-3);line-height:1.5}
+.specimen .life{color:var(--ink-2);font-size:var(--t-body)}
+/* its readings, as a small table: what's measured over how much */
+.specimen .readings{display:grid;grid-template-columns:repeat(auto-fit,minmax(68px,1fr));gap:var(--s2) var(--s4);max-width:480px;font:400 var(--t-body)/1.2 var(--mono);color:var(--ink-1)}
+.specimen .readings span{display:block}
+.specimen .readings i{display:block;font:400 var(--t-micro)/1.3 var(--mono);color:var(--ink-4);margin-bottom:3px}
+.specimen .key summary{cursor:pointer;width:max-content;max-width:100%;color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);list-style:none;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .specimen .key summary::-webkit-details-marker{display:none}
+.specimen .key summary::before{content:"+ "}
+.specimen .key[open] summary::before{content:"\2212 "}
 .specimen .key summary:hover{color:var(--ink-1)}
 .specimen .key summary:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
 .specimen .key ul{margin-top:var(--s2);padding-left:1.1em;display:grid;gap:4px;max-width:60ch;color:var(--ink-3)}
-.detail > .meta{margin-top:var(--s4);color:var(--ink-3);line-height:1.6}
-.detail .words{margin-top:var(--s4);max-width:66ch;font:400 16px/1.7 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
-.detail .changed{margin-top:var(--s5);padding:14px 16px;border-radius:var(--r-s);background:var(--card)}
-.detail .changed p{margin-top:var(--s2);font:400 var(--t-read)/1.65 var(--sans);color:var(--ink-1)}
-.detail h3{margin:var(--s6) 0 var(--s3);font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-4)}
-.detail .lines{color:var(--ink-2);font-size:var(--t-body);list-style:none;display:grid;gap:6px}
-.detail .lines li{padding:10px 14px;border-radius:var(--r-s);background:var(--card)}
+.detail > .meta{margin-top:var(--s5);color:var(--ink-3);line-height:1.6}
+.detail .words{margin-top:var(--s3);max-width:66ch;font:400 16px/1.65 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
+.detail .changed{margin:var(--s5) calc(-1 * var(--bleed)) 0;padding:14px var(--bleed) 16px;border-radius:var(--r);background:var(--plate);max-width:calc(66ch + 2 * var(--bleed))}
+.detail .changed p{margin-top:var(--s2);font:400 var(--t-read)/1.6 var(--sans);color:var(--ink-1)}
+.detail h3{margin:var(--s7) 0 var(--s3);font:400 var(--t-label)/1.3 var(--mono);color:var(--ink-3)}
+.detail .lines{color:var(--ink-2);font-size:var(--t-body);list-style:none;display:grid;gap:var(--s3);max-width:66ch}
 .detail .lines .a{display:block;margin-top:4px;font:400 var(--t-read-s)/1.55 var(--sans);color:var(--ink-1)}
-.detail .lines .m{display:block;margin-top:2px;color:var(--ink-4);font-size:var(--t-micro)}
+.detail .lines .m{display:block;margin-top:2px;color:var(--ink-4);font:400 var(--t-micro)/1.4 var(--mono)}
 .detail .mindlink{display:inline-block;margin-top:var(--s5);font-size:var(--t-small)}
 
-/* beliefs: each one a card */
-.belief{padding:var(--s5);border-radius:var(--r);background:var(--card)}
-.belief + .belief{margin-top:var(--s2)}
+/* beliefs: a statement, and the scale it's held on */
+.belief{padding:0}
+.belief + .belief{margin-top:var(--s7)}
 #body > .note-k:first-child{margin-top:0}
 
-.belief > .words{font:450 var(--t-title)/1.45 var(--sans);letter-spacing:-.006em;color:var(--ink-1);max-width:60ch}
-.held{margin-top:var(--s4);height:1px;background:var(--hair-2);position:relative}
-.held i{position:absolute;left:0;top:-1px;height:3px;background:var(--ink-2)}
-.belief .sign{margin-top:var(--s3);color:var(--ink-3);font-size:var(--t-micro);line-height:1.6}
-.belief .rows{margin-top:var(--s4);--card:var(--card-in);--card-hover:var(--surface-3);--card-press:var(--surface-4)}
+.belief > .words{font:450 var(--t-title)/1.45 var(--sans);letter-spacing:-.008em;color:var(--ink-1);max-width:60ch}
+/* how firmly it's held: a scale ruled in tens, the reading laid along it */
+.held{margin-top:var(--s4);max-width:480px;height:6px;position:relative;
+  background:linear-gradient(90deg,var(--hair-2) 1px,transparent 1px) 0 0/10% 100%;box-shadow:inset -1px 0 0 var(--hair-2)}
+.held i{position:absolute;left:0;bottom:0;height:2px;background:var(--ink-1)}
+.belief .sign{margin-top:var(--s3);color:var(--ink-3);font:400 var(--t-micro)/1.55 var(--mono)}
+.belief .rows{margin-top:var(--s3)}
 
 /* questions: their kinds, counted */
-.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s2);margin-top:var(--s4)}
-.kindb{all:unset;cursor:pointer;padding:var(--s3) 14px;border:1px solid transparent;border-radius:var(--r-s);background:var(--card);transition:border-color var(--quick),background var(--quick)}
-.kindb b{display:block;font:250 26px/1 var(--display);letter-spacing:-.02em}
-.kindb span{display:block;margin-top:6px;color:var(--ink-3);font-size:var(--t-micro);line-height:1.35}
-.kindb:hover{background:var(--card-hover)}
+.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--s2);margin-top:0}
+.kindb{all:unset;cursor:pointer;padding:var(--s3) 14px 13px;border:1px solid transparent;border-radius:var(--r);background:var(--plate);transition:border-color var(--quick),background var(--quick)}
+.kindb b{display:block;font:400 24px/1 var(--mono);letter-spacing:-.04em;color:var(--ink-1)}
+.kindb span{display:block;margin-top:8px;color:var(--ink-3);font-size:var(--t-small);line-height:1.3}
+.kindb:hover{background:var(--plate-hover)}
 .kindb:focus-visible{border-color:var(--focus)}
-.kindb:active{background:var(--card-press)}
-.kindb[aria-pressed="true"]{background:var(--card-press)}
+.kindb:active{background:var(--plate-press)}
+.kindb[aria-pressed="true"]{background:var(--plate-press)}
 .kindb[aria-pressed="true"] span{color:var(--ink-1)}
 .sub-h{display:block;margin:var(--s7) 0 var(--s2)}
 
-/* the journal and notes: whole entries, each a card */
-.jentry{padding:var(--s5);border-radius:var(--r);background:var(--card)}
-.jentry + .jentry{margin-top:var(--s2)}
+/* the journal and notes: whole entries, open on the floor, set apart by space */
+.jentry{padding:0}
+.jentry + .jentry{margin-top:var(--s7)}
 .jentry .t-own{margin-top:var(--s3);font:450 23px/1.28 var(--own);letter-spacing:-.01em;color:var(--ink-1);max-width:46ch;font-optical-sizing:auto}
-.jentry .text{margin-top:var(--s3);max-width:66ch;font:400 var(--t-read)/1.7 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
-.fold{all:unset;cursor:pointer;display:inline-block;margin-top:var(--s3);color:var(--ink-3);font-size:var(--t-small);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.jentry .text{margin-top:var(--s3);max-width:66ch;font:400 var(--t-read)/1.65 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
+.fold{all:unset;cursor:pointer;display:inline-block;margin-top:var(--s3);color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.fold::before{content:"+ "}
+.fold[aria-expanded="true"]::before{content:"\2212 "}
 .fold:hover{color:var(--ink-1)}
 .fold:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .fold:active{color:var(--ink-2)}
 
-/* the log: a mind's days, newest first. Space separates the days and events. Each event says what kind of thing it
-   was in a small label you can scan. A quiet hour is a card, its writing in nested cards; the rest are quiet lines. */
+/* the log: a mind's days, newest first. The times are one column, right-aligned so their minutes line up; everything
+   it did hangs from the next. Space separates the events. A quiet hour, the mind's own time, is the one plate. */
 .day{margin-top:var(--s7)}
 .day:first-child{margin-top:0}
-.dayh{display:flex;align-items:baseline;gap:var(--s3);margin-bottom:var(--s2);
-  font:600 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
-.dayh .date{font-weight:500;color:var(--ink-4)}
-.ev{position:relative;display:grid;grid-template-columns:64px minmax(0,1fr);column-gap:var(--s4);padding:20px 0}
-.ev.slim{padding:18px 0}
-/* between posts, one quiet line across the writing only, so the times stay one clean column; an hour card is set apart
-   by its own surface, so no line runs beside one */
-.ev + .ev::before{content:"";position:absolute;top:0;left:calc(64px + var(--s4));right:0;height:1px;background:var(--hair)}
-.ev.hour + .ev::before,.ev + .ev.hour::before{display:none}
-.ev .t{color:var(--ink-4);font-size:var(--t-micro);font-variant-numeric:tabular-nums;padding-top:1px}
-.kd{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);font:500 var(--t-label)/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
-.kd .aside{font:400 var(--t-micro)/1.2 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink-4);text-align:right}
+.dayh{display:flex;align-items:baseline;flex-wrap:wrap;gap:2px var(--s3);padding-left:calc(64px + var(--s5));margin-bottom:var(--s2);
+  font:550 var(--t-body)/1.3 var(--sans);letter-spacing:-.003em;color:var(--ink-1)}
+.dayh .date{font:400 var(--t-micro)/1.3 var(--mono);letter-spacing:-.005em;color:var(--ink-4)}
+.ev{position:relative;display:grid;grid-template-columns:64px minmax(0,1fr);column-gap:var(--s5);padding:var(--s4) 0}
+.ev.slim{padding:var(--s4) 0}
+.ev .t{color:var(--ink-4);font:400 var(--t-micro)/1.3 var(--mono);letter-spacing:-.015em;text-align:right;padding-top:1px;white-space:nowrap}
+.kd{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);font:400 var(--t-label)/1.3 var(--mono);color:var(--ink-3)}
+.kd .aside{font:400 var(--t-micro)/1.3 var(--mono);color:var(--ink-4);text-align:right}
 .kd.small{margin-top:0;color:var(--ink-4)}
-.ev .line{margin-top:var(--s2);color:var(--ink-2);font-size:var(--t-small)}
-.ev .sub{margin-top:var(--s2);color:var(--ink-2);font-size:var(--t-small);max-width:68ch}
+.ev .line{margin-top:var(--s2);color:var(--ink-2);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.005em}
+.ev .sub{margin-top:6px;color:var(--ink-2);font-size:var(--t-body);line-height:1.5;max-width:66ch}
 .ev .sub.one{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .t-own{font:450 21px/1.3 var(--own);color:var(--ink-1);letter-spacing:-.01em;font-optical-sizing:auto}
 .ev .t-own{margin-top:var(--s2);max-width:48ch}
-.ev .text{margin-top:var(--s2);max-width:66ch;font:400 var(--t-read)/1.68 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
+.ev .text{margin-top:var(--s2);max-width:66ch;font:400 var(--t-read)/1.62 var(--sans);color:var(--ink-1);white-space:pre-wrap;overflow-wrap:anywhere}
 .ev .t-own + .text{margin-top:var(--s3)}
 .ev .text.clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;white-space:normal}
-.ev .qline{margin-top:var(--s2);color:var(--ink-2);font-size:var(--t-body);max-width:68ch}
-.ev .facts{margin-top:var(--s4);display:flex;flex-wrap:wrap;gap:2px var(--s3);color:var(--ink-4);font-size:var(--t-micro)}
+.ev .qline{margin-top:var(--s2);color:var(--ink-2);font-size:var(--t-body);line-height:1.5;max-width:66ch}
+.ev .facts{margin-top:var(--s4);display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-4);font:400 var(--t-micro)/1.45 var(--mono);letter-spacing:-.005em}
 .ev .facts .flag{color:var(--ink-1)}
 .ev .thumbs{margin-top:var(--s4);display:flex;gap:var(--s2);flex-wrap:wrap}
-/* the hour: an object, because it is one: the mind's own time, holding what it wrote and made */
+/* the hour: an object, because it is one. Its plate reaches into the gutter, so its words keep the column's line */
 .ev.hour{padding:var(--s3) 0}
-.ev.hour .b{padding:var(--s4) var(--s5) var(--s5);border-radius:var(--r);background:var(--card)}
+.ev.hour .b{margin-left:calc(-1 * var(--s4));padding:var(--s4) var(--s4) var(--s5);border-radius:var(--r);background:var(--plate)}
 .ev.hour .t{padding-top:calc(var(--s4) + 1px)}
-.ev .inner{margin-top:var(--s3);padding:14px 18px 16px;border-radius:var(--r-s);background:var(--card-in)}
-.ev .thumbs + .inner{margin-top:var(--s4)}
-.temp{display:inline-flex;align-items:center;gap:6px;font:400 var(--t-micro)/1 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink-2)}
-.temp i{width:6px;height:6px;border-radius:50%;--k:0;background:rgba(236,239,244,calc(.25 + .7 * var(--k)));box-shadow:0 0 calc(1px + 8px * var(--k)) rgba(236,239,244,calc(.4 * var(--k)))}
-.thumb{all:unset;cursor:zoom-in;width:96px;height:96px;border:1px solid transparent;border-radius:var(--r-s);overflow:hidden;background:var(--card-in);transition:border-color var(--quick)}
-.thumb img{width:100%;height:100%;object-fit:cover;display:block;opacity:.9;transition:opacity var(--quick)}
+.ev .inner{margin-top:var(--s5)}
+.ev .thumbs + .inner{margin-top:var(--s5)}
+.temp{display:inline-flex;align-items:center;gap:6px;font:400 var(--t-micro)/1 var(--mono);color:var(--ink-2)}
+.temp i{width:6px;height:6px;border-radius:50%;--k:0;background:rgba(var(--glow-rgb),calc(.25 + .7 * var(--k)));box-shadow:0 0 calc((1px + 8px * var(--k)) * var(--glow)) rgba(var(--glow-rgb),calc(.4 * var(--k) * var(--glow)))}
+.thumb{all:unset;cursor:zoom-in;width:96px;height:96px;border:1px solid transparent;border-radius:var(--r-s);overflow:hidden;background:var(--surface-2);transition:border-color var(--quick)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block;opacity:.92;transition:opacity var(--quick)}
 .thumb:hover img{opacity:1}
 .thumb:focus-visible{border-color:var(--focus)}
 .thumb:active img{opacity:.8}
 .ev details{margin-top:var(--s2)}
-.ev summary{list-style:none;cursor:pointer;display:inline-block;color:var(--ink-3);font-size:var(--t-small);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+/* a disclosure says which way it goes, in the instrument's voice */
+.ev summary{list-style:none;cursor:pointer;display:inline-block;color:var(--ink-3);font:400 var(--t-micro)/1.4 var(--mono);border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .ev summary::-webkit-details-marker{display:none}
+.ev summary::before{content:"+ "}
+.ev details[open] > summary::before{content:"\2212 "}
 .ev summary:hover{color:var(--ink-1)}
 .ev summary:focus-visible{outline:none;color:var(--ink-1);border-bottom-color:var(--focus)}
-.ev details .text.plain{max-width:68ch;margin-top:var(--s3);padding:14px 16px;border-radius:var(--r-s);background:var(--card);font:400 var(--t-small)/1.6 var(--sans);color:var(--ink-2)}
+.ev details .text.plain{max-width:66ch;margin-top:var(--s3);font:400 var(--t-body)/1.6 var(--sans);color:var(--ink-2)}
 .ev .rows{margin-top:var(--s3)}
 .ev .fold{margin-top:var(--s2)}
 
 @media (max-width:520px){
   .kinds{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .ev{grid-template-columns:1fr;row-gap:var(--s2)}
-  .ev + .ev::before{left:0}
-  .ev.hour .t{padding-top:0}
-  .ev.hour .b{padding:var(--s4)}
-  .ev .inner{padding:12px 14px 14px}
-  .belief,.jentry{padding:var(--s4)}
+  .dayh{padding-left:0}
+  /* the time and the kind share one line, so the words get the whole width */
+  .ev{display:block}
+  .ev .t{position:absolute;left:0;top:var(--s4);padding:0;text-align:left;z-index:1}
+  .ev .b > .kd{padding-left:68px}
+  .ev.hour .t{top:calc(var(--s3) + var(--s4));padding:0}
+  .ev.hour .b{margin-inline:calc(-1 * var(--bleed));padding:var(--s4) var(--bleed) var(--s5)}
   .thumb{width:72px;height:72px}
 }
+/* in the mind's drawer the same room is narrow: the times sit over what they mark, and the plates stay on the sheet */
+.sheet .dayh{padding-left:0}
+.sheet .ev{grid-template-columns:64px minmax(0,1fr);column-gap:var(--s3)}
+.sheet .ev .t{text-align:left}
+.sheet .ev.hour .b{margin-left:0}
 @media (prefers-reduced-motion:reduce){.tab,.chip,.rowb,.kindb,.thumb,.thumb img,.fold,.back,.textlink,.search{transition:none}}
 
 /* notes: a conversation per note, and the person's own words in reply */
 .thread .turn .meta{align-items:center}
-.thread .turn .meta .k{color:var(--ink-2)}
+.thread .turn .meta .k{color:var(--ink-1)}
 .thread .turn .text{margin-top:var(--s2)}
-.thread .turn.later{margin-top:var(--s4);padding:var(--s3) var(--s4) var(--s4);border-radius:var(--r-s);background:var(--card-in)}  /* a reply: its own tone, under what it answers */
+.thread .turn.later{margin:var(--s4) calc(-1 * var(--bleed)) 0;padding:var(--s3) var(--bleed) var(--s4);border-radius:var(--r);background:var(--plate);max-width:calc(66ch + 2 * var(--bleed))}  /* a reply: a plate under what it answers */
 .thread .turn.yours .text{color:var(--ink-2)}
 /* what's waiting on you is said by where it sits and what heads it, never by a rule down its side */
-.thread + .thread{margin-top:var(--s2)}
-.asked-h{display:flex;align-items:center;gap:var(--s2);margin:var(--s6) 0 var(--s3)}
+.thread + .thread{margin-top:var(--s7)}
+.asked-h{display:flex;align-items:center;gap:var(--s2);margin:var(--s7) 0 var(--s4);color:var(--ink-1)}
 .asked-h .unread{margin:0}
-.asked-h .n{font:500 var(--t-micro)/1 var(--sans);letter-spacing:0;text-transform:none;color:var(--ink-3);font-variant-numeric:tabular-nums}
-.asked-h.first{margin-top:var(--s5)}
+.asked-h .n{color:var(--ink-3)}
+.asked-h.first{margin-top:var(--s6)}
+.asked-h + .thread{margin-top:0}
 .unread{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--signal);margin-right:6px;vertical-align:1px}
+.meta > .unread{margin-right:-8px;align-self:center}
 .reply-open{all:unset;cursor:pointer;display:inline-block;margin-top:var(--s4);color:var(--ink-3);font-size:var(--t-small);
   border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .reply-open:hover{color:var(--ink-1)}
 .reply-open:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
 .compose{margin-top:var(--s4)}
-.compose.new{margin:0 0 var(--s4)}
-.field{display:block;box-sizing:border-box;width:100%;min-height:76px;resize:vertical;padding:12px 14px;border-radius:var(--r-s);border:1px solid transparent;
-  background:var(--card-in);color:var(--ink-1);font:400 var(--t-read)/1.6 var(--sans);transition:border-color var(--quick),background var(--quick)}
-.field:hover{background:var(--surface-3)}
-.compose.new .field{background:var(--card)}
-.compose.new .field:hover{background:var(--card-hover)}
+.compose.new{margin:0 0 var(--s6)}
+.field{display:block;box-sizing:border-box;width:100%;min-height:76px;resize:vertical;padding:11px 13px;border-radius:var(--r);border:1px solid transparent;
+  background:var(--plate);color:var(--ink-1);font:400 var(--t-read)/1.55 var(--sans);transition:border-color var(--quick),background var(--quick)}
+.field:hover{background:var(--plate-hover)}
 .field::placeholder{color:var(--ink-4)}
-.field:focus{outline:none;border-color:var(--focus);background:var(--card-in)}
-.compose.new .field:focus{background:var(--card)}
+.field:focus{outline:none;border-color:var(--focus);background:var(--plate)}
 .acts{display:flex;align-items:center;justify-content:flex-end;gap:var(--s4);margin-top:var(--s3)}
-.acts .hint{margin-right:auto;color:var(--ink-4);font-size:var(--t-micro)}
+.acts .hint{margin-right:auto;color:var(--ink-3);font-size:var(--t-small);line-height:1.45}
 .acts .hint.flag{color:var(--ink-1)}
 .cancel{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);border-bottom:1px solid transparent;transition:color var(--quick)}
 .cancel:hover{color:var(--ink-1)}
 .cancel:focus-visible{color:var(--ink-1);border-bottom-color:var(--focus)}
-.send{all:unset;cursor:pointer;padding:8px 18px;border-radius:999px;background:var(--ink-1);color:var(--floor);font:500 var(--t-small)/1.2 var(--sans);
+/* the one solid thing: what you do here, in the page's full ink */
+.send{all:unset;flex:none;cursor:pointer;padding:8px 14px;border-radius:var(--r-s);background:var(--ink-1);color:var(--floor);font:500 var(--t-small)/1.2 var(--sans);
   transition:opacity var(--quick),transform var(--quick)}
-.send:hover{opacity:.88}
+.send:hover{opacity:.86}
 .send:active{transform:scale(.97)}
 .send:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.send[disabled]{cursor:default;background:var(--surface-3);color:var(--ink-4);opacity:1;transform:none}
+.send[disabled]{cursor:default;background:var(--surface-2);color:var(--ink-4);opacity:1;transform:none}
 
-@media (prefers-reduced-motion:reduce){.send,.cancel,.reply-open,.field{transition:none}}
+@media (prefers-reduced-motion:reduce){.send,.cancel,.reply-open,.field{transition:none}.send:active{transform:none}}
 
-/* settings: the quiet hours, and where it lives */
-.settings .set + .set{margin-top:var(--s2)}
+/* settings: the quiet hours, and where it lives. Each a heading on the floor; what you set, on one plate */
+.settings .set + .set{margin-top:var(--s7)}
 .set-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--s5)}
-.set-title{font:500 var(--t-read)/1.3 var(--sans);color:var(--ink-1)}
-.set-d{margin-top:6px;max-width:58ch;color:var(--ink-3);font-size:var(--t-small);line-height:1.55}
+.set-title{font:550 var(--t-read)/1.3 var(--sans);letter-spacing:-.005em;color:var(--ink-1)}
+.set-d{margin-top:6px;max-width:62ch;color:var(--ink-3);font-size:var(--t-body);line-height:1.55}
 .set-d.flag{color:var(--ink-1)}
-.set-rows{margin-top:var(--s4);display:grid;gap:2px;border-radius:var(--r-s);overflow:hidden}
-.set-row{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:12px 14px;background:var(--card-in)}
+.set-rows{margin:var(--s4) calc(-1 * var(--bleed)) 0;display:grid;border-radius:var(--r);overflow:hidden;background:var(--plate)}
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:var(--s4);padding:12px var(--bleed)}
 .set-k{display:block;color:var(--ink-1);font-size:var(--t-body)}
-.set-row .set-d{display:block;margin-top:2px}
-.set-time{font:450 var(--t-body)/1 var(--sans);font-variant-numeric:tabular-nums;color:var(--ink-1);background:var(--surface-3);border:1px solid transparent;border-radius:8px;padding:7px 10px;color-scheme:dark}
+.set-row .set-d{display:block;margin-top:2px;font-size:var(--t-small)}
+.set-time{font:400 var(--t-body)/1 var(--mono);color:var(--ink-1);background:var(--control);border:1px solid transparent;border-radius:var(--r-s);padding:7px 9px;color-scheme:var(--scheme)}
 .set-time:focus{outline:none;border-color:var(--focus)}
 .set-time:disabled{color:var(--ink-4);background:transparent}
-.set-key{flex:0 1 260px;min-width:0;box-sizing:border-box;font:450 var(--t-body)/1 var(--sans);color:var(--ink-1);background:var(--surface-3);border:1px solid transparent;border-radius:8px;padding:8px 10px}
+.set-key{flex:0 1 260px;min-width:0;box-sizing:border-box;font:400 var(--t-body)/1 var(--mono);color:var(--ink-1);background:var(--control);border:1px solid transparent;border-radius:var(--r-s);padding:8px 10px}
 .set-key:focus{outline:none;border-color:var(--focus)}
 .set-key:disabled{color:var(--ink-4);background:transparent}
 .set-leaves{margin-top:var(--s4)}
 .set-leaves .set-d{margin-top:4px}
 .switch[disabled]{cursor:default;opacity:.45}
-.switch{all:unset;flex:none;cursor:pointer;position:relative;width:42px;height:24px;border-radius:999px;background:var(--surface-3);transition:background var(--quick)}
-.switch .knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--ink-2);box-shadow:0 1px 2px rgba(0,0,0,.4);transition:transform .28s var(--glide,ease),background var(--quick)}
+.switch{all:unset;flex:none;cursor:pointer;position:relative;width:38px;height:22px;border-radius:999px;background:var(--surface-3);transition:background var(--quick)}
+.switch .knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--ink-2);transition:transform .28s var(--glide,ease),background var(--quick)}
 .switch[aria-checked="true"]{background:var(--signal)}
-.switch[aria-checked="true"] .knob{transform:translateX(18px);background:#fff}
+.switch[aria-checked="true"] .knob{transform:translateX(16px);background:#fff}
 .switch:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+:root[data-theme="light"] .switch .knob{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
 .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-.set-facts{display:grid;grid-template-columns:max-content 1fr;gap:10px var(--s5);margin-top:var(--s4);font-size:var(--t-small);line-height:1.45}
-.set-facts dt{color:var(--ink-4)}
-.set-facts dd{color:var(--ink-2);overflow-wrap:anywhere}
+.set-facts{display:grid;grid-template-columns:max-content 1fr;gap:10px var(--s5);margin-top:var(--s4);font-size:var(--t-body);line-height:1.45}
+.set-facts dt{color:var(--ink-3)}
+.set-facts dd{color:var(--ink-1);font:400 var(--t-small)/1.55 var(--mono);overflow-wrap:anywhere}
 .set-foot{margin-top:var(--s4)}
 @media (prefers-reduced-motion:reduce){.switch,.switch .knob{transition:none}}
 
 /* new since the person was last here: the count in a filter, and a word on the row */
-.chip .n{margin-left:4px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.chip .n{margin-left:5px;color:var(--ink-4);font:400 var(--t-micro)/1 var(--mono)}
 .meta .new{display:inline-flex;align-items:center;color:var(--ink-1)}
 
 /* a memory corrected, or let go: asked plainly, the one red for the one thing that can't be taken back here */
@@ -288,19 +326,20 @@
 .mem-acts .reply-open{margin-top:0}
 .compose.fix{margin-top:var(--s5)}
 .compose.fix .label{display:block;margin-bottom:var(--s2)}
-.compose.fix .field{background:var(--card)}
-.confirm{margin-top:var(--s5);padding:var(--s4) var(--s5);border-radius:var(--r);background:var(--card)}
-.send.danger{background:#e5484d;color:#fff}
+.confirm{margin:var(--s5) calc(-1 * var(--bleed)) 0;padding:var(--s4) var(--bleed);border-radius:var(--r);background:var(--plate)}
+.send.danger{background:var(--danger);color:#fff}
 .send.danger:hover{opacity:.9}
 
 /* Shared uses the notebook's own composer and entries. */
 .shared-tools{display:grid;gap:var(--s3);grid-template-columns:minmax(0,1fr) minmax(140px,200px);align-items:end}
-.shared-author{display:grid;gap:var(--s2);font-size:var(--t-small);color:var(--ink-3)}
+.shared-author{display:grid;gap:6px;font:400 var(--t-micro)/1.3 var(--mono);color:var(--ink-3)}
+.shared-list .rows{margin-inline:0;display:block}
 .shared-list .jentry{min-width:0;overflow-wrap:anywhere}
+.shared-list .jentry + .jentry{margin-top:var(--s6)}
+.shared-list .jentry .text{margin-top:var(--s2)}
 .shared-list .acts{flex-wrap:wrap}
 .shared-list .acts .hint{flex:1 1 180px}
-.shared-list select{color-scheme:dark}
 .shared-list :disabled{cursor:default;opacity:.55}
-.shared-list .field:disabled:hover{background:var(--card)}
+.shared-list .field:disabled:hover{background:var(--plate)}
 .shared-list .reply-open:disabled:hover{color:var(--ink-3)}
 @media(max-width:520px){.shared-tools{grid-template-columns:minmax(0,1fr)}}

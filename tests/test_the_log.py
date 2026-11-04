@@ -500,7 +500,7 @@ def test_mnemos_log_runs_until_ctrl_c(mind, tmp_path):
 def test_the_page_asks_nothing_of_the_network():
     files = page_files()
     for name in ("log/index.html", "log/log.js", "shared/room.js", "shared/room.css", "shared/words.js",
-                 "shared/fonts.css", "mind/index.html", "mind/mind.js", "mind/build.js", "engine/tissue.js"):
+                 "shared/theme.js", "shared/fonts.css", "mind/index.html", "mind/mind.js", "mind/build.js", "engine/tissue.js"):
         assert name in files
     for name, content in files.items():
         if name.endswith((".html", ".js", ".css")):
@@ -508,6 +508,17 @@ def test_the_page_asks_nothing_of_the_network():
             text = content.decode("utf-8").replace("http://www.w3.org/2000/svg", "")
             assert not re.search(r"https?://|//fonts\.|@import", text), name
             assert "../warm/" not in text and "open-mind" not in text, name  # Still warm doesn't ship
+
+
+def test_the_log_has_two_looks_and_the_mind_stays_dark():
+    """The look is set before the page draws, so it never flashes the wrong one, and only where it's asked for: the
+    stylesheet the mind shares has no light of its own to fall into, whatever the system says."""
+    files = page_files()
+    log, css = files["log/index.html"].decode("utf-8"), files["shared/room.css"].decode("utf-8")
+    assert log.index('src="../shared/theme.js"') < log.index('rel="stylesheet"')
+    assert ':root[data-theme="light"]' in css and "prefers-color-scheme" not in css
+    assert "theme.js" not in files["mind/index.html"].decode("utf-8")
+    assert "theme.js" not in files["mind/mind.js"].decode("utf-8")
 
 
 def test_every_font_ships_with_its_license():

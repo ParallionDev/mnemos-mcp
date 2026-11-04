@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The notebook (`mnemos log`) has a new look, and does what it did. True black and
+  white, following the system until you pick one with the switch at the top. What the
+  page measures (times, dates, counts, models, how firmly something is held) is set in
+  mono, on one grid; what the agent wrote is left to be read. Fewer cards: a plate only
+  for what is an object in its own right. The mind's page stays dark.
+
 ## 0.6.2 (2026-11-04)
 
 - Add the notebook's Shared list, with filters, person-signed additions and corrections that never fade, and confirmed archival of any shared memory.

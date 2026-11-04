@@ -103,11 +103,17 @@ function marginHTML() {
   return parts.join('');
 }
 
+// how firmly its beliefs are held, in a line short enough for a phone
+function heldAt(beliefs) {
+  const held = beliefs.map((b) => Math.round(b.confidence * 100)), low = Math.min(...held), high = Math.max(...held);
+  return `${beliefs.length}, held at ${low === high ? `${low}%` : `${low}% to ${high}%`}`;
+}
+
 function glanceHTML() {
   const who = life.identity, Q = life.questions, notes = notesFor(), unread = notes.filter((n) => !n.read).length;
   const line = (attrs, a, b) => `<button class="g" type="button" ${attrs}><span>${a}</span><span>${b}</span></button>`;
   const rows = [line('data-goto="notes"', who.person ? `For ${esc(who.person)}` : 'For you', notes.length ? (unread ? `${unread} not yet read` : plural(notes.length, 'note')) : 'no notes yet')];
-  if (life.beliefs.length) rows.push(line('data-goto="beliefs"', 'Beliefs', `${life.beliefs.length}, held at ${life.beliefs.map((b) => `${Math.round(b.confidence * 100)}%`).join(', ')}`));
+  if (life.beliefs.length) rows.push(line('data-goto="beliefs"', 'Beliefs', heldAt(life.beliefs)));
   if (Q.open) rows.push(line('data-goto="questions"', 'What its memory asks', `${Q.open.toLocaleString('en-US')} open`));
   const made = madeLately()[0];
   if (made) rows.push(line(`data-pic="${esc(made.picture)}" data-cap="${esc(made.path)}"`, 'Made lately', esc(made.path.split('/').pop())));
@@ -148,6 +154,10 @@ function placeMarker(key, glide) {
   marker.style.width = `${r.width}px`;
   marker.style.transform = `translateX(${r.left - base.left}px)`;
   if (glide) btn.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  else {                                       // on arriving at a tab past the edge of a narrow screen, it's still in view
+    const view = $('scroller'), edge = 16;
+    if (r.right > view.getBoundingClientRect().right - edge) view.scrollLeft += r.right - view.getBoundingClientRect().right + edge;
+  }
 }
 let leaving = null, then = null;              // then: what to do once the new content is in place
 const arrived = () => { if (then) { const f = then; then = null; requestAnimationFrame(f); } };
@@ -318,6 +328,13 @@ $('pick').addEventListener('click', () => showMinds($('minds').hidden));
 addEventListener('click', (e) => { if (!$('minds').hidden && !e.target.closest('.pick-wrap')) showMinds(false); });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('minds').hidden) { showMinds(false); $('pick').focus(); } });
 $('to-mind').href = withAgent('../mind/');
+
+/* ---------- the page's look: the system's, or the one picked here ---------- */
+
+const lookNow = () => { for (const b of $('look').querySelectorAll('[data-look]')) b.setAttribute('aria-pressed', String(b.dataset.look === window.mnemosTheme.choice)); };
+$('look').addEventListener('click', (e) => { const b = e.target.closest('[data-look]'); if (b) window.mnemosTheme.set(b.dataset.look); });
+addEventListener('mnemos-theme', () => { lookNow(); if (room && document.querySelector('.specimen canvas')) room.refresh(); });
+lookNow();
 
 await look();
 setInterval(look, EVERY);

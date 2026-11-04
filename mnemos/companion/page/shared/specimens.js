@@ -12,7 +12,11 @@
 
 import { composeFamily, drawFamily, pickFamily } from './herbarium/figure.js';
 
-const INK = [226, 232, 244], PAPER = 'rgb(10,10,13)', SIGNAL = '#6d93c9';
+/* the ink and paper come from the page, so the plate is drawn for the look it's on (room.css: --fig-*) */
+const figureColors = (el) => {
+  const s = getComputedStyle(el), v = (k) => s.getPropertyValue(k).trim();
+  return { ink: v('--fig-ink').split(',').map(Number), paper: v('--fig-paper'), signal: v('--fig-signal') };
+};
 const MOST_SPINES = 64;                       // a memory tied to hundreds is drawn with its strongest; the words say how many
 const MOST_KIN = 7;                           // a life drawn in the room: the memory and the nearest six of its family
 const ENGRAVE = 1100;                         // ms for a specimen to engrave itself, experience first
@@ -83,14 +87,14 @@ export function mountLife(canvas, model, i, { open } = {}) {
   const w = Math.round(box.width), h = life.nodes.length > 1 ? 250 : 230;
   const dpr = Math.min(devicePixelRatio || 1, 2);
   canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = `${h}px`;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d'), colors = figureColors(canvas);
   const fig = composeFamily(model, life, { w, h }, { kMax: life.nodes.length > 1 ? 64 : 58, pad: 14 });
   let hover = null, start = engraved.has(model.cells[i].id) || reduce ? -1e9 : performance.now(), raf = 0;
   engraved.add(model.cells[i].id);
   const draw = (now) => {
     const progress = Math.min(1, (now - start) / ENGRAVE);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
-    drawFamily(ctx, fig, { ink: INK, paper: PAPER, signal: SIGNAL, t: 0, progress, hover: hover ?? i });
+    drawFamily(ctx, fig, { ...colors, t: 0, progress, hover: hover ?? i });
     raf = progress < 1 && canvas.isConnected ? requestAnimationFrame(draw) : 0;
   };
   draw(performance.now());
