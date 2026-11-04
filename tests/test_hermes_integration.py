@@ -713,8 +713,8 @@ def test_prefetch_still_caches_when_nothing_was_written(tmp_path):
         provider.handle_tool_call("mnemos_identity_capture",
                                   {"content": "The studio door code is ZEBRA4471."})
         calls = []
-        recall = provider._runtime.recall
-        provider._runtime.recall = lambda *a, **k: calls.append(1) or recall(*a, **k)
+        recall = provider._runtime._recall_own
+        provider._runtime._recall_own = lambda *a, **k: calls.append(1) or recall(*a, **k)
         first = provider.prefetch("studio door code")
         second = provider.prefetch("studio door code")
     finally:
