@@ -202,3 +202,14 @@ def quiet_hours_on(agent_id: str) -> bool:
         return False
     crontab = scheduler.read_crontab() if backend == "crontab" else ""
     return any(scheduled(agent_id, job, backend, crontab) for job in scheduler.HOUR_JOBS)
+
+
+def upkeep_on(agent_id: str) -> bool:
+    """Whether the upkeep between sessions is scheduled for this agent."""
+    from . import scheduler
+
+    backend = scheduler.detect_backend()
+    if backend == "unsupported":
+        return False
+    crontab = scheduler.read_crontab() if backend == "crontab" else ""
+    return any(scheduled(agent_id, job, backend, crontab) for job in scheduler.JOBS)

@@ -1447,6 +1447,11 @@ def generated_notice(prompt: str) -> bool:
     return opening is not None and opening.group(1) in GENERATED_TAGS
 
 
+# The events a harness sends before it answers a message: Claude Code's and
+# Codex's UserPromptSubmit, and Gemini CLI's BeforeAgent.
+PROMPT_EVENTS = frozenset({"UserPromptSubmit", "BeforeAgent"})
+
+
 def prompt_hook(
     payload: Mapping[str, Any],
     *,
@@ -1464,7 +1469,8 @@ def prompt_hook(
     of time, the store stayed locked, it broke, or its judge failed), in the
     session's file (``SeenFile``). Writes nothing to the store.
 
-    ``payload`` is Claude Code's UserPromptSubmit input. A notice Claude Code
+    ``payload`` is Claude Code's UserPromptSubmit input (Codex sends the same;
+    Gemini CLI sends BeforeAgent with ``prompt`` and ``session_id`` too). A notice Claude Code
     wrote itself (``generated_notice``) gets nothing, and nothing is recorded
     for it: it was never the person's message. ``deadline`` (a
     ``time.monotonic()`` value) bounds the work: past it, nothing is printed.
@@ -1483,7 +1489,7 @@ def prompt_hook(
     mark_hook_in_use()
 
     event = payload.get("hook_event_name")
-    if event is not None and event != "UserPromptSubmit":
+    if event is not None and event not in PROMPT_EVENTS:
         return ""
     text = payload.get("prompt")
     if not isinstance(text, str) or generated_notice(text):

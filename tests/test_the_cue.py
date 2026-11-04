@@ -1042,11 +1042,61 @@ def test_printing_without_write_shows_the_prompt_hook_unless_left_out(tmp_path, 
     assert not (tmp_path / "s.json").exists()
 
 
-def test_the_prompt_hook_is_for_claude_code_only(tmp_path, capsys):
+def test_codex_gets_the_cue_too(tmp_path):
+    """Codex runs a UserPromptSubmit hook and adds its output as developer
+    context, so it gets the cue (it was Claude Code's alone before), beside
+    the wake it already had. --no-prompt takes it out again."""
     settings = tmp_path / "hooks.json"
-    code = main(["hooks", "install", "codex", "--prompt", "--settings", str(settings), "--write"])
-    assert code == 1 and not settings.exists()
-    assert "Claude Code" in capsys.readouterr().err
+    base = ["hooks", "install", "codex", "--settings", str(settings), "--write", "--no-upkeep"]
+    assert main(base) == 0
+    hooks = json.loads(settings.read_text())["hooks"]
+    [handler] = hooks["UserPromptSubmit"][0]["hooks"]
+    assert handler["command"].endswith("hook prompt || true") or " hook prompt " in handler["command"]
+    assert handler["timeout"] == 2  # seconds, as Claude Code's and Codex's are
+    assert "SessionStart" in hooks
 
-    assert main(["hooks", "install", "codex", "--settings", str(settings), "--write"]) == 0
-    assert "UserPromptSubmit" not in json.loads(settings.read_text())["hooks"]
+    assert main([*base, "--no-prompt"]) == 0
+    hooks = json.loads(settings.read_text())["hooks"]
+    assert not hooks.get("UserPromptSubmit") and "SessionStart" in hooks
+
+
+def test_gemini_gets_the_wake_and_the_cue_in_its_own_shape(tmp_path, monkeypatch):
+    """Gemini CLI keeps hooks in settings.json, counts their timeouts in
+    milliseconds and names the per-message event BeforeAgent. The cue answers
+    it in that event's name."""
+    monkeypatch.setenv("GEMINI_CLI_HOME", str(tmp_path))
+    settings = tmp_path / ".gemini" / "settings.json"
+    assert main(["hooks", "install", "gemini", "--write", "--no-upkeep"]) == 0
+    hooks = json.loads(settings.read_text())["hooks"]
+    [wake] = hooks["SessionStart"][0]["hooks"]
+    [cue] = hooks["BeforeAgent"][0]["hooks"]
+    assert wake["timeout"] == 15_000 and cue["timeout"] == 2_000
+    assert " hook session-start" in wake["command"] and " hook prompt" in cue["command"]
+    assert cue["command"].endswith("|| true")
+
+    # Taking the cue out leaves anyone else's BeforeAgent hook alone.
+    other = {"hooks": [{"type": "command", "command": "echo mine"}]}
+    data = json.loads(settings.read_text())
+    data["hooks"]["BeforeAgent"].append(other)
+    settings.write_text(json.dumps(data))
+    assert main(["hooks", "install", "gemini", "--no-prompt", "--write", "--no-upkeep"]) == 0
+    assert json.loads(settings.read_text())["hooks"]["BeforeAgent"] == [other]
+
+
+def test_the_cue_answers_gemini_in_beforeagent(tmp_path):
+    """Gemini CLI sends BeforeAgent with the same prompt and session fields.
+    Before this the cue ignored every event but UserPromptSubmit."""
+    from mnemos import cue
+
+    assert cue.PROMPT_EVENTS == {"UserPromptSubmit", "BeforeAgent"}
+    db = tmp_path / "x.db"  # no store: the cue reads nothing and creates nothing
+    for event in ("BeforeAgent", "UserPromptSubmit"):
+        assert cue.prompt_hook(
+            {"hook_event_name": event, "prompt": "what should I feed the tortoise this week"},
+            db_path=str(db), agent_id="a", person_id="p", project_scope="g",
+        ) == ""
+    assert cue.prompt_hook(
+        {"hook_event_name": "PreToolUse", "prompt": "what should I feed the tortoise this week"},
+        db_path=str(db), agent_id="a", person_id="p", project_scope="g",
+    ) == ""
+    assert not db.exists()

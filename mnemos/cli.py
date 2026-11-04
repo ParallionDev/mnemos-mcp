@@ -14,7 +14,7 @@ Commands:
     mnemos interface             The commands above for an app, one JSON line each
     mnemos consolidate [--deep]  Run a consolidation cycle
     mnemos export [--workspace]  Export workspace files (MEMORY.md, etc.)
-    mnemos setup-openclaw        Register cron jobs for OpenClaw
+    mnemos connect               Set Mnemos up for an agent (Claude Code, Codex, Grok, Gemini, Hermes, OpenClaw...)
     mnemos bootstrap             Bootstrap a complete agent stack
     mnemos identity diff         Diff graph-derived identity against SOUL.md
     mnemos identity accept       Accept a divergence, open a new epoch
@@ -264,9 +264,10 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     # ── setup-openclaw ──
-    p_setup = sub.add_parser("setup-openclaw", help="Register OpenClaw cron jobs")
-    p_setup.add_argument("--agent", default="main", help="OpenClaw agent ID")
-    p_setup.add_argument("--dry-run", action="store_true", help="Show what would be registered")
+    p_setup = sub.add_parser("setup-openclaw", help="Retired: use mnemos connect openclaw")
+    # Accepted so old instructions reach the reason rather than a usage error.
+    p_setup.add_argument("--agent", default="main", help=argparse.SUPPRESS)
+    p_setup.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
 
     # ── index (retired) ──
     p_index = sub.add_parser("index", help="Retired: the transcript indexer (says why)")
@@ -695,6 +696,44 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    # ── connect ──
+    p_connect = sub.add_parser(
+        "connect",
+        help="Set Mnemos up for an agent (Claude Code, Codex, Grok, Gemini, Hermes, OpenClaw, Pi, Muse)",
+        description=(
+            "With no agent: list the ones on this machine and, for each, what it has of "
+            "Mnemos and what is missing. With one: preview what connecting does, and with "
+            "--write do it: the tools (MCP server), the wake (memory before the first "
+            "message), the cue (memories that bear on each message) and upkeep between "
+            "sessions, wherever that agent can take them. Each agent gets its own memory "
+            "(--agent-id shares one); an agent that already has Mnemos keeps its memory "
+            "where it is."
+        ),
+    )
+    p_connect.add_argument(
+        "harness", nargs="?", default=None,
+        help="claude-code, codex, grok, gemini, hermes, openclaw, pi or muse",
+    )
+    _scope_options(p_connect)
+    p_connect.add_argument("--name", default="mnemos", help="MCP server name")
+    p_connect.add_argument("--write", action="store_true", help="Do it instead of showing what it would do")
+    p_connect.add_argument(
+        "--no-prompt", action="store_true",
+        help="Leave out the cue, the hook that brings the memories that bear on each message",
+    )
+    p_connect.add_argument(
+        "--no-upkeep", action="store_true",
+        help="Don't schedule upkeep between sessions",
+    )
+    p_connect.add_argument(
+        "--agent-safe", action="store_true",
+        help=(
+            "Hermes: add only the tools and leave memory.provider alone, as when an agent runs "
+            "this from inside Hermes (switching its memory provider mid-session cuts the memory "
+            "it is using, and needs a restart)"
+        ),
+    )
+
     # ── hook ──
     p_hook = sub.add_parser(
         "hook", help="Emit agent-harness hook payloads (used by installed hooks)"
@@ -752,15 +791,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Print or write the hooks that bring memory into each session",
         description=(
             "Install the SessionStart hook, which wakes the agent with its memory, "
-            "and for Claude Code the cue (a UserPromptSubmit hook) that brings the "
-            "memories that may bear on each message. With --write it also schedules "
+            "and the cue (a UserPromptSubmit hook, or BeforeAgent in Gemini CLI) that "
+            "brings the memories that may bear on each message. With --write it also schedules "
             "upkeep between sessions, and at a terminal asks once about quiet hours "
             "(Claude Code)."
         ),
     )
     p_hooks_install.add_argument(
-        "client", nargs="?", default="claude-code", choices=("claude-code", "codex"),
-        help="Agent harness to install the hook for",
+        "client", nargs="?", default="claude-code", choices=("claude-code", "codex", "gemini"),
+        help="Agent harness to install the hook for (mnemos connect does this and more)",
     )
     _scope_options(p_hooks_install)
     p_hooks_install.add_argument("--timeout", type=int, default=15, help="Hook timeout seconds")
@@ -777,9 +816,8 @@ def main(argv: list[str] | None = None) -> int:
         "--no-prompt",
         action="store_true",
         help=(
-            "Leave out the cue, the UserPromptSubmit hook that brings the memories "
-            "that may bear on each message (Claude Code; on by default). Removes "
-            "one an earlier install added."
+            "Leave out the cue, the hook that brings the memories that may bear "
+            "on each message (on by default). Removes one an earlier install added."
         ),
     )
     # The cue is on by default now; --prompt stays accepted for instructions
@@ -924,6 +962,7 @@ def main(argv: list[str] | None = None) -> int:
         "mcp": _cmd_mcp,
         "hook": _cmd_hook,
         "hooks": _cmd_hooks,
+        "connect": _cmd_connect,
         "daemon": _cmd_daemon,
         "uninstall": _cmd_uninstall,
         "backup": _cmd_backup,
@@ -1126,6 +1165,9 @@ def _hook_prompt(args: argparse.Namespace) -> int:
         if not isinstance(payload, dict):
             return 0
         scope = _cli_scope(args)
+        # The answer names the event it answers, as the harness named it.
+        event = payload.get("hook_event_name")
+        event = event if event in cue.PROMPT_EVENTS else "UserPromptSubmit"
         block = cue.prompt_hook(
             payload,
             db_path=scope.db_path,
@@ -1137,7 +1179,7 @@ def _hook_prompt(args: argparse.Namespace) -> int:
         if block:
             out = json.dumps({
                 "hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
+                    "hookEventName": event,
                     "additionalContext": block,
                 }
             }, ensure_ascii=False)
@@ -1736,30 +1778,29 @@ PROMPT_HOOK_TIMEOUT = 2
 
 def _cmd_hooks(args: argparse.Namespace) -> int:
     """Install the SessionStart hook that injects memory before turn one, and
-    for Claude Code the cue: the UserPromptSubmit hook that brings the
-    memories that may bear on each message. The cue is on by default;
-    ``--no-prompt`` leaves it out and takes out one an earlier install added
-    (``--prompt`` is still taken, and changes nothing).
+    the cue: the hook that brings the memories that may bear on each message
+    (UserPromptSubmit in Claude Code and Codex, BeforeAgent in Gemini CLI). The
+    cue is on by default; ``--no-prompt`` leaves it out and takes out one an
+    earlier install added (``--prompt`` is still taken, and changes nothing).
 
-    This is the last step of setup for Claude Code and Codex, so with
-    ``--write`` it also schedules upkeep between sessions (``--no-upkeep``
-    leaves it out) and, for Claude Code, asks once about the quiet hours
-    (``_background_setup``)."""
+    This is the last step of setup for these agents, so with ``--write`` it
+    also schedules upkeep between sessions (``--no-upkeep`` leaves it out) and,
+    for Claude Code, asks once about the quiet hours (``_background_setup``).
+    ``mnemos connect`` does this and the rest of an agent's setup."""
     if getattr(args, "hooks_command", None) != "install":
         print(
-            "Usage: mnemos hooks install [claude-code|codex] [--no-prompt] "
+            "Usage: mnemos hooks install [claude-code|codex|gemini] [--no-prompt] "
             "[--no-upkeep] [--write]",
             file=sys.stderr,
         )
         return 1
-    if getattr(args, "prompt", False) and args.client != "claude-code":
-        print(
-            "The prompt hook is for Claude Code: mnemos hooks install claude-code",
-            file=sys.stderr,
-        )
-        return 1
+    from .setup import connect as _connect
+    from .setup import harnesses as _harnesses
+
+    harness = _harnesses.get(args.client)
     claude_code = args.client == "claude-code"
-    prompt = claude_code and not getattr(args, "no_prompt", False)
+    gemini = args.client == "gemini"
+    prompt = bool(harness and harness.cue_event) and not getattr(args, "no_prompt", False)
 
     scope_flags: list[str] = []
     for flag, value in (
@@ -1775,11 +1816,15 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
             scope_flags.extend([flag, value])
     command_parts = [_mnemos_command(), "hook", "session-start", *scope_flags]
 
+    # Gemini CLI counts hook timeouts in milliseconds; the others in seconds.
+    unit = 1000 if gemini else 1
     handler = {
             "type": "command",
             "command": shlex.join(command_parts),
-            "timeout": args.timeout,
+            "timeout": args.timeout * unit,
         }
+    if gemini:
+        handler["name"] = "mnemos-wake"
     if args.client == "codex":
         handler.update({
             "statusMessage": "Loading Mnemos continuity",
@@ -1795,25 +1840,24 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
         ),
         "hooks": [handler],
     }
-    installing = {"SessionStart": entry}
+    wake_event = harness.wake_event if harness else "SessionStart"
+    cue_event = harness.cue_event if harness else "UserPromptSubmit"
+    installing = {wake_event: entry}
     if prompt:
-        installing["UserPromptSubmit"] = {
-            "hooks": [{
-                "type": "command",
-                # A prompt hook that exits 2 blocks the prompt and erases it.
-                # `hook prompt` itself always exits 0; the guard covers a Mnemos
-                # that cannot run it at all (rolled back to a version without
-                # it, or moved), which argparse would answer with a 2.
-                "command": shlex.join([_mnemos_command(), "hook", "prompt", *scope_flags]) + " || true",
-                "timeout": PROMPT_HOOK_TIMEOUT,
-            }],
+        cue_handler = {
+            "type": "command",
+            # A prompt hook that exits 2 blocks the prompt and erases it.
+            # `hook prompt` itself always exits 0; the guard covers a Mnemos
+            # that cannot run it at all (rolled back to a version without
+            # it, or moved), which argparse would answer with a 2.
+            "command": shlex.join([_mnemos_command(), "hook", "prompt", *scope_flags]) + " || true",
+            "timeout": PROMPT_HOOK_TIMEOUT * unit,
         }
+        if gemini:
+            cue_handler["name"] = "mnemos-cue"
+        installing[cue_event] = {"hooks": [cue_handler]}
 
-    default_path = (
-        _codex_hooks_path()
-        if args.client == "codex"
-        else _claude_code_settings_path()
-    )
+    default_path = _connect.hooks_path(harness) if harness else _claude_code_settings_path()
     path = Path(args.settings).expanduser() if args.settings else default_path
 
     if not args.write:
@@ -1863,7 +1907,7 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
 
     actions: dict[str, str] = {}
     for event, item in installing.items():
-        subcommand = "session-start" if event == "SessionStart" else "prompt"
+        subcommand = "session-start" if event == wake_event else "prompt"
         listed = hooks[event]
         existing = [e for e in listed if _is_mnemos_hook(e, subcommand)]
         for stale in existing:
@@ -1873,8 +1917,8 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
     # The cue left out: the one an earlier install added goes too, and only
     # that one. Anyone else's prompt hooks stay.
     dropped = False
-    if claude_code and not prompt and isinstance(hooks.get("UserPromptSubmit"), list):
-        listed = hooks["UserPromptSubmit"]
+    if cue_event and not prompt and isinstance(hooks.get(cue_event), list):
+        listed = hooks[cue_event]
         cues = [e for e in listed if _is_mnemos_hook(e, "prompt")]
         for cue_hook in cues:
             listed.remove(cue_hook)
@@ -1888,7 +1932,13 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
         print(f"{actions[event]} the Mnemos {event} hook in {path}")
         print(f"  Command: {item['hooks'][0]['command']}")
     if dropped:
-        print(f"Removed the Mnemos UserPromptSubmit hook (the cue) from {path}")
+        print(f"Removed the Mnemos {cue_event} hook (the cue) from {path}")
+    cue_words = (
+        "Each message then brings up to three memories that may bear on "
+        "it, found by meaning once the session's Mnemos server has its "
+        "model loaded, by words until then."
+    )
+    off = f"  Turn it off: mnemos hooks install {args.client} --no-prompt --write"
     if args.client == "codex":
         print(
             "In Codex, open /hooks and complete the normal review before "
@@ -1898,18 +1948,26 @@ def _cmd_hooks(args: argparse.Namespace) -> int:
             "After review, continuity is injected at startup, resume, clear, "
             "and after compaction."
         )
+        if prompt:
+            print(cue_words)
+            print(off)
+    elif gemini:
+        print(
+            "Start a new session: memory is added to the first prompt. Gemini CLI has no "
+            "hook after compaction, so a long session that compacts calls mnemos_context "
+            "itself (the server's instructions say so)."
+        )
+        if prompt:
+            print(cue_words)
+            print(off)
     else:
         print(
             "Start a new session — memory is injected before the first turn "
             "and after compaction."
         )
         if prompt:
-            print(
-                "Each message then brings up to three memories that may bear on "
-                "it, found by meaning once the session's Mnemos server has its "
-                "model loaded, by words until then."
-            )
-            print("  Turn it off: mnemos hooks install claude-code --no-prompt --write")
+            print(cue_words)
+            print(off)
     if getattr(args, "no_upkeep", False) and not claude_code:
         return 0
     return _background_setup(args, ask_hours=claude_code)
@@ -2550,26 +2608,28 @@ def _cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
+# What `mnemos setup-openclaw` says now, in place of registering cron jobs.
+SETUP_OPENCLAW_RETIRED = """\
+mnemos setup-openclaw is retired. Use: mnemos connect openclaw
+Its three cron jobs asked the agent to call mnemos_consolidate and mnemos_export,
+tools that only the advanced (operator) server has: a default install does not,
+so the jobs ran and did nothing. Upkeep between sessions is scheduled by the
+system now (mnemos daemon install), and connect does that and the rest: the
+tools, the wake, and the scheduled upkeep. Jobs an earlier run put in
+~/.openclaw/cron/jobs.json are still there; remove the mnemos-* ones with
+openclaw cron."""
+
+
 def _cmd_setup_openclaw(args: argparse.Namespace) -> int:
-    """Register OpenClaw cron jobs."""
-    from .openclaw_cron import generate_cron_jobs, install_cron_jobs
+    """The OpenClaw cron jobs, retired: says so and why, and registers nothing."""
+    print(SETUP_OPENCLAW_RETIRED, file=sys.stderr)
+    return 1
 
-    jobs = generate_cron_jobs(agent_id=args.agent)
 
-    if args.dry_run:
-        print("Would register the following cron jobs:")
-        for job in jobs:
-            print(f"  {job['name']}: {job['schedule']['expr']} → {job['payload']['message'][:60]}...")
-        return 0
+def _cmd_connect(args: argparse.Namespace) -> int:
+    from . import connect_cmd
 
-    result = install_cron_jobs(jobs)
-    if result["success"]:
-        print(f"Registered {result['jobs_added']} cron jobs for agent '{args.agent}'")
-    else:
-        print(f"Failed: {result['error']}", file=sys.stderr)
-        return 1
-
-    return 0
+    return connect_cmd.run(args)
 
 
 # What `mnemos index` says now, in place of indexing.
@@ -4424,7 +4484,10 @@ def _without_mnemos_hooks(path: Path, *, write: bool) -> tuple[int, str]:
     if not isinstance(hooks, dict):
         return 0, ""
     found = 0
-    for event, subcommand in (("SessionStart", "session-start"), ("UserPromptSubmit", "prompt")):
+    for event, subcommand in (
+        ("SessionStart", "session-start"), ("UserPromptSubmit", "prompt"),
+        ("BeforeAgent", "prompt"),
+    ):
         listed = hooks.get(event)
         if not isinstance(listed, list):
             continue
@@ -4489,7 +4552,14 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
     done: list[str] = []
     problems: list[str] = []
 
-    for label, path in (("Claude Code", _claude_code_settings_path()), ("Codex", _codex_hooks_path())):
+    from .setup import connect as _connect
+    from .setup import harnesses as _harnesses
+
+    for label, path in (
+        ("Claude Code", _claude_code_settings_path()),
+        ("Codex", _codex_hooks_path()),
+        ("Gemini CLI", _connect.gemini_settings_path()),
+    ):
         count, problem = _without_mnemos_hooks(path, write=write)
         if problem:
             problems.append(problem)
@@ -4506,15 +4576,38 @@ def _cmd_uninstall(args: argparse.Namespace) -> int:
             f"{_claude_desktop_config_path()}"
         )
 
+    # The agents connect sets up. Only a server of Mnemos's own is removed: a
+    # server another tool put under the same name stays, and so does the one
+    # Grok borrows from Claude Code.
+    own = {
+        key: any(not s.inherited for s in _connect.servers(_harnesses.get(key)))
+        for key in ("gemini", "grok", "openclaw")
+    }
     for label, tool, parts in (
         ("Claude Code", "claude", ["mcp", "remove", "--scope", "user", args.name]),
         ("Codex", "codex", ["mcp", "remove", args.name]),
+        *(
+            (label, tool, parts)
+            for key, label, tool, parts in (
+                ("gemini", "Gemini CLI", "gemini", ["mcp", "remove", "--scope", "user", args.name]),
+                ("grok", "Grok", "grok", ["mcp", "remove", args.name]),
+                ("openclaw", "OpenClaw", "openclaw", ["mcp", "unset", args.name]),
+            )
+            if own[key]
+        ),
     ):
         said = _remove_registered_server(tool, parts, write=write)
         if said.startswith(("ran", "would run")):
             done.append(f"{label}: {said}")
         elif said:
             problems.append(f"{label}: {said}")
+
+    hook_dir = _connect.openclaw_hook_dir()
+    if hook_dir.is_dir() and (hook_dir / "handler.js").is_file():
+        if write:
+            _remove_registered_server("openclaw", ["hooks", "disable", "mnemos-wake"], write=True)
+            shutil.rmtree(hook_dir, ignore_errors=True)
+        done.append(f"OpenClaw: the mnemos-wake hook {'removed from' if write else 'in'} {hook_dir}")
 
     if done:
         print("Removed:" if write else "Would remove:")

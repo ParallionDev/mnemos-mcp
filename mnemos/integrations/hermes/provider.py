@@ -236,6 +236,7 @@ class MnemosMemoryProviderCore:
             person_id=self._scope.person_id,
             project_scope=self._scope.project_scope,
             use_dedicated_model=config.deep_maintenance,
+            harness="hermes",
         )
         Path(self._scope.db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         self._runtime.context(max_results=1)

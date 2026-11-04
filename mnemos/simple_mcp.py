@@ -189,6 +189,19 @@ def _get_runtime() -> MnemosRuntime:
         return _runtime
 
 
+def _client_name(server: FastMCP) -> str:
+    """The name the MCP client gave in its handshake (``clientInfo.name``), or
+    "". Claude Code says claude-code, Gemini CLI gemini-cli-mcp-client, Grok
+    grok-shell-<server>, OpenClaw openclaw-bundle-mcp; Hermes says "mcp" (the
+    SDK's default), which says nothing. Only read inside a tool call; any
+    failure is an empty name."""
+    try:
+        info = server.get_context().session.client_params.clientInfo
+        return str(info.name or "").strip()
+    except Exception:
+        return ""
+
+
 def start_warm_up() -> threading.Thread | None:
     """Open this server's runtime in the background as it starts
     (``MnemosRuntime.warm``), so a session's first capture doesn't wait for
@@ -275,6 +288,7 @@ def register_simple_tools(server: FastMCP) -> None:
         """
 
         runtime = _get_runtime()
+        runtime.client_name = _client_name(server)
         packet = _output(runtime.context(
             query=_text("query", query, MAX_QUERY_CHARS),
             max_results=_count("max_results", max_results, minimum=1, maximum=MAX_RESULTS),

@@ -1148,7 +1148,14 @@ class MnemosRuntime:
         use_dedicated_model: bool = True,
         read_only: bool = False,
         marks_lived: bool = True,
+        harness: str = "",
     ) -> None:
+        # Which agent this runtime serves, when its host says so (the Hermes
+        # provider does), and the name an MCP client gave in its handshake
+        # (``mnemos_context`` sets it). The first session's setup part reads
+        # them (``_setup_part``).
+        self.harness = harness
+        self.client_name = ""
         self.scope = resolve_scope(
             db_path=db_path,
             agent_id=agent_id,
@@ -2911,6 +2918,98 @@ class MnemosRuntime:
         return "\n".join(lines)
 
     def _setup_part(self) -> tuple[list[str], str | None]:
+        """What the first session must settle so this memory carries, and
+        what is already set, for the onboarding ritual. Which agent is reading
+        decides what that is: Claude Code (``_claude_code_setup_part``, as it
+        always was), another agent Mnemos knows (``_other_setup_part``), or one
+        it cannot tell."""
+        try:
+            from .setup import harnesses
+
+            harness = harnesses.identify(declared=self.harness, client_name=self.client_name)
+        except Exception:
+            harness = None
+        if harness is not None and harness.key != "claude-code":
+            return self._other_setup_part(harness)
+        if harness is None and not os.environ.get("CLAUDECODE"):
+            return self._other_setup_part(None)
+        return self._claude_code_setup_part()
+
+    def _other_setup_part(self, harness) -> tuple[list[str], str | None]:
+        """The setup part for an agent that is not Claude Code: what its
+        setup has and has not given this memory, read from the machine, with
+        the one command that finishes it. An agent Mnemos cannot identify is
+        told so, and pointed at ``mnemos connect`` (only when an MCP client
+        really named itself: a runtime with no client says nothing). Quiet
+        hours are never offered: they run Claude Code, and nothing is
+        scheduled for another agent. Never a reason to fail the packet."""
+        try:
+            from .setup import state
+
+            agent_id, db_path = self.scope.agent_id, self.db_path
+            if harness is None:
+                name = (self.client_name or "").strip()
+                if not name or name.lower().startswith(("claude", "cursor")):
+                    return [], None
+                command = state.command_line(agent_id, db_path, "connect")
+                return [], (
+                    f"- I can't tell which agent you are running in (your client calls itself "
+                    f"{name!r}), so I can't say what is set up for you. Run this, which only "
+                    f"reads, and tell them what it finds in a line:\n  {command}\n"
+                    "- Quiet hours are not offered here: they run Claude Code, and nothing "
+                    "is scheduled for you."
+                )
+            from .setup import connect
+
+            status = connect.status(harness, agent_id, str(db_path))
+            missing = []
+            if status.wake == "missing":
+                missing.append("waking with this memory")
+            if status.cue == "missing":
+                missing.append("the memories that bear on each message")
+            if not status.upkeep:
+                missing.append("upkeep between sessions")
+            settle: list[str] = []
+            if missing:
+                command = state.command_line(
+                    agent_id, db_path, "connect", harness.key, "--write",
+                )
+                settle.append(
+                    f"- Not set up yet for {harness.label}: {', and '.join(missing)}. Say you'd "
+                    "like to set that up (it all happens on this machine, from the next "
+                    "session on). With their yes, run it yourself:\n"
+                    f"  {command}"
+                )
+            lines: list[str] = []
+            set_up = []
+            if status.wake == "set":
+                set_up.append("you'll wake with this memory at the start of every session")
+            if status.cue == "set":
+                set_up.append("what may bear on each message comes to you")
+            if set_up:
+                lines.append(
+                    f"- Already set: {', and '.join(set_up)}. Tell them so in a line."
+                )
+            if status.wake == "cannot":
+                lines.append(
+                    f"- {harness.label} can't load your memory before the first message: "
+                    f"{harness.wake.how}. At the start of every session call mnemos_context "
+                    "yourself, and don't tell them it failed: it is how you wake here."
+                )
+            if harness.after_compaction.works is False:
+                lines.append(
+                    "- After your context is compacted nothing wakes you again here: call "
+                    "mnemos_context yourself."
+                )
+            lines.append(
+                f"- Quiet hours are not offered here: they run Claude Code, and nothing is "
+                f"scheduled for {harness.label} yet."
+            )
+            return settle, "\n".join(lines)
+        except Exception:
+            return [], None
+
+    def _claude_code_setup_part(self) -> tuple[list[str], str | None]:
         """What the first session must settle so this memory carries, and
         what is already set, for the onboarding ritual: in Claude Code,
         whether it wakes this memory when a session starts, and the quiet
