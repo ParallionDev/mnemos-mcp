@@ -240,6 +240,48 @@ mnemos mcp install generic
 
 These print MCP JSON snippets you can paste into the client config.
 
+### What Each Agent Gets
+
+`mnemos connect <agent> --write` sets up everything an agent can take. What
+that is differs, because the agents' hooks differ. "Saw it" means we ran it on
+a real install and watched; "docs say" means the agent's own documentation says
+so and we have not run it; "not tested" means it is set up and loads, but no
+model turn was run to see whether the text reaches it.
+
+| Agent | Tools (MCP) | Wakes with its memory | After compaction | Memories for each message | Own memory |
+|---|---|---|---|---|---|
+| Claude Code | docs say | docs say | docs say | docs say | yes |
+| Codex | saw it | docs say | docs say | docs say | yes |
+| Grok | saw it | no (saw it: its hook runs, nothing it prints reaches the model) | no (docs say) | no (saw it) | yes |
+| Gemini CLI | saw it | not tested | no (docs say) | not tested | yes |
+| Hermes | saw it | not tested (Provider Mode) | not tested | not tested | yes |
+| OpenClaw | saw it | not tested (a bootstrap hook) | not tested | no (needs a plugin) | yes |
+| Pi | docs say | needs an extension | needs an extension | needs an extension | not installed here |
+| Muse Code | docs say | hook format not documented | not documented | not documented | not installed here |
+
+Where an agent cannot be woken by a hook, it wakes itself: the server's
+instructions have it call `mnemos_context` first, and the first session says
+so in so many words. Upkeep between sessions (memories fading, links forming)
+is scheduled for every agent `connect` sets up. The quiet hours (an hour of its
+own, the day's work, the night's dream) run Claude Code, so they are for
+Claude Code agents only, for now.
+
+Two things worth knowing:
+
+- **Grok borrows from Claude Code.** On a machine with both, Grok reads the
+  MCP servers in `~/.claude.json` and the hooks in `~/.claude/settings.json`,
+  so it can open Claude Code's memory. `mnemos connect grok` says so, gives
+  Grok a server of its own under the same name (which takes its place in
+  Grok), and never touches Claude Code's files. To stop Grok running Claude
+  Code's hooks too, set `GROK_CLAUDE_HOOKS_ENABLED=0`.
+- **Hermes has one memory slot.** If another provider holds `memory.provider`,
+  `connect hermes` leaves it and adds only the tools (no wake or cue); to run
+  it from inside Hermes without switching providers, use `--agent-safe`.
+
+Pi and Muse Code were not installed on the machine this was written on, and
+`connect` writes nothing for them: it prints what their documentation says,
+marked untested.
+
 ### Automatic Continuity
 
 Connecting the MCP gives an agent memory tools. It does not, by itself,
@@ -799,6 +841,8 @@ mnemos serve --mode advanced          # Simple mode plus admin tools (less teste
 mnemos mcp install generic            # Print MCP config
 mnemos mcp install claude-code --write  # Register with Claude Code
 mnemos mcp install claude --write     # Merge Claude Desktop config
+mnemos connect                        # What each agent on this machine has of Mnemos, and what is missing
+mnemos connect grok --write           # Set Mnemos up for an agent: tools, wake, cue, upkeep
 mnemos hooks install claude-code      # Preview Claude Code's hooks: the wake and the cue
 mnemos hooks install claude-code --write  # Install them, schedule upkeep, ask about quiet hours
 mnemos hooks install claude-code --no-prompt --write  # The same without the cue
@@ -835,7 +879,7 @@ Workspace, identity, and automation commands:
 ```bash
 mnemos export --workspace ./memory-export
 mnemos bootstrap --agent-name Nova --workspace ~/nova
-mnemos setup-openclaw --agent main --dry-run
+mnemos connect openclaw
 mnemos identity diff --soul ./SOUL.md
 mnemos identity accept --divergence 1 --note "Accepted updated self-model"
 ```

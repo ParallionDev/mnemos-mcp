@@ -94,17 +94,25 @@ Then connect your agent:
 
 | Agent | Setup |
 |---|---|
-| Claude Code | `mnemos mcp install claude-code --write`<br>`mnemos hooks install claude-code --write` |
-| Codex | `mnemos mcp install codex`, and run the line it prints<br>`mnemos hooks install codex --write` |
+| Claude Code | `mnemos connect claude-code --write` |
+| Codex | `mnemos connect codex --write` |
+| Grok | `mnemos connect grok --write` |
+| Gemini CLI | `mnemos connect gemini --write` |
+| Hermes | `mnemos connect hermes --write` |
+| OpenClaw | `mnemos connect openclaw --write` |
+| Pi, Muse Code | `mnemos connect pi` or `mnemos connect muse`: prints the setup, untested |
 | Claude Desktop | `mnemos mcp install claude --write` |
 | Cursor | `mnemos mcp install cursor`, and add what it prints |
-| Hermes | `mnemos hermes quickstart --agent-safe` |
 | Any other MCP client | `mnemos mcp install generic`, and add what it prints |
 
+`mnemos connect` on its own lists the agents on this machine and, for each,
+what it has of Mnemos and what is missing. Each agent gets a memory of its own
+(`--agent-id` shares one), and what each can take differs: the table in
+[the guide](docs/guide.md#what-each-agent-gets) says what, and how we know.
+
 Start your agent: it wakes with its memory, and the memory tools are there.
-With nothing kept yet, its first session gets to know you. In Claude
-Code it first checks that the memory will carry, and with your yes sets up
-whatever isn't.
+With nothing kept yet, its first session gets to know you. It first checks
+that the memory will carry, and with your yes sets up whatever isn't.
 
 Mnemos needs Python 3.10 or newer. Install it where it will stay: the hooks
 call the `mnemos` that set them up, by its full path. The `embeddings` extra

@@ -2,11 +2,11 @@
 
 > **Legacy.** This guide was written for an earlier Mnemos: the advanced
 > server and its workspace files. It isn't maintained for 0.4.x, and
-> `mnemos setup-openclaw`'s jobs ask the agent for advanced-mode tools
-> (`mnemos_consolidate`) that the default simple server doesn't have. To give
-> an OpenClaw agent Mnemos today, add the simple MCP server like any other MCP
-> client (see [Simple MCP Mode](guide.md#simple-mcp-mode) in the guide) and schedule upkeep with
-> `mnemos daemon install`.
+> `mnemos setup-openclaw` is retired: its jobs asked the agent for advanced-mode
+> tools (`mnemos_consolidate`) that the default simple server doesn't have. To
+> give an OpenClaw agent Mnemos today, run `mnemos connect openclaw --write`: it
+> adds the simple MCP server, a hook that wakes the agent with its memory
+> (not yet tested against a running gateway) and scheduled upkeep.
 
 This guide covers how to set up Mnemos as a complete agent cognition system using [OpenClaw](https://openclaw.dev) for agent orchestration and cron scheduling.
 
@@ -92,7 +92,7 @@ Or for direct Anthropic:
 The bootstrap command prints the cron installation commands. Or use the existing OpenClaw cron integration:
 
 ```bash
-mnemos setup-openclaw --agent nova
+mnemos connect openclaw --write
 ```
 
 ### Cron Jobs Installed

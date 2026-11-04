@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+### Connect Mnemos to more agents
+
+`mnemos connect <agent>` previews and `--write` sets up everything that agent
+can take: the tools (MCP server), the wake (memory before the first message),
+the cue (the memories that bear on each message) and upkeep between sessions.
+Agents: Claude Code, Codex, Grok, Gemini CLI, Hermes and OpenClaw; Pi and Muse
+Code print their setup, marked untested, and write nothing. With no agent it
+lists the ones on this machine and, for each, what it has and what is missing,
+read from the machine. The facts about each agent, and how each is known (saw
+it, docs say, not tested), are in one table, `mnemos/setup/harnesses.py`, and
+in [the guide](docs/guide.md#what-each-agent-gets).
+
+- **Its own memory by default.** Each agent gets an agent id and store of its
+  own (`grok`, `~/.mnemos/grok.db`); `--agent-id` shares one. An agent that
+  already has a Mnemos server or hook keeps its memory where it is, and
+  connect refuses to move it. Connect never edits another agent's config:
+  Grok borrows Claude Code's MCP servers and hooks (so it can open Claude's
+  memory), and `connect grok` says so and adds a server of Grok's own.
+- **The cue for Codex and Gemini CLI.** `mnemos hooks install codex` now adds
+  the cue (a UserPromptSubmit hook) beside the wake, and `hooks install gemini`
+  is new: SessionStart and BeforeAgent in `settings.json`. `--no-prompt` leaves
+  the cue out. Grok's hooks run, but nothing they print reaches its model
+  (seen with a marker), so none are installed; Grok loads its memory with
+  `mnemos_context` through the server's instructions, as does any agent after
+  a compaction it has no hook for (Gemini, Grok).
+- **The first session tells the truth about the agent reading it.** It reads
+  which agent that is from what `connect` wrote into the server
+  (`MNEMOS_HARNESS`), then from the name the client sends in the MCP handshake
+  (Grok, Gemini CLI and OpenClaw send one that says; Hermes sends only `mcp`),
+  and says what is set and what is not, with the exact command. Where it
+  cannot tell, it says so and points at `mnemos connect`. The quiet hours are
+  never offered outside Claude Code: they run Claude Code. Claude Code's first
+  session is as it was.
+- **`mnemos setup-openclaw` is retired.** Its cron jobs asked the agent to call
+  `mnemos_consolidate` and `mnemos_export`, which only the advanced server has,
+  so on a default install they ran and did nothing. `mnemos connect openclaw`
+  replaces it: the server, a wake hook (an `agent:bootstrap` hook; not tested
+  against a running gateway) and upkeep scheduled by the system.
+- **Fixed: Hermes' memory provider was misread without PyYAML.** The installer
+  took the first `provider:` line in `config.yaml`, which is the model's
+  (`model: provider: openai-codex`), as the memory provider. It now reads the
+  line inside `memory:`. The Hermes server it writes also names itself
+  (`MNEMOS_HARNESS=hermes`) and runs this install's own `mnemos`.
+
 ## 0.6.0 (2026-11-03)
 
 ### The notebook page

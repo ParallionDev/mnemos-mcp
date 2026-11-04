@@ -328,7 +328,7 @@ and OpenClaw's session APIs, such as the observer context sync, `MEMORY.md`
 upkeep, morning briefs, and daily debriefs.
 
 ```bash
-mnemos setup-openclaw --agent main --dry-run
+mnemos connect openclaw
 ```
 
 Review generated commands before enabling them.
