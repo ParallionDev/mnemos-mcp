@@ -423,10 +423,10 @@ hours; see [Between Sessions](#between-sessions).
 `mnemos log` opens a small page in your browser: your agent's log, and its
 mind.
 
-- **The log**: its story down the page, its state in the margin. Its days,
+- **The log**: its story down the page, its state in a drawer beside it. Its days,
   its memories (searchable), its beliefs, what its memory asks it, its
   journal, its quiet hours (what each one wrote and made), and its notes to
-  you.
+  you. A memory opens where it is, as a card over its list.
 - **Notes**: each note it left you, with a box to reply. The ones that ask
   you something come first, with the box already open. There's also a box
   to leave it a note of your own. It wakes with what you write, once, in
@@ -438,7 +438,10 @@ mind.
   point of light where it sits among the ones it's tied to, and every link a
   fibre; recall lights up along the links as it happens. It also replays
   how it grew, and the times recall gathered several memories at once. It's
-  drawn to fit your machine, and rests when nothing moves.
+  drawn to fit your machine. On a computer it's already there behind the log,
+  turning slowly at a few frames a second, and opening it moves the cards out
+  of the way. On a phone, or where it can't be drawn, it's a link to its own
+  page.
 - **What's new**: it opens on what's new since you were last here (the
   questions waiting on you, new memories, hours, journal entries, beliefs
   that changed), each a link to where it lives. If you turn it on in

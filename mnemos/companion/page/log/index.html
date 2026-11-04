@@ -146,8 +146,8 @@ main{background:var(--card)}
 .held.thin{display:block;margin:0;height:2px;max-width:none;background:var(--hair);box-shadow:none}
 .held.thin i{height:2px}
 /* what its memory asks: a small table, the count then its kind, every number on one column */
-.m-counts{display:grid;gap:0;margin-inline:-6px}
-.m-count{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:44px minmax(0,1fr);align-items:baseline;gap:var(--s2);padding:4px 6px;border-radius:6px;transition:background var(--quick)}
+.m-counts{display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:var(--s2);margin-inline:-6px}
+.m-count{all:unset;box-sizing:border-box;cursor:pointer;grid-column:1/-1;display:grid;grid-template-columns:subgrid;align-items:baseline;padding:4px 6px;border-radius:6px;transition:background var(--quick)}
 .m-count b{font:400 var(--t-small)/1.3 var(--mono);text-align:right;color:var(--ink-1)}
 .m-count span{color:var(--ink-3);font-size:var(--t-small);line-height:1.3}
 .m-count:hover{background:var(--plate-hover)}
