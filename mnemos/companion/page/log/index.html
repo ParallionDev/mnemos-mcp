@@ -24,8 +24,8 @@ button{font:inherit;color:inherit}
 a{color:inherit}
 .shell{position:relative;padding:28px var(--gutter) 0}
 :root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:424px;--rail-w:238px;--gap:10px;--r-card:14px;
-  --ground:#060606;--veil:rgba(6,6,8,.5);--card:rgba(0,0,0,.45);--pane:rgba(255,255,255,.024);--on-ground:rgba(255,255,255,.07);--on-ground-2:rgba(255,255,255,.12)}
-:root[data-theme="light"]{--ground:#f3f3f3;--veil:rgba(243,243,243,.7);--card:rgba(255,255,255,.64);--pane:rgba(0,0,0,.048);--on-ground:#fff;--on-ground-2:#fafafa}
+  --ground:#060606;--veil:rgba(6,6,8,.5);--card:rgba(0,0,0,.84);--sheet:#010101;--pane:rgba(255,255,255,.024);--on-ground:rgba(255,255,255,.07);--on-ground-2:rgba(255,255,255,.12)}
+:root[data-theme="light"]{--ground:#f3f3f3;--veil:rgba(243,243,243,.7);--card:rgba(255,255,255,.92);--sheet:#fefefe;--pane:rgba(0,0,0,.048);--on-ground:#fff;--on-ground-2:#fafafa}
 /* one tone besides the card: a plate on the card is the floor's own tone, as if the card were cut away to show it (in
    the dark, what the floor measures with the mind's haze under its veil) */
 :is(main,.drawer){--surface-1:var(--pane);--plate:var(--pane)}
@@ -90,7 +90,7 @@ a{color:inherit}
 
 /* the categories stay in reach as you read: what passes under them is frosted right out, flat, with no edge of its own */
 .nav{position:sticky;top:0;z-index:4;margin:var(--s4) calc(-1 * var(--gutter)) 0;padding:var(--s2) var(--gutter)}
-.nav::before{content:"";position:absolute;inset:0 0 -14px;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--ground) 76%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+.nav::before{content:"";position:absolute;inset:0 0 -14px;z-index:-1;pointer-events:none;background:var(--ground);
   -webkit-mask-image:linear-gradient(#000 calc(100% - 14px),transparent);mask-image:linear-gradient(#000 calc(100% - 14px),transparent)}
 /* the categories ride in one track; a marker glides to the open one (iOS's settling curve), while the content below
    trades places in the same direction. The content itself stays on the floor. */
@@ -246,10 +246,10 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   /* the mind, whole and running, under everything: softened right out into the haze of light the floor is made of,
      and brought to focus as the cards move out of its way. The cards keep their place and their scroll while they're
      gone, and come back the way they left. */
-  #behind{position:fixed;left:0;top:0;z-index:0;width:100%;height:100%;border:0;pointer-events:none;filter:blur(22px) brightness(.46) saturate(1.15);transform:scale(1.05);
+  #behind{position:fixed;left:0;top:0;z-index:0;width:100%;height:100%;border:0;pointer-events:none;filter:blur(56px) brightness(.46) saturate(1.15);transform:scale(1.05);
     transition:filter .95s var(--glide),transform .95s var(--glide)}
   /* in the light the same haze is a soft shadow: its light turned over, so a bright region reads as a cloud in white glass */
-  :root[data-theme="light"] #behind{filter:blur(22px) invert(1) grayscale(1) brightness(1.04)}
+  :root[data-theme="light"] #behind{filter:blur(56px) invert(1) grayscale(1) brightness(1.04)}
   body.parted #behind,:root[data-theme="light"] body.parted #behind{pointer-events:auto;filter:none;transform:none}
   .shell{position:relative;z-index:1}
   .shell::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--veil);transition:opacity .7s var(--glide)}
@@ -276,7 +276,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   /* the pane floats over the right edge here, so the column keeps to the left, and always did: nothing has to move */
   .story,body[data-tab="log"] .story{margin-left:0;padding-inline:clamp(24px,4vw,38px)}
   .drawer,body.drawer-open .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0}
-  .drawer{transform:translateX(calc(100% + 2 * var(--gap)));background:color-mix(in srgb,var(--card) 74%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.28)}
+  .drawer{transform:translateX(calc(100% + 2 * var(--gap)));background:color-mix(in srgb,var(--ground) 95%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.28)}
   :root[data-theme="light"] .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
   :root:not([data-theme="light"]) .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.6)}
   body.drawer-open .drawer{transform:none}
@@ -315,15 +315,15 @@ body.reading .drawer-h,body.reading .drawer-body{display:none}
 .pane .detail{padding-bottom:var(--s6)}
 .pane .detail > :not(.pane-h):not(.specimen):not(.alsos){margin-inline:20px}
 .pane .specimen{margin:var(--s1) 0 var(--s5)}
-/* the search and filters stay in reach down a long list, and what scrolls under them goes soft */
+/* the search and filters stay in reach down a long list. The bar is solid: words under words is what makes glass look cheap */
 @media (min-width:760px){
   #body > .tools,#body > .shared-list > .tools{position:sticky;top:0;z-index:2;margin-inline:calc(-1 * var(--bleed));padding:var(--s3) var(--bleed);margin-top:calc(-1 * var(--s3))}
-  #body > .tools::before,#body > .shared-list > .tools::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;opacity:0;transition:opacity var(--quick);background:color-mix(in srgb,var(--ground) 68%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
+  #body > .tools::before,#body > .shared-list > .tools::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;opacity:0;transition:opacity var(--quick);background:var(--sheet);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
   #body > .tools.stuck::before,#body > .shared-list > .tools.stuck::before{opacity:1}
   #body > .shared-list > .tools{margin-bottom:var(--s2)}
 }
 .pane-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:var(--s3);min-height:44px;padding:0 8px 0 20px}
-.pane-h::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;background:color-mix(in srgb,var(--ground) 68%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
+.pane-h::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;background:var(--sheet);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
 .pane-acts{flex:none;display:flex;gap:2px}
 .icon-b{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;color:var(--ink-3);cursor:pointer;transition:color var(--quick),background var(--quick)}
 .icon-b:hover{color:var(--ink-1);background:var(--hover)}
@@ -334,7 +334,7 @@ body.reading .drawer-h,body.reading .drawer-body{display:none}
 /* no room beside the list, or the drawer's shut: the same pane floats over the list's edge, on frosted glass */
 @media (min-width:760px){
   body.peek .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0;visibility:visible;overflow:hidden;transform:none;transition:none;
-    background:color-mix(in srgb,var(--ground) 86%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.5)}
+    background:color-mix(in srgb,var(--ground) 95%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.5)}
   :root[data-theme="light"] body.peek .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
   body.peek .drawer-toggle{visibility:hidden}
 }
