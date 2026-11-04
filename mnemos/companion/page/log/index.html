@@ -63,17 +63,18 @@ a{color:inherit}
 @media (prefers-reduced-motion:reduce){.pick .chev{transition:none}}
 /* what stays in reach: the page's look, and the way to the mind */
 .head-r{position:absolute;top:calc(28px - 13px);right:var(--gutter);display:flex;align-items:center;gap:var(--s2)}
-.seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--on-ground)}
-.seg button{all:unset;display:grid;place-items:center;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--ink-3);transition:color var(--quick),background var(--quick)}
+.seg{display:inline-flex;padding:2px;border-radius:var(--r-s);background:var(--btn)}
+.seg button{all:unset;display:grid;place-items:center;cursor:pointer;width:28px;height:28px;border-radius:6px;color:var(--ink-2);transition:color var(--quick),background var(--quick)}
 .seg button:hover{color:var(--ink-1)}
-.seg button[aria-pressed="true"]{color:var(--ink-1);background:var(--on-ground-2)}
+.seg button[aria-pressed="true"]{color:var(--ink-1);background:var(--btn-hover);box-shadow:var(--btn-lit)}
 :root[data-theme="light"] .seg{background:rgba(0,0,0,.055)}
 :root[data-theme="light"] .seg button[aria-pressed="true"]{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.14)}
 .seg svg{display:block}
-.to-mind{all:unset;flex:none;cursor:pointer;padding:9px 13px;border-radius:var(--r-s);background:var(--on-ground);
-  font:500 var(--t-small)/18px var(--sans);letter-spacing:-.003em;color:var(--ink-1);transition:background var(--quick)}
-.to-mind:hover{background:var(--on-ground-2)}
-.to-mind:active{background:var(--on-ground)}
+/* the page's one main action, lit from above, the same as Send */
+.to-mind{all:unset;box-sizing:border-box;flex:none;display:inline-flex;align-items:center;justify-content:center;min-height:32px;padding:0 12px;white-space:nowrap;border-radius:var(--r-s);cursor:pointer;background:var(--main);color:var(--main-ink);box-shadow:var(--main-lit);
+  font:500 var(--t-small)/18px var(--sans);letter-spacing:-.003em;transition:background var(--quick),transform .46s var(--spring)}
+.to-mind:hover{background:var(--main-hover)}
+.to-mind:active{background:var(--main-press);transform:scale(.96);transition:background var(--quick),transform .07s ease-out}
 .verify{margin-top:var(--s3);display:flex;flex-wrap:wrap;gap:2px var(--s4);color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0}
 .verify .flag{color:var(--ink-1)}
 .verify .ok::before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--signal);margin-right:7px;vertical-align:1px}
@@ -127,7 +128,7 @@ main{background:var(--card)}
 
 .m-h{display:flex;justify-content:space-between;align-items:baseline;gap:var(--s3);margin-bottom:var(--s3)}
 .m-h .label{font-weight:500;color:var(--ink-2)}
-.m-h .textlink{all:unset;flex:none;white-space:nowrap;cursor:pointer;color:var(--ink-3);font:400 var(--t-micro)/16px var(--sans);letter-spacing:0;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
+.m-h .textlink{all:unset;flex:none;white-space:nowrap;cursor:pointer;color:var(--signal);font:400 var(--t-small)/18px var(--sans);letter-spacing:-.003em;border-bottom:1px solid transparent;transition:color var(--quick),border-color var(--quick)}
 .m-h .textlink:hover{color:var(--ink-1)}
 .m-h .textlink:active{color:var(--ink-2)}
 .m-item + .m-item{margin-top:var(--s4)}
@@ -190,14 +191,14 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .rail .nav::before{display:none}
   .rail .verify{order:5;margin-top:auto;padding:var(--s4) 0 0;flex-direction:column;gap:3px}
   .rail .head-r{order:6;position:static;margin-top:var(--s3);justify-content:space-between}
+  .rail .head-r .to-mind{flex:1;min-width:0;padding:0 8px}
 
   .pick{gap:6px}
   .pick:not([disabled]):hover{background:var(--on-ground)}
   .state-line{align-items:flex-start;margin-top:6px}
   .state{font:400 var(--t-body)/20px var(--sans);letter-spacing:-.006em;text-wrap:balance}
   .dot{align-self:flex-start;margin-top:6px}
-  .seg button{width:27px;height:27px}
-  .to-mind{padding:9px 11px}
+  .seg button{width:28px;height:28px}
 
   .scroller{overflow:visible}
   .track{display:block;padding:0;border-radius:0;background:none}
@@ -225,10 +226,10 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   #body.entering{transform:translateY(calc(var(--dir,0) * var(--drift)))}
 
   /* the one control that opens the drawer, in the card's corner; what passes under it is softened */
-  .drawer-toggle,.drawer-close{all:unset;box-sizing:border-box;display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:var(--r-s);color:var(--ink-3);cursor:pointer;transition:color var(--quick),background var(--quick)}
-  .drawer-toggle{position:absolute;z-index:3;top:var(--gap);right:var(--gap);background:color-mix(in srgb,var(--card) 72%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
-  .drawer-toggle:hover,.drawer-close:hover{color:var(--ink-1);background:var(--plate-hover,var(--on-ground))}
-  .drawer-toggle:active,.drawer-close:active{color:var(--ink-2)}
+  .drawer-toggle,.drawer-close{all:unset;box-sizing:border-box;display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:7px;color:var(--ink-1);background:var(--btn);box-shadow:var(--btn-lit);cursor:pointer;transition:background var(--quick)}
+  .drawer-toggle{position:absolute;z-index:3;top:var(--gap);right:var(--gap)}
+  .drawer-toggle:hover,.drawer-close:hover{background:var(--btn-hover)}
+  .drawer-toggle:active,.drawer-close:active{background:var(--btn-press)}
   .drawer-toggle svg,.drawer-close svg{display:block}
   body.drawer-open .drawer-toggle{visibility:hidden}
 
@@ -238,7 +239,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   :root[data-theme="light"] .drawer{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
   body.drawer-open .drawer{width:var(--drawer);margin-left:var(--gap);visibility:visible}
   .drawer-in{display:flex;flex-direction:column;width:var(--drawer);height:100%}
-  .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--gap) 0 var(--s4);color:var(--ink-3);font:400 var(--t-label)/16px var(--sans);letter-spacing:0}
+  .drawer-h{flex:none;display:flex;justify-content:space-between;align-items:center;padding:var(--gap) var(--s4) 0;color:var(--ink-3);font:400 var(--t-label)/16px var(--sans);letter-spacing:0}
   .drawer-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:var(--s3) var(--s4) var(--s5)}
   body.ready .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s .48s,transform .78s var(--glide)}
   body.ready.drawer-open .drawer{transition:width .48s var(--glide),margin-left .48s var(--glide),visibility 0s,transform .78s var(--glide)}
@@ -302,7 +303,7 @@ dialog .cap button:hover{color:var(--ink-1)}
   .head-r{top:7px}
   .pick{font-size:23px}
   .seg button{width:32px;height:32px}
-  .to-mind{padding:11px 13px}
+  .to-mind{min-height:36px}
   /* the track runs off the edge of the screen, so it reads as something that scrolls */
   .scroller{margin-inline:calc(-1 * var(--gutter));padding-inline:var(--gutter)}
   .minds{min-width:0;width:calc(100vw - 32px)}
@@ -322,13 +323,14 @@ body.reading .drawer-h,body.reading .drawer-body{display:none}
   #body > .tools.stuck::before,#body > .shared-list > .tools.stuck::before{opacity:1}
   #body > .shared-list > .tools{margin-bottom:var(--s2)}
 }
-.pane-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:var(--s3);min-height:44px;padding:0 8px 0 20px}
+.pane-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:var(--s3);min-height:44px;padding:0 20px}
 .pane-h::before{content:"";position:absolute;inset:0 0 -10px;z-index:-1;pointer-events:none;background:var(--sheet);-webkit-mask-image:linear-gradient(#000 calc(100% - 10px),transparent);mask-image:linear-gradient(#000 calc(100% - 10px),transparent)}
-.pane-acts{flex:none;display:flex;gap:2px}
-.icon-b{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:6px;color:var(--ink-3);cursor:pointer;transition:color var(--quick),background var(--quick)}
-.icon-b:hover{color:var(--ink-1);background:var(--hover)}
-.icon-b:active{background:var(--selected)}
-.icon-b[disabled]{color:var(--hair-2);background:none;cursor:default}
+.pane-acts{flex:none;display:flex;gap:4px}
+.icon-b{all:unset;box-sizing:border-box;display:grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--ink-1);background:var(--btn);box-shadow:var(--btn-lit);cursor:pointer;transition:background var(--quick)}
+.icon-b:hover{background:var(--btn-hover)}
+.icon-b:active{background:var(--btn-press)}
+.icon-b[disabled]{color:var(--ink-3);background:var(--hover);box-shadow:none;cursor:default}
+@media (pointer:coarse){.icon-b{width:36px;height:36px}}
 .icon-b svg{display:block}
 .pane .alsos{margin-inline:12px}
 /* no room beside the list, or the drawer's shut: the same pane floats over the list's edge, on frosted glass */
@@ -344,7 +346,7 @@ body.reading .drawer-h,body.reading .drawer-body{display:none}
   body.reading .drawer-in{display:flex;flex-direction:column;height:100%}
   html:has(body.reading){overflow:hidden}
 }
-@media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}}
+@media (prefers-reduced-motion:reduce){.dot,.marker,.nav .tab,.pick,.seg button,.to-mind,.drawer,body.ready .drawer,body.ready.drawer-open .drawer{transition:none}.to-mind:active{transform:none}}
 ::view-transition-old(root),::view-transition-new(root){animation-duration:.24s}
 </style>
 </head>

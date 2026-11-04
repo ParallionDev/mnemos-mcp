@@ -34,6 +34,11 @@
   show the memory they're about, not the same prompt 186 times. A reply waits as one quiet
   line, with its buttons coming when you write. Shared uses the same search and order as
   Memories.
+- Every button on the notebook now speaks one language. The main action is white on dark and
+  black on light, lit along its top edge, and gives when pressed; it lights up only when it can
+  act. The rest are solid, never outlines, in a fill you can see. Links that take you somewhere
+  are blue; things that open where they are stay grey with a chevron. Fields, the order menu and
+  the switches got the same pass, and the keyboard's focus ring is blue.
 
 ## 0.6.2 (2026-11-04)
 

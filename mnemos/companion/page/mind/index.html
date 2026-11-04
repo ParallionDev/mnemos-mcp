@@ -242,10 +242,10 @@ figure.plate + figure.plate{margin-top:var(--s5)}
 .room-top{display:flex;justify-content:space-between;align-items:baseline}
 .room-top h2{font:300 20px/1.2 var(--display);letter-spacing:-.01em}
 .room-top h2:focus{outline:none}                 /* focus is placed here so keys land in the room; it isn't a control */
-.close{all:unset;cursor:pointer;color:var(--ink-3);font-size:var(--t-small);padding:4px 8px;border:1px solid transparent;border-radius:6px;transition:color var(--quick),border-color var(--quick)}
-.room-top .close{margin-right:-9px}
-.close:hover{color:var(--ink-1)}
-.close:focus-visible{border-color:var(--focus);color:var(--ink-1)}
+.close{all:unset;box-sizing:border-box;flex:none;display:inline-flex;align-items:center;min-height:32px;padding:0 12px;cursor:pointer;color:var(--ink-1);font:500 var(--t-small)/18px var(--sans);letter-spacing:-.003em;border-radius:8px;background:var(--btn);box-shadow:var(--btn-lit);transition:background var(--quick)}
+.close:hover{background:var(--btn-hover)}
+.close:active{background:var(--btn-press)}
+.close:focus-visible{outline:1.5px solid var(--focus);outline-offset:2px}
 .room-body{flex:1;overflow-y:auto;padding:var(--s4) 24px var(--s8);overscroll-behavior:contain;border-radius:0 0 var(--g-r) var(--g-r)}
 .room .tabs{margin-top:var(--s4);gap:12px}
 dialog{margin:auto;border:0;border-radius:var(--r);background:var(--raised);padding:0;max-width:min(92vw,1100px);max-height:92vh;overflow:hidden;color:var(--ink-1)}
