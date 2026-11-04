@@ -7,13 +7,13 @@
  *     hooks   → { hover(id|null), open(id|null), route(hash), mindLink?(id), picture?(src, caption), hour?(id) }
  */
 
-import { esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
+import { SHARED, esc, at, clock, dayKey, dayName, longDay, shortDay, plural, putTo, question, firstLine, opening, titleOf, signedBy, person,
   forPerson, temperature, tempWord, KIND, ASK, ASK_ORDER, RELATION, trailSentence, modelName, sameModel } from './words.js';
 
 import { telling, setTelling, canTell, refused } from './tell.js';
 import { herbariumOf, lifeOf, lifeWords, mountLife } from './specimens.js';
 
-const LABEL = { log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours', settings: 'Settings' };
+const LABEL = { shared: SHARED.title, log: 'Log', memories: 'Memories', beliefs: 'Beliefs', questions: 'Questions', journal: 'Journal', notes: 'Notes', hours: 'Hours', settings: 'Settings' };
 const PAGE = 60;
 const SEEN_AFTER = 1200;                  // a note of its own is read once it has stayed on your screen this long
 
@@ -34,6 +34,7 @@ export class Room {
     this.toMark = new Set();
     this.present = false;                   // someone has touched the page: moved, scrolled, typed
     this.hours = null;                      // the quiet hours as you're setting them, until saved
+    this.shared = { query: '', author: '', shown: 50 };
     this.jevKey = '';                       // a key you're typing for Jev, held only here until it's sent
     this.bind();
   }
@@ -42,7 +43,7 @@ export class Room {
 
   count(tab) {
     const { life, mems } = this.ctx();
-    return { log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
+    return { shared: life.shared?.status === 'ready' ? life.shared.rows.length : null, log: null, memories: mems.length, beliefs: life.beliefs.length, questions: life.questions.open,
       journal: life.journal.length, notes: life.notes.length, hours: life.hours.length, settings: null }[tab];
   }
   /* its notes to you no one has read yet: the tab says so in the one colour that means "for you" */
@@ -80,7 +81,10 @@ export class Room {
     const a = document.activeElement, typingIn = a?.dataset?.draft ? [a.dataset.draft, a.selectionStart, a.selectionEnd] : null;
     this.bodyEl.innerHTML = open ? this.memoryHTML(this.s.memory)
       : { log: () => this.logHTML(), memories: () => this.memoriesHTML(), beliefs: () => this.beliefsHTML(), questions: () => this.questionsHTML(),
-        journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML(), settings: () => this.settingsHTML() }[this.s.tab]();
+        journal: () => this.journalHTML(), notes: () => this.notesHTML(), hours: () => this.hoursHTML(), shared: () => this.sharedHTML(), settings: () => this.settingsHTML() }[this.s.tab]();
+    if (this.s.tab === 'shared' && this.sending) {
+      for (const control of this.bodyEl.querySelectorAll('button, input, textarea, select')) control.disabled = true;
+    }
     this.restoreOpen();
     if (toTop) this.toTop(); else scroller.scrollTop = top;
     const search = this.bodyEl.querySelector('#room-search');
@@ -213,6 +217,38 @@ export class Room {
         <details data-key="formed-${esc(list[0].born)}"><summary>${list.length === 1 ? 'Read it' : 'Read them'}</summary><ul class="rows">${rows}</ul>${list.length > 12 ? `<p class="count">and ${list.length - 12} more, in Memories</p>` : ''}</details></div></div>`;
     }
     return '';
+  }
+
+  /* Shared words stay in their own list, never in the mind's memory view. */
+  sharedHTML() {
+    const data = this.ctx().life.shared || { status: 'error', rows: [] }, busy = !!this.sending;
+    if (data.status === 'off') return `<p class="empty">${SHARED.off}</p>`;
+    if (data.status === 'error') return `<p class="empty" role="status">${SHARED.error}</p>`;
+    const draft = this.drafts.get('shared-new') || '', notice = this.notices.get('shared-new');
+    const authors = new Map(data.rows.map(m => [m.author, m.person ? SHARED.you : m.author]));
+    const rows = data.rows.filter(m => (!this.shared.author || m.author === this.shared.author) && m.content.toLowerCase().includes(this.shared.query.toLowerCase()));
+    return `<section class="shared-list" aria-label="${SHARED.title}" aria-busy="${busy}">
+      <div class="compose new"><textarea class="field" rows="3" data-draft="shared-new" aria-label="${SHARED.placeholder}" placeholder="${SHARED.placeholder}"${busy ? ' disabled' : ''}>${esc(draft)}</textarea>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" role="status">${esc(notice || SHARED.hint)}</span>
+        <button type="button" class="send" data-shared-add="1"${busy || !draft.trim() ? ' disabled' : ''}>${this.sending === 'shared-new' ? SHARED.adding : SHARED.add}</button></div></div>
+      ${data.rows.length ? `<div class="tools shared-tools"><input id="room-search" class="search" type="search" value="${esc(this.shared.query)}" placeholder="${SHARED.search}" aria-label="${SHARED.search}">
+      <label class="shared-author">${SHARED.author}<select class="search" data-shared-author="1"><option value="">${SHARED.all}</option>${[...authors].map(([id, name]) => `<option value="${esc(id)}"${this.shared.author === id ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></label></div>` : ''}
+      <ul class="rows">${rows.slice(0, this.shared.shown).map(m => `<li class="jentry"><div class="meta"><span class="k">${esc(m.person ? SHARED.you : m.author)}</span>${m.model ? `<span>${esc(modelName(m.model))}</span>` : ''}<time datetime="${esc(m.born)}">${shortDay(at(m.born))}</time></div>${this.own(m.id, m.content)}${this.memActs(m, true)}</li>`).join('')}</ul>
+      ${!rows.length ? `<p class="empty">${data.rows.length ? SHARED.none : SHARED.empty}</p>` : ''}
+      ${rows.length > this.shared.shown ? `<button type="button" class="reply-open" data-shared-more="1"${busy ? ' disabled' : ''}>${SHARED.more}</button>` : ''}</section>`;
+  }
+  async sharedAdd() {
+    if (this.sending || !this.hooks.send) return;
+    const text = (this.drafts.get('shared-new') || '').trim();
+    if (!text) return;
+    this.sending = 'shared-new'; this.notices.delete('shared-new'); this.render();
+    let answer;
+    try { answer = await this.hooks.send({ command: 'shared', action: 'add', text }); }
+    catch { answer = { error: SHARED.failed }; }
+    this.sending = null;
+    if (answer?.result) this.drafts.delete('shared-new');
+    else this.notices.set('shared-new', answer?.error || SHARED.failed);
+    this.render(); this.bodyEl.querySelector('[data-draft="shared-new"]')?.focus();
   }
 
   /* ---------- memories ---------- */
@@ -441,29 +477,30 @@ export class Room {
    * words with the person's (its own stay in its history) and it wakes knowing, once; letting one go archives it, never
    * deletes it, and it's told once that a memory was let go, never what it said. Neither is offered for a mind the page
    * only reads. */
-  memActs(m) {
+  memActs(m, shared = false) {
     const { who } = this.ctx();
-    if (who.unfiled || !this.hooks.send) return '';
+    if ((!shared && who.unfiled) || !this.hooks.send) return '';
     const key = `fix:${m.id}`, mode = this.editing?.id === m.id ? this.editing.mode : null, notice = this.notices.get(key);
     if (mode === 'correct') {
       const draft = this.drafts.has(key) ? this.drafts.get(key) : m.content;
       return `<div class="compose fix"><span class="label">Correct it, in your words</span>
         <textarea class="field" rows="5" data-draft="${esc(key)}" aria-label="The memory, corrected in your words">${esc(draft)}</textarea>
-        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || `Its own words stay in its history. ${who.name} wakes knowing you corrected it, once.`)}</span>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (shared ? SHARED.correction : `Its own words stay in its history. ${who.name} wakes knowing you corrected it, once.`))}</span>
           <button class="cancel" type="button" data-mem-cancel="1">Cancel</button>
           <button class="send" type="button" data-fix-save="${esc(m.id)}"${draft.trim() && draft.trim() !== m.content.trim() && this.sending !== key ? '' : ' disabled'}>${this.sending === key ? 'Saving…' : 'Save correction'}</button></div></div>`;
     }
     if (mode === 'forget') {
       return `<div class="confirm" role="alertdialog" aria-labelledby="let-go-h"><div class="set-title" id="let-go-h">Let this memory go?</div>
-        <p class="set-d">It won't come back by its words, its meaning or its id. It's kept in the archive, not deleted, and ${esc(who.name)} will know, once, that you let a memory go, though not what it said.</p>
+        <p class="set-d">${shared ? SHARED.withdraw : `It won't come back by its words, its meaning or its id. It's kept in the archive, not deleted, and ${esc(who.name)} will know, once, that you let a memory go, though not what it said.`}</p>
         <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || '')}</span>
           <button class="cancel" type="button" data-mem-cancel="1">Keep it</button>
           <button class="send danger" type="button" data-forget-yes="${esc(m.id)}"${this.sending === key ? ' disabled' : ''}>${this.sending === key ? 'Letting go…' : 'Let it go'}</button></div></div>`;
     }
-    return `<div class="mem-acts"><button class="reply-open" type="button" data-mem-act="correct" data-id="${esc(m.id)}">Correct it</button>
+    return `<div class="mem-acts">${!shared || m.editable ? `<button class="reply-open" type="button" data-mem-act="correct" data-id="${esc(m.id)}">Correct it</button>` : ''}
       <button class="reply-open" type="button" data-mem-act="forget" data-id="${esc(m.id)}">Let it go</button></div>`;
   }
   async memChange(id, request) {
+    if (this.s.tab === 'shared') request = { ...request, command: 'shared', action: request.command };
     const key = `fix:${id}`;
     if (this.sending) return;
     this.sending = key; this.notices.delete(key); this.render();
@@ -588,6 +625,8 @@ export class Room {
     this.tabsEl.addEventListener('click', (e) => { const t = e.target.closest('[data-tab]'); if (t) { this.s.qkind = 'all'; this.go({ tab: t.dataset.tab }); } });
     const body = this.bodyEl;
     body.addEventListener('click', (e) => {
+      if (e.target.closest('[data-shared-add]')) return this.sharedAdd();
+      if (e.target.closest('[data-shared-more]')) { this.shared.shown += 50; this.render(); (this.bodyEl.querySelector('[data-shared-more]') || this.bodyEl.querySelector('[data-shared-add]'))?.focus(); return; }
       const fold = e.target.closest('[data-fold]');
       if (fold) {
         const id = fold.dataset.fold, open = !this.whole.has(id);
@@ -610,7 +649,7 @@ export class Room {
         this.editing = { id: act.dataset.id, mode: act.dataset.memAct }; this.render();
         return this.bodyEl.querySelector(act.dataset.memAct === 'correct' ? '.fix .field' : '[data-mem-cancel]')?.focus();
       }
-      if (e.target.closest('[data-mem-cancel]')) { if (this.editing) this.drafts.delete(`fix:${this.editing.id}`); this.editing = null; return this.render(); }
+      if (e.target.closest('[data-mem-cancel]')) { const id = this.editing?.id; if (id) this.drafts.delete(`fix:${id}`); this.editing = null; this.render(); if (this.s.tab === 'shared' && id) this.bodyEl.querySelector(`[data-mem-act][data-id="${CSS.escape(id)}"]`)?.focus(); return; }
       const fix = e.target.closest('[data-fix-save]');
       if (fix) { const id = fix.dataset.fixSave; return this.memChange(id, { command: 'correct', memory_id: id, text: (this.drafts.get(`fix:${id}`) || '').trim() }); }
       const yes = e.target.closest('[data-forget-yes]');
@@ -638,7 +677,7 @@ export class Room {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && e.target.dataset?.draft) {
         e.preventDefault();
         const k = e.target.dataset.draft;
-        if (k.startsWith('fix:')) this.bodyEl.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
+        if (k === 'shared-new') this.sharedAdd(); else if (k.startsWith('fix:')) this.bodyEl.querySelector('[data-fix-save]:not([disabled])')?.click(); else this.send(k);
       }
       if (e.key === 'Escape' && this.editing) { this.editing = null; this.render(); }
       if (e.key === 'Enter' && e.target.dataset?.jevKey) { e.preventDefault(); this.bodyEl.querySelector('[data-jev-save]:not([disabled])')?.click(); }
@@ -657,18 +696,21 @@ export class Room {
         const hint = this.bodyEl.querySelector('.set .acts .hint'); if (hint) { hint.textContent = 'Not saved yet.'; hint.classList.remove('flag'); }
         return;
       }
+      if (e.target.dataset?.sharedAuthor) { this.shared.author = e.target.value; this.shared.shown = 50; this.render(); this.bodyEl.querySelector('[data-shared-author]')?.focus(); return; }
       const key = e.target.dataset?.draft;
       if (key) {
         this.drafts.set(key, e.target.value);
+        if (key === 'shared-new') { this.bodyEl.querySelector('[data-shared-add]').disabled = !e.target.value.trim() || !!this.sending; return; }
         const send = this.bodyEl.querySelector(`[data-send="${CSS.escape(key)}"]`);
         if (send) send.disabled = !e.target.value.trim() || this.sending === key;
         if (key.startsWith('fix:')) {
-          const id = key.slice(4), m = this.ctx().mems[this.ctx().byId.get(id)], save = this.bodyEl.querySelector('[data-fix-save]');
+          const id = key.slice(4), m = this.s.tab === 'shared' ? this.ctx().life.shared.rows.find(m => m.id === id) : this.ctx().mems[this.ctx().byId.get(id)], save = this.bodyEl.querySelector('[data-fix-save]');
           if (save && m) save.disabled = !e.target.value.trim() || e.target.value.trim() === m.content.trim();
         }
         return;
       }
       if (e.target.id !== 'room-search') return;
+      if (this.s.tab === 'shared') { this.shared.query = e.target.value; this.shared.shown = 50; return this.render(); }
       this.s.query = e.target.value; this.s.shown = PAGE;
       this.render();
     });

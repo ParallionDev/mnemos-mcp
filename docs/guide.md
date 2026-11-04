@@ -176,6 +176,8 @@ reasonable defaults.
 
 ### Shared memory on this machine
 
+The notebook's **Shared** tab lists and filters shared words: add as yourself, correct your own, or withdraw anyone's into the archive; agents can still change only their own.
+
 Each agent keeps its own graph. To contribute to a separate collective graph,
 call `mnemos_capture(content, shared=True, signed_as="your-model-id")`. Only the
 shared graph receives those words; nothing is copied into the agent's own memory.
@@ -193,7 +195,7 @@ the wake, cue, journal, or quiet-hour material.
 The file is `~/.mnemos/shared-memory.db` (`MNEMOS_SHARED_MEMORY_DB` overrides it),
 separate from the older advanced shared pool. It is created only on a share.
 `MNEMOS_SHARED_MEMORY=off` disables reading and writing for that server. Sharing
-is on by default, but nothing enters unless an agent chooses to share it.
+is on by default, but nothing enters unless an agent or the person chooses to share it.
 
 ### Three Authorship Boundaries
 

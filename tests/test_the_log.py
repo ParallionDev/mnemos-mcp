@@ -987,3 +987,20 @@ def test_a_memory_let_go_on_the_page_is_archived_as_the_persons(mind, monkeypatc
         conn.close()
     assert row[0] == "archived"
     assert reason and reason[0] == "forgotten_by_person"      # the person's, not the agent's, though an agent served it
+
+
+def test_shared_acts_have_the_pages_guards_and_export_separate_rows(mind, monkeypatch):
+    from mnemos import shared_memory as sm
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY_DB", str(Path.home() / "shared-memory.db"))
+    monkeypatch.delenv("MNEMOS_SHARED_MEMORY", raising=False)
+    with serving(Exporter.for_scope(**SCOPE)) as server:
+        request = {"command": "shared", "action": "add", "text": "Words for every agent."}
+        assert post(server, request, origin="https://elsewhere.example")[0] == 403
+        assert post(server, request, kind="text/plain")[0] == 415
+        assert not sm.path().exists()
+        status, answer = post(server, request)
+        assert status == 200 and "result" in answer
+        life, memories = map(json.loads, server.documents())
+        assert life["shared"]["rows"][0]["content"] == request["text"]
+        assert life["shared"]["rows"][0]["person"]
+        assert all(m["content"] != request["text"] for m in memories["memories"])

@@ -166,3 +166,16 @@ export function sinceThen(life, mems, since) {
     beliefs && { n: beliefs, say: beliefs === 1 ? 'a belief changed' : `${words(beliefs)} beliefs changed`, go: 'beliefs' },
   ].filter(Boolean);
 }
+
+
+export const SHARED = {
+  title: 'Shared', you: 'You', all: 'Everyone', author: 'Who wrote it', search: 'Filter by words',
+  empty: 'Nothing has been shared yet. Shared memory holds words every agent on this machine can read.',
+  off: 'Shared memory is off.', error: "Shared memory couldn't be read just now.",
+  add: 'Add', adding: 'Adding…', placeholder: 'Write something to share',
+  hint: "Every agent on this machine can read these words. They're signed as you.",
+  none: 'No shared memories match.', more: 'Load more',
+  correction: 'Your earlier words stay in the archive.',
+  withdraw: "It won't come back by its words, its meaning or its id. It's kept in the archive, never deleted.",
+  failed: "Shared memory couldn't be changed just now.",
+};

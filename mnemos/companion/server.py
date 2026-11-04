@@ -55,7 +55,7 @@ CACHE_SECONDS = 5.0
 # let go), which notes they read, whether and when the agent's quiet hours run, and whether Jev judges what comes
 # to mind, with the person's own key (the settings that are the person's to decide; the rest of Mnemos tunes
 # itself). A correction or a forget is always the person's, whoever serves the page.
-ACTS = ("reply", "note", "read", "hours", "jev", "correct", "forget")
+ACTS = ("reply", "note", "read", "hours", "jev", "correct", "forget", "shared")
 CLOCK = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 MOST_READ = 200
 MOST_ACT_BYTES = 32 * 1024
@@ -122,6 +122,7 @@ def minds_beside(home: Exporter) -> list[Exporter]:
     (``<agent>.db``, as Mnemos makes them): each read from the person and project that hold most of its memories.
     A store that pools several agents (a shared pool, an old default store) is left out: its file names no one."""
     from ..simple_scope import resolve_scope
+    from .. import shared_memory
     from .export import open_read_only
 
     found: list[Exporter] = []
@@ -129,6 +130,11 @@ def minds_beside(home: Exporter) -> list[Exporter]:
     if not folder.is_dir():
         return found
     for path in sorted(folder.glob("*.db")):
+        try:
+            if path.resolve() == shared_memory.path().resolve():
+                continue
+        except ValueError:
+            pass
         agent = path.stem
         if agent == home.scope.agent_id or path.resolve() == home.db.resolve():
             continue
@@ -221,6 +227,14 @@ class LogServer(ThreadingHTTPServer):
         mind = self.mind(agent)
         if mind is None:
             return {"error": "There's no such mind on this machine."}
+        if request.get("command") == "shared":
+            from ..shared_memory import notebook_act
+            with self._settings:
+                answer = notebook_act(request)
+            self._home.forget()
+            for other in (self._others[1].values() if self._others else []):
+                other.forget()
+            return answer
         if request.get("command") == "jev":
             return self._jev(request, mind)
         if UNFILED in (mind.exporter.scope.person_id, mind.exporter.scope.project_scope):

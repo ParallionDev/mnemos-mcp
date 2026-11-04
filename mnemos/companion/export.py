@@ -727,9 +727,12 @@ class Exporter:
 
     def export(self, now: datetime | None = None) -> tuple[dict, dict]:
         """The page's two documents, ``(life, memories)``. Writes nothing."""
+        from ..shared_memory import notebook
+
+        shared = notebook()
         now = now or datetime.now(timezone.utc)
         if not self.db.is_file():
-            return ({"made": iso(now), "missing": True, "identity": self.identity()},
+            return ({"made": iso(now), "missing": True, "identity": self.identity(), "shared": shared},
                     {"version": None, "made": iso(now), "memories": []})
         files = self.studio()
         conn = open_read_only(self.db)
@@ -759,6 +762,7 @@ class Exporter:
             "hours": hours,
             "schedule": self.schedule(),
             "jev": self.jev(),
+            "shared": shared,
             "journal": journal,
             "notes": notes,
             "studio": files,

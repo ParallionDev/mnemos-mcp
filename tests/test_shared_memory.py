@@ -299,3 +299,127 @@ def test_faded_id_restores_but_withdrawn_never_does(monkeypatch):
     assert "Withdrawn" in r.correct("", target_id=memory_id, action="archive")
     assert WORDS not in r.recall(memory_id)
     r.close()
+
+
+def test_notebook_reads_without_creating_and_handles_off_and_failure(monkeypatch):
+    from mnemos import shared_memory as sm
+    from mnemos.companion.export import Exporter
+    exporter = Exporter.for_scope(agent_id="reader")
+    assert exporter.export()[0]["shared"] == {"status": "ready", "rows": []}
+    assert not sm.path().exists()
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY", "off")
+    assert exporter.export()[0]["shared"]["status"] == "off"
+    assert "error" in sm.notebook_act({"action": "add", "text": WORDS})
+    assert not sm.path().exists()
+    monkeypatch.delenv("MNEMOS_SHARED_MEMORY")
+    sm.path().write_bytes(b"broken")
+    assert exporter.export()[0]["shared"]["status"] == "error"
+    assert sm.path().read_bytes() == b"broken"
+
+
+def test_notebook_person_signature_correction_and_agent_recall():
+    from mnemos import shared_memory as sm
+    from mnemos.companion.export import Exporter
+    from mnemos.companion.server import LogServer
+    from mnemos.simple_scope import resolve_scope
+    with LogServer(Exporter.for_scope(agent_id="writer")) as server:
+        added = server.act({"command": "shared", "action": "add", "text": WORDS,
+                            "author_kind": "agent", "agent_id": "pretender"})
+        memory_id = share_id(added["result"])
+        assert rows("SELECT author_kind, owner_agent_id, author_model FROM engrams") == [("person", sm.PERSON_OWNER, "")]
+        assert resolve_scope(agent_id=sm.PERSON_OWNER).agent_id != sm.PERSON_OWNER
+        assert "Only the agent" in sm.correct(memory_id, "", action="archive", agent_id=sm.PERSON_OWNER, model="test-model")
+        found = process("reader", "print(r.recall('telescope lenses'))")
+        assert WORDS in found and "the person" in found and "model unknown" not in found
+        changed = server.act({"command": "shared", "action": "correct", "memory_id": memory_id, "text": "The telescope lenses are upstairs."})
+        new_id = share_id(changed["result"])
+        listed = server.exporter.export()[0]["shared"]["rows"]
+        assert [r["id"] for r in listed] == [new_id]
+        assert listed[0]["person"] and listed[0]["editable"]
+        assert "upstairs" in process("reader", f"print(r.recall({new_id!r}))")
+        assert rows("SELECT archive_reason FROM archive") == [("shared_corrected",)]
+
+
+def test_person_withdraws_agent_but_agents_cannot_withdraw_others():
+    from mnemos import shared_memory as sm
+    memory_id = share_id(sm.capture(WORDS, agent_id="writer", model="test-model"))
+    assert "Only the agent" in sm.correct(memory_id, "", action="archive", agent_id="reader", model="test-model")
+    assert "error" in sm.notebook_act({"action": "correct", "memory_id": memory_id, "text": "Rewritten"})
+    assert "error" in sm.notebook_act({"action": "forget", "memory_id": memory_id})
+    assert sm.notebook()["rows"][0]["id"] == memory_id
+    assert "result" in sm.notebook_act({"action": "forget", "memory_id": memory_id, "confirmed": True})
+    assert sm.notebook()["rows"] == []
+    assert rows("SELECT state FROM engrams") == [("archived",)]
+    assert rows("SELECT archive_reason FROM archive") == [("shared_withdrawn",)]
+    assert WORDS not in process("reader", f"print(r.recall({memory_id!r}))")
+
+
+
+def test_notebook_lists_newest_first_without_writing_and_omits_superseded(monkeypatch):
+    from mnemos import shared_memory as sm
+    monkeypatch.setattr(sm, "_index_saved", lambda *args: None)
+    first = share_id(sm.capture("First words", agent_id="writer", model="test-model"))
+    second = share_id(sm.capture("Second words", agent_id="reader", model="other-model"))
+    with sqlite3.connect(sm.path()) as conn:
+        conn.execute("UPDATE engrams SET created_at='2026-01-01T00:00:00+00:00' WHERE id=?", (first,))
+        conn.execute("UPDATE engrams SET created_at='2026-01-02T00:00:00+00:00' WHERE id=?", (second,))
+    before = sm.path().read_bytes()
+    assert [r["id"] for r in sm.notebook()["rows"]] == [second, first]
+    assert sm.path().read_bytes() == before
+    with sqlite3.connect(sm.path()) as conn:
+        conn.execute('UPDATE engrams SET lineage=? WHERE id=?', ('{"superseded_by":"replacement"}', second))
+    assert [r["id"] for r in sm.notebook()["rows"]] == [first]
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY", "off")
+    before = sm.path().read_bytes()
+    assert sm.notebook() == {"status": "off", "rows": []}
+    assert "error" in sm.notebook_act({"action": "forget", "memory_id": first, "confirmed": True})
+    assert sm.path().read_bytes() == before
+
+
+@pytest.mark.parametrize("payload", [{"action": []}, {"action": "add", "text": 3},
+                                    {"action": "add", "text": "  "}, {"action": "correct", "memory_id": []}])
+def test_notebook_bad_requests_create_nothing(payload):
+    from mnemos import shared_memory as sm
+    assert "error" in sm.notebook_act(payload)
+    assert not sm.path().exists()
+
+
+def test_a_persons_shared_words_are_standing_and_an_agents_are_not(monkeypatch):
+    """The decay pass skips standing memories; what a person asks to keep never fades."""
+    from mnemos.shared_memory import notebook_act
+
+    agent = share_id(runtime(monkeypatch, "writer").capture(WORDS, shared=True))
+    added = share_id(notebook_act({"action": "add", "text": "Riley keeps the spare keys in the blue tin."})["result"])
+    assert rows("SELECT standing FROM engrams WHERE id = ?", (agent,)) == [(0,)]
+    assert rows("SELECT standing FROM engrams WHERE id = ?", (added,)) == [(1,)]
+    corrected = share_id(notebook_act({"action": "correct", "memory_id": added, "text": "The spare keys are in the red tin."})["result"])
+    assert rows("SELECT standing FROM engrams WHERE id = ?", (corrected,)) == [(1,)]
+    assert notebook_act({"action": "forget", "memory_id": corrected, "confirmed": True}).get("result")
+    assert rows("SELECT state FROM engrams WHERE id = ?", (corrected,)) == [("archived",)]
+
+
+def test_recall_waits_out_another_agents_write_instead_of_finding_nothing(monkeypatch):
+    import threading
+    import time
+
+    from mnemos import shared_memory as sm
+
+    r = runtime(monkeypatch, "writer")
+    share_id(r.capture(WORDS, shared=True))
+    held = threading.Event()
+
+    def write_briefly():
+        conn = sqlite3.connect(sm.path())
+        conn.execute("BEGIN IMMEDIATE")
+        held.set()
+        time.sleep(0.3)
+        conn.rollback()
+        conn.close()
+
+    thread = threading.Thread(target=write_briefly)
+    thread.start()
+    held.wait()
+    found = sm.recall("cedar observatory telescope lenses", agent_id="reader")
+    thread.join()
+    assert WORDS in found
+    r.close()

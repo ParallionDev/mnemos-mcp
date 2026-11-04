@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 const nav = document.querySelector('.nav');
 const EVERY = 20_000;
 const STALE_AFTER = 3 * 60_000;              // every read is fresh; three minutes without one means `mnemos log` stopped
-const TABS = ['log', 'memories', 'beliefs', 'questions', 'journal', 'notes', 'hours', 'settings'];
+const TABS = ['log', 'memories', 'shared', 'beliefs', 'questions', 'journal', 'notes', 'hours', 'settings'];
 
 let life = null, mems = [], byId = new Map(), version = null, room = null;
 

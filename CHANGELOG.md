@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add the notebook's Shared list, with filters, person-signed additions and corrections that never fade, and confirmed archival of any shared memory.
+
 - Add a separate, machine-local shared graph through `mnemos_capture(shared=True)`.
   Captures remain signed and go only to that graph. Recall adds up to three
   marked shared rows after the agent's own results; only the author can correct

@@ -292,3 +292,15 @@
 .confirm{margin-top:var(--s5);padding:var(--s4) var(--s5);border-radius:var(--r);background:var(--card)}
 .send.danger{background:#e5484d;color:#fff}
 .send.danger:hover{opacity:.9}
+
+/* Shared uses the notebook's own composer and entries. */
+.shared-tools{display:grid;gap:var(--s3);grid-template-columns:minmax(0,1fr) minmax(140px,200px);align-items:end}
+.shared-author{display:grid;gap:var(--s2);font-size:var(--t-small);color:var(--ink-3)}
+.shared-list .jentry{min-width:0;overflow-wrap:anywhere}
+.shared-list .acts{flex-wrap:wrap}
+.shared-list .acts .hint{flex:1 1 180px}
+.shared-list select{color-scheme:dark}
+.shared-list :disabled{cursor:default;opacity:.55}
+.shared-list .field:disabled:hover{background:var(--card)}
+.shared-list .reply-open:disabled:hover{color:var(--ink-3)}
+@media(max-width:520px){.shared-tools{grid-template-columns:minmax(0,1fr)}}

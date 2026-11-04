@@ -8,6 +8,7 @@ each memory retains its actual author's agent id. No scope is resolved here.
 from __future__ import annotations
 
 import os
+import json
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timezone
@@ -16,9 +17,11 @@ from pathlib import Path
 from .core.engram import Engram
 from .store.sqlite_store import EngramStore
 
+PERSON_OWNER = "person:local"  # Agent ids are slugs; a colon cannot occur in one.
 PREFIX = "shared_"
 LAST_PASS = "shared_memory:last_pass"
 PASS_HOURS = 4
+RECALL_WAIT_MS = 1000
 
 
 def enabled() -> bool:
@@ -91,6 +94,10 @@ def _index_saved(target, memory):
 
 
 def capture(content, *, agent_id, model, context="", standing=False):
+    return _capture(content, agent_id=agent_id, model=model, context=context, standing=standing)
+
+
+def _capture(content, *, agent_id, model, context="", standing=False, person=False):
     if not enabled():
         return "Nothing shared: shared memory is off for this server (MNEMOS_SHARED_MEMORY=off)."
     if standing:
@@ -99,13 +106,15 @@ def capture(content, *, agent_id, model, context="", standing=False):
         return "Nothing captured: content was empty."
     target = path()
     memory = Engram(content=content.strip(), owner_agent_id=agent_id,
-                    author_kind="agent", author_model=model, visibility="shared")
+                    author_kind="person" if person else "agent", author_model="" if person else model, visibility="shared")
     memory.id = PREFIX + memory.id
     if context.strip():
         memory.content += f"\n\nContext: {context.strip()}"
         memory.content_at_encoding = memory.content
     with closing(EngramStore(target)) as store, store.transaction():
         store.save_engram(memory)
+        if person:  # What a person asks to be kept never fades.
+            store.set_standing(memory.id, True, by=agent_id)
         store.mark_lived(agent_id)
     _index_saved(target, memory)
     return ("Saved to shared memory. Every agent on this machine can read it.\n"
@@ -117,61 +126,79 @@ def recall(query, *, agent_id, session=""):
     if not enabled():
         return ""
     try:
-        from .retrieval.reactive import ReactiveRetriever, RetrievalResult
         target = path()
-        with closing(_Graph(target)) as store, store.transaction(), closing(_index(target)) as index:
-            retriever = ReactiveRetriever(store, embedding_index=index, shared_store=store, common_share=None)
-            if query.strip().startswith(PREFIX):
-                memory = store.get_engram(query.strip())
-                if memory is None:
-                    return ""
-                if memory.state == "archived":
-                    reason = store._get_conn().execute(
-                        "SELECT archive_reason FROM archive WHERE id = ?", (memory.id,),
-                    ).fetchone()
-                    if not reason or reason[0] != "decay_below_threshold":
-                        return ""
-                    from .code_version import MAINTENANCE_CODE_VERSION
-                    if (store.min_code_version() or 0) <= MAINTENANCE_CODE_VERSION:
-                        from .store.archive import resharpen
-                        memory = resharpen(store, memory.id) or memory
-                results = [RetrievalResult(engram=memory)]
-            else:
-                results = retriever.retrieve(query, agent_id=None, person_id=None,
-                                             project_scope=None, max_results=3,
-                                             reconsolidate_results=False)
-            if not results:
-                return ""
-            # The transaction covers selection too: no concurrent withdrawal
-            # can be resurrected by reinforcement of a stale result.
-            retriever.reinforce(results, query, agent_id=agent_id,
-                                 session=f"{agent_id}:{session or os.getpid()}")
-            rows = ["Shared memory:"]
-            for result in results:
-                memory = result.engram
-                rows.append(f"- [shared] {memory.id} | {memory.owner_agent_id} | "
-                            f"{memory.author_model or 'model unknown'} | {memory.created_at[:10]}\n{memory.content}")
-            return "\n".join(rows)
+        with closing(_Graph(target)) as store, closing(_index(target)) as index:
+            # Another agent's write is brief. Waiting for it beats silently finding nothing.
+            store._get_conn().execute(f"PRAGMA busy_timeout={RECALL_WAIT_MS}")
+            with store.transaction():
+                return _recall_locked(store, index, query, agent_id, session)
     except Exception:
         return ""
 
 
+def _recall_locked(store, index, query, agent_id, session):
+    from .retrieval.reactive import ReactiveRetriever, RetrievalResult
+    retriever = ReactiveRetriever(store, embedding_index=index, shared_store=store, common_share=None)
+    if query.strip().startswith(PREFIX):
+        memory = store.get_engram(query.strip())
+        if memory is None:
+            return ""
+        if memory.state == "archived":
+            reason = store._get_conn().execute(
+                "SELECT archive_reason FROM archive WHERE id = ?", (memory.id,),
+            ).fetchone()
+            if not reason or reason[0] != "decay_below_threshold":
+                return ""
+            from .code_version import MAINTENANCE_CODE_VERSION
+            if (store.min_code_version() or 0) <= MAINTENANCE_CODE_VERSION:
+                from .store.archive import resharpen
+                memory = resharpen(store, memory.id) or memory
+        results = [RetrievalResult(engram=memory)]
+    else:
+        results = retriever.retrieve(query, agent_id=None, person_id=None,
+                                     project_scope=None, max_results=3,
+                                     reconsolidate_results=False)
+    if not results:
+        return ""
+    # The transaction covers selection too: no concurrent withdrawal
+    # can be resurrected by reinforcement of a stale result.
+    retriever.reinforce(results, query, agent_id=agent_id,
+                         session=f"{agent_id}:{session or os.getpid()}")
+    rows = ["Shared memory:"]
+    for result in results:
+        memory = result.engram
+        author = "the person" if memory.author_kind == "person" else memory.owner_agent_id
+        signature = author + (f" | {memory.author_model}" if memory.author_model else "")
+        rows.append(f"- [shared] {memory.id} | {signature} | {memory.created_at[:10]}\n{memory.content}")
+    return "\n".join(rows)
+
+
 def correct(target_id, correction, *, action, agent_id, model):
+    return _correct(target_id, correction, action=action, agent_id=agent_id, model=model)
+
+
+def _correct(target_id, correction, *, action, agent_id, model, person=False):
     if not enabled():
         return "Nothing changed: shared memory is off for this server."
     try:
+        def allowed(memory):
+            if person:
+                return action == "archive" or (memory.author_kind == "person" and memory.owner_agent_id == PERSON_OWNER)
+            return memory.author_kind == "agent" and memory.owner_agent_id == agent_id
+
         target = path()
         with closing(_Graph(target)) as store, store.transaction():
             memory = store.get_engram(target_id)
             if memory is None:
                 return "Shared memory not found. Nothing changed."
-            if memory.owner_agent_id != agent_id:
-                return "Only the agent that shared this memory may correct or withdraw it. Nothing changed."
+            if not allowed(memory):
+                return ("You can only correct shared words you wrote. Nothing changed." if person else
+                        "Only the agent that shared this memory may correct or withdraw it. Nothing changed.")
             seen = set()
             while memory.lineage.superseded_by and memory.id not in seen:
                 seen.add(memory.id)
                 memory = store.get_engram(memory.lineage.superseded_by)
-                if memory is None or memory.owner_agent_id != agent_id:
+                if memory is None or not allowed(memory):
                     return "Shared memory successor unavailable. Nothing changed."
             if action in {"forget", "archive", "remove", "delete"}:
                 store.archive_engram(memory, reason="shared_withdrawn")
@@ -183,17 +210,70 @@ def correct(target_id, correction, *, action, agent_id, model):
             if not correction.strip():
                 return "Correction needs replacement text."
             replacement = Engram(content=correction.strip(), owner_agent_id=agent_id,
-                                 author_kind="agent", author_model=model, visibility="shared")
+                                 author_kind="person" if person else "agent", author_model="" if person else model, visibility="shared")
             replacement.id = PREFIX + replacement.id
             replacement.lineage.supersedes = [memory.id]
             memory.lineage.superseded_by = replacement.id
             store.save_engram(memory)
             store.archive_engram(memory, reason="shared_corrected")
             store.save_engram(replacement)
+            if person:
+                store.set_standing(replacement.id, True, by=agent_id)
         _index_saved(target, replacement)
         return f"Corrected shared memory. Shared memory ID: {replacement.id}"
     except Exception:
         return "Shared memory unavailable. Nothing changed."
+
+
+def notebook():
+    """The notebook's separate list. Reading never creates or migrates a file."""
+    if not enabled():
+        return {"status": "off", "rows": []}
+    try:
+        target = path()
+        if not target.exists():
+            return {"status": "ready", "rows": []}
+        with closing(sqlite3.connect(f"{target.resolve().as_uri()}?mode=ro", uri=True)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = []
+            for row in conn.execute("SELECT id, content, owner_agent_id, author_kind, author_model, created_at, lineage "
+                                    "FROM engrams WHERE state IN ('active', 'dormant') ORDER BY created_at DESC, id DESC"):
+                if json.loads(row["lineage"] or "{}").get("superseded_by"):
+                    continue
+                rows.append({"id": row["id"], "content": row["content"], "author": row["owner_agent_id"],
+                             "person": row["author_kind"] == "person", "model": row["author_model"],
+                             "born": row["created_at"],
+                             "editable": row["author_kind"] == "person" and row["owner_agent_id"] == PERSON_OWNER})
+        return {"status": "ready", "rows": rows}
+    except Exception:
+        return {"status": "error", "rows": []}
+
+
+def notebook_act(request):
+    """Person-only entry point, called by the notebook's guarded act route."""
+    if not enabled():
+        return {"error": "Shared memory is off."}
+    action = request.get("action")
+    text = request.get("text", "")
+    if not isinstance(text, str):
+        return {"error": "The words must be text."}
+    if action not in ("add", "correct", "forget"):
+        return {"error": "Choose whether to add, correct, or let it go."}
+    if action != "forget" and not text.strip():
+        return {"error": "Write something first."}
+    if action == "forget" and request.get("confirmed") is not True:
+        return {"error": "Letting a memory go is asked for twice: the page asks first."}
+    if action != "add" and (not isinstance(request.get("memory_id"), str) or not request["memory_id"].startswith(PREFIX)):
+        return {"error": "Choose a shared memory first."}
+    try:
+        if action == "add":
+            said = _capture(text, agent_id=PERSON_OWNER, model=None, person=True)
+        else:
+            said = _correct(request["memory_id"], text, action="archive" if action == "forget" else "update",
+                            agent_id=PERSON_OWNER, model=None, person=True)
+        return {"result" if said.startswith(("Saved", "Corrected", "Withdrawn")) else "error": said}
+    except Exception:
+        return {"error": "Shared memory couldn't be changed just now."}
 
 
 def maintain():
