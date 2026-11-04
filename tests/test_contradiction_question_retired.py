@@ -321,7 +321,7 @@ def test_answering_one_shown_before_keeps_the_words_and_changes_nothing(tmp_path
     assert _all(db, "SELECT * FROM beliefs") == beliefs
 
 
-@pytest.mark.parametrize("verdict", ["contradicts", "compatible", "unsure"])
+@pytest.mark.parametrize("verdict", ["contradicts", "compatible"])
 def test_its_verdict_with_nothing_waiting_is_answered_plainly(tmp_path, verdict):
     """After upkeep has cleared it, the verdict is still understood: not
     "is not a verdict", but what happened to the question."""
@@ -340,6 +340,19 @@ def test_its_verdict_with_nothing_waiting_is_answered_plainly(tmp_path, verdict)
         "mnemos_correct."
     )
     assert _graph(db) == graph
+
+
+def test_unsure_with_nothing_waiting_is_a_fact_question_answered_already(tmp_path):
+    """Since 0.6.1 unsure is a verdict on a fading fact, so with nothing waiting
+    it says that, not that a question about contradictions was retired."""
+    db = tmp_path / "memory.db"
+    rt = _runtime(db)
+    try:
+        target = _memory(rt, "Riley now pushes small fixes straight to main.")
+        said = rt.reflect(target, "Can't tell.", verdict="unsure")
+    finally:
+        rt.close()
+    assert said.startswith("Nothing was pending for"), said
 
 
 def test_an_answer_goes_to_the_question_shown_not_to_a_retired_one(tmp_path):

@@ -4883,6 +4883,20 @@ class EngramStore:
             ).rowcount or 0
         return closed + removed
 
+    def reword_waiting_reflections(self, kind: str, old: str, new: str) -> int:
+        """Give questions still waiting in ``old`` words the ``new`` ones.
+
+        A question keeps the words it was asked in, so changing what's asked
+        doesn't reach one already in line. Answered ones are history, and are
+        left exactly as they are. Returns the number reworded.
+        """
+        with self.transaction() as conn:
+            return conn.execute(
+                "UPDATE reflection_queue SET prompt = ? "
+                "WHERE answered_at IS NULL AND kind = ? AND prompt = ?",
+                (new, kind, old),
+            ).rowcount or 0
+
     def mark_reflections_surfaced(self, ids: list[str]) -> None:
         """Record that these were shown, so an ignored item eventually stops."""
         if not ids:

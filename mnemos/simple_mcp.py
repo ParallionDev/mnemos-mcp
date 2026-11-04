@@ -681,6 +681,10 @@ def register_simple_tools(server: FastMCP) -> None:
         - What did it change, or teach? answer (your words become what the
           memory means), skip (nothing true comes; the memory is left as it
           is). Without a verdict, these words are taken as the answer.
+        - This fact is fading: still true? still_true (you know it holds; it's
+          woken as if recalled), changed (correct it with mnemos_correct too),
+          no_longer_true (it's let go: archived, never deleted), unsure (you
+          can't tell; it's left as it is, and goes on fading unless used).
         A belief question answered without a verdict keeps your words and
         stays open, and nothing is formed or retired.
 

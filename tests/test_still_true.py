@@ -5,11 +5,14 @@ teach you?" An experience teaches; a fact is true or it isn't. So a fading
 fact (kind ``semantic``) is asked "still true?", as its own kind of question
 ('fact'), with three verdicts:
 
-- still_true: it stays, woken as a return wakes it; unsure, this;
+- still_true: it stays, woken as a return wakes it;
 - changed: the agent corrects it with mnemos_correct, and the verdict closes
   the question and says so;
 - no_longer_true: it's let go, archived as a forget archives it, never
-  deleted.
+  deleted;
+- unsure: the question closes and the memory is left exactly as it was. In
+  0.6.0 the question told an unsure agent to answer still_true, which woke the
+  fact: its doubt became the old value's strength.
 
 Experiences keep the lesson question. Code older than the store leaves the
 new kind open and never spends it.
@@ -25,7 +28,12 @@ import pytest
 
 from mnemos import life
 from mnemos.code_version import MAINTENANCE_CODE_VERSION
-from mnemos.simple_runtime import MnemosRuntime, _STILL_TRUE_QUESTION, verdict_call_lines
+from mnemos.simple_runtime import (
+    MnemosRuntime,
+    _OLD_STILL_TRUE_QUESTION,
+    _STILL_TRUE_QUESTION,
+    verdict_call_lines,
+)
 from mnemos.store.sqlite_store import EngramStore
 
 SCOPE = {"agent_id": "nova", "person_id": "riley", "project_scope": "demo"}
@@ -107,7 +115,7 @@ def test_the_wake_shows_the_verdicts(db):
         rt.close()
     assert verdict_call_lines(ask) == [
         f'mnemos_reflect(target_id="{fact}", text="…", verdict="…")',
-        "verdict: still_true, changed or no_longer_true",
+        "verdict: still_true, changed, no_longer_true or unsure",
     ]
 
 
@@ -123,6 +131,73 @@ def test_still_true_keeps_it_and_wakes_it_as_a_return_does(db):
     finally:
         conn.close()
     assert state == "active" and accessibility > 0.1
+
+
+def _row(db: Path, memory: str) -> dict:
+    conn = sqlite3.connect(str(db))
+    conn.row_factory = sqlite3.Row
+    try:
+        return dict(conn.execute("SELECT * FROM engrams WHERE id = ?", (memory,)).fetchone())
+    finally:
+        conn.close()
+
+
+def test_unsure_closes_the_question_and_leaves_the_memory_exactly_as_it_was(db):
+    (fact,) = _faded(db, FACT)
+    before = _row(db, fact)
+    said = _reflect(db, fact, "I can't tell from here; the timetable would say.", "unsure")
+    assert said.startswith("Left as it was"), said
+    assert _asks(db)[fact][2] is not None
+    assert _row(db, fact) == before, "doubt changed the memory"
+    conn = sqlite3.connect(str(db))
+    try:
+        (answer,) = conn.execute(
+            "SELECT answer FROM reflection_queue WHERE target_id = ?", (fact,)).fetchone()
+    finally:
+        conn.close()
+    assert answer == "I can't tell from here; the timetable would say."
+
+
+def test_unsure_is_asked_once(db):
+    (fact,) = _faded(db, FACT)
+    _reflect(db, fact, "Can't tell.", "unsure")
+    rt = _runtime(db)
+    try:
+        assert rt._enqueue_lesson_reflections({"awaiting_impact": [fact]}) == 0
+        assert rt.pending_reflections() == []
+    finally:
+        rt.close()
+
+
+def test_the_question_never_tells_doubt_to_answer_still_true(db):
+    assert "still true." not in _STILL_TRUE_QUESTION.split("?", 1)[1].lower()
+    assert "unsure" in _STILL_TRUE_QUESTION
+
+
+def test_unsure_answers_only_a_fact(db):
+    (experience,) = _faded(db, EXPERIENCE)
+    before = _row(db, experience)
+    said = _reflect(db, experience, "Not sure.", "unsure")
+    assert said.startswith("Nothing recorded: unsure does not answer this question."), said
+    assert _asks(db)[experience][2] is None
+    assert _row(db, experience) == before
+
+
+def test_upkeep_gives_a_waiting_question_the_new_words_and_leaves_answered_ones(db):
+    waiting, answered = _faded(db, FACT, "The harbour office closes at five on Fridays.")
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE reflection_queue SET prompt = ?", (_OLD_STILL_TRUE_QUESTION,))
+    conn.commit()
+    conn.close()
+    _reflect(db, answered, "Still five.", "still_true")
+    rt = _runtime(db)
+    try:
+        rt.maintain()
+    finally:
+        rt.close()
+    asks = _asks(db)
+    assert asks[waiting][1] == _STILL_TRUE_QUESTION
+    assert asks[answered][1] == _OLD_STILL_TRUE_QUESTION
 
 
 def test_no_longer_true_lets_it_go_archived_never_deleted(db):
@@ -234,6 +309,6 @@ def test_the_dream_asks_fading_facts_whether_they_are_still_true(db):
     assert material["fading"] == []
     prompt = life._dream_prompt("nova-test-no-studio", material)
     section = prompt.split("Facts fading: still true?", 1)[1]
-    assert "still_true, changed or no_longer_true" in section
-    assert "If you're unsure, it's still true." in section
+    assert "still_true, changed, no_longer_true or unsure" in section
+    assert "still true." not in section.split("[", 1)[0].lower()
     assert f"{FACT} (kept" in section and f"[{fact}]" in section
