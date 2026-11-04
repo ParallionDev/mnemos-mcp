@@ -33,8 +33,45 @@ in [the guide](docs/guide.md#what-each-agent-gets).
   (Grok, Gemini CLI and OpenClaw send one that says; Hermes sends only `mcp`),
   and says what is set and what is not, with the exact command. Where it
   cannot tell, it says so and points at `mnemos connect`. The quiet hours are
-  never offered outside Claude Code: they run Claude Code. Claude Code's first
-  session is as it was.
+  offered in words true for that agent (below). Claude Code's first session is
+  as it was.
+- **Quiet hours for the other agents: an hour can be handed over.** Claude
+  Code's hours are still the only ones Mnemos runs, walled in to its memory's
+  tools. `mnemos life --hour mine|ours|dream --handoff` prints the prompt an
+  hour would get (the same words file and material) behind a fence that says it
+  isn't walled in, for any agent to take in its own session with its own
+  tools, signed as itself. It needs no `claude` and takes any model. It runs
+  nothing and writes nothing into memory, but it records the hour in
+  `hours.jsonl`, so tomorrow's material moves on and the same material can't be
+  handed twice; the prompt is stdout and what is said about it is stderr.
+  `--dry-run` with `--handoff` shows it without recording. `--runner AGENT`
+  names whose command would run the hour built in; Mnemos refuses every agent
+  but Claude Code and says why. Grok was run for real with
+  `--permission-mode dontAsk --allow 'mcp__mnemos__*' --tools none`, and its
+  model still ran a shell command, read `/etc/hosts` and called another
+  server's tool; Codex's and Gemini's flags (from their help, not run) leave
+  the shell or the file tools. The reason for each is in the table in
+  `mnemos/setup/harnesses.py`.
+- **Hermes and OpenClaw can schedule them in their own cron, if you ask.**
+  `mnemos connect hermes --hours --write` (and `openclaw`) puts three jobs,
+  `mnemos-hour-mine`, `-ours` and `-dream` at Claude's own times, in the
+  agent's scheduler; each wakes the agent to run the hand-off. They run on the
+  model and provider that agent is set to use, so they spend that provider's
+  usage and what the agent thinks over goes to it. Each job's reply goes
+  nowhere (Hermes `--deliver local`; OpenClaw `--no-deliver`, in an isolated
+  session). Nothing is scheduled by a preview, a plain `connect --write`, or
+  the first session without your yes; `--no-hours` and `mnemos uninstall` remove
+  the jobs. Hermes fires jobs only while its gateway runs. Seen against real
+  Hermes in a throwaway home; OpenClaw's commands are from its help, not run.
+  Codex, Grok and Gemini have no scheduler Mnemos uses, so they get the
+  hand-off only, and the first session says who sees an hour (OpenAI, xAI,
+  Google).
+- **Fixed: Claude Code's hooks did their work inside Grok.** Grok imports the
+  hooks in `~/.claude/settings.json` and runs them; nothing they print reaches
+  its model, but the wake still built a packet and counted a day lived. Both
+  hooks now do nothing, with no output and no write, when `GROK_HOOK_EVENT` is
+  set (Grok's docs say its hook runner sets it on every hook; seen on a hook it
+  ran). With the variable unset, which is every Claude Code session, they run.
 - **`mnemos setup-openclaw` is retired.** Its cron jobs asked the agent to call
   `mnemos_consolidate` and `mnemos_export`, which only the advanced server has,
   so on a default install they ran and did nothing. `mnemos connect openclaw`

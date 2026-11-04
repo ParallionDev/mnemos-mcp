@@ -263,8 +263,29 @@ Where an agent cannot be woken by a hook, it wakes itself: the server's
 instructions have it call `mnemos_context` first, and the first session says
 so in so many words. Upkeep between sessions (memories fading, links forming)
 is scheduled for every agent `connect` sets up. The quiet hours (an hour of its
-own, the day's work, the night's dream) run Claude Code, so they are for
-Claude Code agents only, for now.
+own, the day's work, the night's dream) are different for each agent, because
+only Claude Code can be run walled in to its memory's tools:
+
+| Agent | Quiet hours |
+|---|---|
+| Claude Code | Mnemos runs them, walled in; on unless you say no. Thoughts go to Anthropic, on your Claude plan |
+| Codex | Handed over in a session; Mnemos runs none: its flags leave the shell (not tested). Goes to OpenAI |
+| Grok | Handed over in a session; Mnemos runs none: its flags did not wall a run in (saw it). Goes to xAI |
+| Gemini CLI | Handed over in a session; Mnemos runs none (not tested). Goes to Google |
+| Hermes | Three jobs in its own cron, off unless you ask (saw it, in a throwaway home). Goes to the provider Hermes uses |
+| OpenClaw | Three jobs in its own cron, off unless you ask (docs say; not run). Goes to the provider OpenClaw uses |
+| Pi, Muse Code | Not offered |
+
+**Handed over** means `mnemos life --hour mine --handoff` (or `ours`, `dream`)
+prints the prompt an hour would get, and the agent takes it in its own session,
+with its own tools, signed as itself. Nothing Mnemos prints writes into its
+memory, and the hour is recorded so the same material is not handed twice. It is
+not walled in the way Claude Code's hours are: the agent has its usual tools,
+and the hour's words ask it to keep to what the hour is for. An hour taken in a
+session spends what that session spends. `mnemos connect hermes --hours --write`
+(or `openclaw`) schedules the three hours in that agent's own cron; each job's
+reply goes nowhere. Nothing is scheduled for any agent but Claude Code unless you
+ask.
 
 Two things worth knowing:
 
@@ -272,8 +293,10 @@ Two things worth knowing:
   MCP servers in `~/.claude.json` and the hooks in `~/.claude/settings.json`,
   so it can open Claude Code's memory. `mnemos connect grok` says so, gives
   Grok a server of its own under the same name (which takes its place in
-  Grok), and never touches Claude Code's files. To stop Grok running Claude
-  Code's hooks too, set `GROK_CLAUDE_HOOKS_ENABLED=0`.
+  Grok), and never touches Claude Code's files. Claude Code's Mnemos hooks do
+  nothing when Grok runs them (Grok marks every hook it runs with
+  `GROK_HOOK_EVENT`); to stop Grok running Claude Code's hooks at all, set
+  `GROK_CLAUDE_HOOKS_ENABLED=0`.
 - **Hermes has one memory slot.** If another provider holds `memory.provider`,
   `connect hermes` leaves it and adds only the tools (no wake or cue); to run
   it from inside Hermes without switching providers, use `--agent-safe`.
@@ -857,6 +880,8 @@ mnemos daemon status                  # What is scheduled right now
 mnemos daemon uninstall --hours --write  # Remove only the quiet hours
 mnemos daemon uninstall --write       # Remove all of it
 mnemos life --hour mine --dry-run     # What a quiet hour would see, running nothing
+mnemos life --hour dream --handoff    # Hand an hour to any agent: print its prompt, record the hour
+mnemos connect hermes --hours --write # Schedule the quiet hours in Hermes' (or OpenClaw's) own cron
 mnemos uninstall                      # What taking Mnemos out would remove
 mnemos uninstall --write              # Take it out; the memories stay
 
