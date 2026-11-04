@@ -24,15 +24,10 @@ button{font:inherit;color:inherit}
 a{color:inherit}
 .shell{position:relative;padding:28px var(--gutter) 0}
 :root{--glide:cubic-bezier(.32,.72,0,1);--gutter:28px;--drawer:332px;--gap:10px;--r-card:14px;
-  --ground:#000;--card:#111;--on-ground:#191919;--on-ground-2:#222}
+  --ground:#000;--card:#000;--on-ground:#191919;--on-ground-2:#222}
 :root[data-theme="light"]{--ground:#f3f3f3;--card:#fff;--on-ground:#fff;--on-ground-2:#fafafa}
 /* the floor's small type stays AA on the floor's own grey */
 :root[data-theme="light"] .rail{--ink-4:#696969}
-/* on the card, every surface is one step up from the card, so a plate on it still reads as a plate. Light needs no
-   change: its card is the white the light tokens were made for. */
-:root:not([data-theme="light"]) :is(main,.drawer){--floor:var(--card);--surface-1:#191919;--surface-2:#222;--surface-3:#2c2c2c;--surface-4:#363636;
-  --raised:var(--surface-2);--raised-2:var(--surface-3);--plate:var(--surface-1);--plate-hover:var(--surface-2);--plate-press:var(--surface-3);--control:var(--surface-2);
-  --ink-4:#8a8a8a;--fig-paper:var(--card)}
 
 /* who, and how warm: the name, one line, then the facts you can check, in the instrument's voice */
 .who{min-width:0;margin-top:var(--s4)}
@@ -221,6 +216,8 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .page{position:relative;flex:1;min-width:0;display:flex;margin:0;padding:0;border-radius:var(--r-card);background:none}
   main{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;border-radius:var(--r-card)}
   :root[data-theme="light"] main{box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.05),0 14px 34px rgba(0,0,0,.05)}
+  /* in the dark the card is the floor's own black, so it's known only by its edge */
+  :root:not([data-theme="light"]) :is(main,.drawer){box-shadow:0 0 0 1px rgba(255,255,255,.09)}
   .story{--drift:12px;width:100%;max-width:980px;margin-inline:auto;padding:var(--s5) 60px 72px}
   #body{padding-top:var(--s2)}
   #body.leaving{transform:translateY(calc(var(--dir,0) * var(--drift) * -.55))}
@@ -251,6 +248,7 @@ body[data-tab="notes"] .margin [data-for="notes"]{display:none}
   .drawer,body.drawer-open .drawer{position:absolute;z-index:8;top:var(--gap);right:var(--gap);bottom:var(--gap);width:var(--drawer);margin:0}
   .drawer{transform:translateX(calc(100% + 2 * var(--gap)));background:color-mix(in srgb,var(--card) 74%,transparent);-webkit-backdrop-filter:blur(26px);backdrop-filter:blur(26px);box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.28)}
   :root[data-theme="light"] .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.14)}
+  :root:not([data-theme="light"]) .drawer{box-shadow:0 0 0 1px var(--hair),0 18px 50px rgba(0,0,0,.6)}
   body.drawer-open .drawer{transform:none}
   body.ready .drawer{transition:transform .48s var(--glide),visibility 0s .48s}
   body.ready.drawer-open .drawer{transition:transform .48s var(--glide),visibility 0s}
