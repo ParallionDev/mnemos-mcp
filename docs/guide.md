@@ -496,7 +496,7 @@ Use mnemos_capture for stable preferences, decisions, project state, workflows, 
 Quietly refresh mnemos_handoff after meaningful progress or a changed plan, when unresolved work remains, and before pausing, ending, delegating, or changing context. Write it in your own words. Do not do this after every ordinary turn.
 Use mnemos_recall before relying on memory from prior sessions.
 Use mnemos_correct when a remembered fact is stale, wrong, superseded, or should be forgotten.
-If the context packet asks you something about your own memory — what a capture changed, what a fading memory taught, whether a fading fact is still true — answer it with mnemos_reflect, in your own words. If nothing true comes to mind, leave it. A fading fact takes a verdict: `still_true` keeps it (and is the answer when you're unsure), `changed` closes the question while you correct it with mnemos_correct, and `no_longer_true` lets it go, archived, never deleted.
+If the context packet asks you something about your own memory — what a capture changed, what a fading memory taught, whether a fading fact is still true — answer it with mnemos_reflect, in your own words. If nothing true comes to mind, leave it. A fading fact takes a verdict: `still_true` wakes it, for when you know it holds; `changed` closes the question while you correct it with mnemos_correct; `no_longer_true` lets it go, archived, never deleted; and `unsure` leaves it as it is, to go on fading unless you use it.
 Use mnemos_health if I ask whether memory is working.
 
 Do not mention tools unless I ask. Just use the memory system quietly and tell me what you remembered when it matters.

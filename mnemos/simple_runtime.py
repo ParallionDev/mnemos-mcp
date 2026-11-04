@@ -799,8 +799,15 @@ _FADING_RULE_VERSION = 13
 _FADING_QUESTION = "This is fading. What did it teach you? The lesson outlives the details."
 
 # What the lesson pass asks about a fact that has faded, in place of what it
-# taught: a fact teaches nothing, it is true or it isn't. Unsure, it stays.
+# taught: a fact teaches nothing, it is true or it isn't. Unsure says so, and
+# leaves it as it is: doubt is no reason for a memory to grow stronger.
 _STILL_TRUE_QUESTION = (
+    "This fact is fading. Is it still true? If it changed, correct it; "
+    "if you can't tell, say unsure, and it's left as it is."
+)
+# What 0.6.0 asked, which told doubt to answer still_true. Upkeep rewords a
+# question still waiting in these words.
+_OLD_STILL_TRUE_QUESTION = (
     "This fact is fading. Is it still true? If it changed, correct it; "
     "if you're unsure, it's still true."
 )
@@ -926,7 +933,7 @@ _VERDICTS: dict[str, tuple[str, ...]] = {
     "reaffirm": ("hold", "decline", "retire", "not_now"),
     "impact": ("answer", "skip"),
     "lesson": ("answer", "skip"),
-    "fact": ("still_true", "changed", "no_longer_true"),
+    "fact": ("still_true", "changed", "no_longer_true", "unsure"),
 }
 VERDICTS = frozenset(v for verdicts in _VERDICTS.values() for v in verdicts)
 
@@ -936,7 +943,7 @@ VERDICTS = frozenset(v for verdicts in _VERDICTS.values() for v in verdicts)
 # verdicts it took, and is told so plainly. A memory that is wrong is corrected
 # with mnemos_correct, which also names the notes that still say the old thing.
 _RETIRED_KINDS = frozenset(RETIRED_REFLECTION_KINDS)
-_RETIRED_VERDICTS = frozenset({"contradicts", "compatible", "unsure"})
+_RETIRED_VERDICTS = frozenset({"contradicts", "compatible"})
 _RETIRED_QUESTION = "Mnemos no longer asks whether a memory contradicts an earlier one"
 _RETIRED_FIX = "If a memory is wrong, correct it with mnemos_correct."
 
@@ -960,14 +967,15 @@ _VERDICT_HELP = {
     "impact": "answer (your words become what it meant) or skip (nothing true comes)",
     "lesson": "answer (your words become what it taught) or skip (nothing true comes)",
     "fact": (
-        "still_true (it stays; when unsure, this), changed (correct it with "
-        "mnemos_correct) or no_longer_true (it's let go)"
+        "still_true (you know it holds; it's woken as if recalled), changed "
+        "(correct it with mnemos_correct), no_longer_true (it's let go) or "
+        "unsure (you can't tell; it's left as it is)"
     ),
 }
 _VERDICT_GUIDE = (
     "Is it a belief you hold: hold, decline or not_now. Still true: hold, "
-    "retire, decline or not_now. A fading fact: still_true, changed or "
-    "no_longer_true. A lesson or what a memory changed: answer or skip."
+    "retire, decline or not_now. A fading fact: still_true, changed, "
+    "no_longer_true or unsure. A lesson or what a memory changed: answer or skip."
 )
 
 
@@ -3698,13 +3706,19 @@ class MnemosRuntime:
         still_true wakes it as a return does (``_reinforce_returned``).
         changed leaves the memory for mnemos_correct, which writes the new
         words and retires these. no_longer_true lets it go as a forget does
-        (``_forget_pair``): archived with its note, never deleted.
+        (``_forget_pair``): archived with its note, never deleted. unsure
+        changes nothing: it goes on fading unless it's used.
         """
         assert self._store is not None
         engram = self._store.get_engram(item["target_id"])
         if engram is None or engram.state == "archived":
             return f"Recorded, but the memory {item['target_id']} is no longer there."
         words = " ".join((engram.content or "").split())[:80]
+        if verdict == "unsure":
+            return (
+                "Left as it was: you can't tell. It goes on fading unless you use it.\n"
+                f"  Memory: {words}"
+            )
         if verdict == "still_true":
             from .retrieval.reactive import RetrievalResult
 
@@ -6726,6 +6740,11 @@ class MnemosRuntime:
             # And a question no longer asked (the contradiction question)
             # stops waiting, so it never holds a memory's one place in line.
             self._store.purge_retired_reflections()
+            # A fact still waiting in 0.6.0's words would tell doubt to answer
+            # still_true.
+            self._store.reword_waiting_reflections(
+                "fact", _OLD_STILL_TRUE_QUESTION, _STILL_TRUE_QUESTION,
+            )
             self._enqueue_lesson_reflections(stats.get("softening") or {})
             self._enqueue_impact_reflections(limit=2)
             # Judgement the agent alone can do, proposed rarely: whether a

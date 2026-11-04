@@ -414,8 +414,9 @@ def _dream_prompt(agent_id, material) -> str:
     if material.get("facts"):
         sections.append(
             "Facts fading: still true?\n"
-            "(Answer with a verdict: still_true, changed or no_longer_true. If you're "
-            "unsure, it's still true. If it changed, correct it with mnemos_correct too.)\n"
+            "(Answer with a verdict: still_true, changed, no_longer_true or unsure. If you "
+            "can't tell, say unsure, and it's left as it is. If it changed, correct it with "
+            "mnemos_correct too.)\n"
             + "\n".join(
                 f"- {q['text']}" + (f" (kept {q['kept']})" if q["kept"] else "") + f" [{q['target_id']}]"
                 for q in material["facts"]))
