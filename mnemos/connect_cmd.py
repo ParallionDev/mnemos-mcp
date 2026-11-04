@@ -185,6 +185,9 @@ def _one(h: hs.Harness, args: argparse.Namespace) -> int:
     else:
         _say(f"Memory: its own, {scope.agent_id} ({db}). {h.label} will not share Claude Code's or "
              "any other agent's; to share one, pass --agent-id.")
+    from .shared_memory import enabled
+    _say("Shared memory: this agent can read and add to the machine's shared memory."
+         if enabled() else "Shared memory: off for this server (MNEMOS_SHARED_MEMORY=off).")
     _say()
 
     if h.level == hs.PRINTS:

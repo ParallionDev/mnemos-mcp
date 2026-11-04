@@ -277,7 +277,7 @@ class MnemosMemoryProviderCore:
         revision = self._store_revision()
         if cached and cached[0] == clean and revision is not None and cached[1] == revision:
             return cached[2]
-        recalled = self._runtime.recall(clean, max_results=self._config.max_recall_results)
+        recalled = self._runtime._recall_own(clean, max_results=self._config.max_recall_results)
         if "No relevant continuity found" in recalled:
             return ""
         context = _truncate("# Mnemos Recall\n" + recalled, self._config.max_context_chars)

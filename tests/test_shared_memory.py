@@ -1,0 +1,301 @@
+"""Default tool paths, separate agents and processes, never the real home."""
+import os
+import re
+import sqlite3
+import subprocess
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import pytest
+
+from mnemos.simple_runtime import MnemosRuntime
+
+WORDS = "The cedar observatory keeps spare telescope lenses in the west cabinet."
+
+
+@pytest.fixture(autouse=True)
+def shared_home(monkeypatch):
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY_DB", str(Path.home() / "shared-memory.db"))
+    monkeypatch.delenv("MNEMOS_SHARED_MEMORY", raising=False)
+    monkeypatch.setenv("MNEMOS_AGENT_MODEL", "test-model")
+
+
+def runtime(monkeypatch, agent):
+    monkeypatch.setenv("MNEMOS_AGENT_ID", agent)
+    return MnemosRuntime(use_dedicated_model=False)
+
+
+def share_id(reply):
+    match = re.search(r"shared_engram_\w+", reply)
+    assert match, reply
+    return match[0]
+
+
+def rows(sql, params=()):
+    with sqlite3.connect(f"file:{os.environ['MNEMOS_SHARED_MEMORY_DB']}?mode=ro", uri=True) as conn:
+        return conn.execute(sql, params).fetchall()
+
+
+def process(agent, code):
+    env = dict(os.environ, MNEMOS_AGENT_ID=agent)
+    return subprocess.run([sys.executable, "-c", "from mnemos.simple_runtime import MnemosRuntime\nr=MnemosRuntime(use_dedicated_model=False)\n" + code + "\nr.close()"],
+                          env=env, text=True, capture_output=True, check=True).stdout.strip()
+
+
+def test_two_processes_defaults():
+    written = process("writer", f"print(r.capture({WORDS!r}, shared=True))")
+    memory_id = share_id(written)
+    found = process("reader", "print(r.recall('telescope lenses'))")
+    assert WORDS in found
+    assert "[shared]" in found and "writer | test-model | " in found
+    assert datetime.now(timezone.utc).date().isoformat() in found
+    assert memory_id in found
+    assert not (Path.home() / ".mnemos/writer.db").exists()
+    assert not (Path.home() / ".mnemos/shared.db").exists()
+    assert rows("SELECT access_count FROM engrams WHERE id=?", (memory_id,))[0][0] > 0
+
+
+def test_sharing_leaves_own_file_unchanged_and_own_rows_first(monkeypatch):
+    r = runtime(monkeypatch, "writer")
+    r.capture("The telescope lenses need cleaning before Friday.")
+    r.recall("telescope lenses", max_results=1)  # once-per-session reinforcement
+    before = r.recall("telescope lenses", max_results=1)
+    dump = "\n".join(r._store._get_conn().iterdump())
+    for i in range(5):
+        share_id(r.capture(WORDS + f" Shelf {i}.", shared=True))
+    assert "\n".join(r._store._get_conn().iterdump()) == dump
+    after = r.recall("telescope lenses", max_results=1)
+    assert after.split("\n\nShared memory:")[0] == before
+    assert after.count("[shared]") == 3
+    assert not r._store._get_conn().execute("SELECT id FROM engrams WHERE id LIKE 'shared_%'").fetchall()
+    assert WORDS not in r.context()
+    r.close()
+
+
+def test_absent_file_is_never_created(monkeypatch):
+    r = runtime(monkeypatch, "reader")
+    from mnemos import shared_memory
+    assert "[shared]" not in r.recall("telescope")
+    assert not shared_memory.maintain()
+    assert not shared_memory.path().exists()
+    assert not (Path.home() / ".mnemos/shared.db").exists()
+    r.close()
+
+
+def test_author_only_correction_and_withdrawal(monkeypatch):
+    writer = runtime(monkeypatch, "writer")
+    old = share_id(writer.capture(WORDS, shared=True))
+    other = runtime(monkeypatch, "reader")
+    before = rows("SELECT id, content, state FROM engrams")
+    for action in ("update", "archive"):
+        assert "Only the agent" in other.correct("replacement", target_id=old, action=action)
+    assert rows("SELECT id, content, state FROM engrams") == before
+    new = share_id(writer.correct("The telescope lenses are now in the east cabinet.", target_id=old))
+    assert "east cabinet" in other.recall(new)
+    assert WORDS not in other.recall(old)
+    assert "Withdrawn" in writer.correct("", target_id=old, action="archive")
+    assert "east cabinet" not in other.recall("telescope lenses", include_archived=True)
+    assert "east cabinet" not in other.recall(new)
+    assert rows("SELECT state FROM engrams ORDER BY id") == [("archived",), ("archived",)]
+    assert len(rows("SELECT id FROM archive")) == 2
+    writer.close(); other.close()
+
+
+def test_off_switch(monkeypatch):
+    r = runtime(monkeypatch, "writer")
+    memory_id = share_id(r.capture(WORDS, shared=True))
+    before = rows("SELECT id, content, state, access_count FROM engrams")
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY", "off")
+    assert "off" in r.capture("Another memory", shared=True)
+    assert "[shared]" not in r.recall("telescope lenses")
+    assert WORDS not in r.recall(memory_id)
+    assert "off" in r.correct("", target_id=memory_id, action="archive")
+    from mnemos import shared_memory
+    assert not shared_memory.maintain()
+    assert rows("SELECT id, content, state, access_count FROM engrams") == before
+    r.close()
+
+
+def test_four_hour_gate_and_process_lock(monkeypatch):
+    from mnemos import shared_memory as sm
+    r = runtime(monkeypatch, "writer")
+    r.capture(WORDS, shared=True)
+    assert sm.maintain()
+    first = rows("SELECT value FROM meta WHERE key=?", (sm.LAST_PASS,))[0][0]
+    assert not sm.maintain()
+    with sqlite3.connect(sm.path()) as conn:
+        conn.execute("UPDATE meta SET value=? WHERE key=?", ((datetime.now(timezone.utc)-timedelta(hours=4, minutes=1)).isoformat(), sm.LAST_PASS))
+    lock = sqlite3.connect(sm.path())
+    lock.execute("BEGIN IMMEDIATE")
+    assert process("reader", "from mnemos.shared_memory import maintain\nprint(maintain())") == "False"
+    lock.rollback(); lock.close()
+    assert sm.maintain()
+    assert rows("SELECT value FROM meta WHERE key=?", (sm.LAST_PASS,))[0][0] != first
+    assert rows("SELECT COUNT(*) FROM reflection_queue")[0][0] == 0
+    r.close()
+
+
+def test_corrupt_file_never_breaks_recall_or_upkeep(monkeypatch):
+    from mnemos import shared_memory as sm
+    r = runtime(monkeypatch, "reader")
+    r.capture("The telescope lenses need cleaning.")
+    r.recall("telescope lenses")
+    before = r.recall("telescope lenses")
+    sm.path().write_bytes(b"not a sqlite database")
+    assert r.recall("telescope lenses") == before
+    assert "Completed:" in r.maintain()
+    assert sm.path().read_bytes() == b"not a sqlite database"
+    r.close()
+
+
+def test_default_path_and_standing_refusal(monkeypatch):
+    from mnemos import shared_memory as sm
+    monkeypatch.delenv("MNEMOS_SHARED_MEMORY_DB")
+    assert sm.path() == Path.home() / ".mnemos/shared-memory.db"
+    monkeypatch.setenv("MNEMOS_SHARED_MEMORY_DB", str(Path.home() / "shared-memory.db"))
+    r = runtime(monkeypatch, "writer")
+    assert "cannot be standing" in r.capture(WORDS, shared=True, standing=True)
+    assert not sm.path().exists()
+    r.close()
+
+
+def test_shared_id_returns_whole_and_reinforces(monkeypatch):
+    r = runtime(monkeypatch, "writer")
+    content = WORDS + " A long account." * 500
+    memory_id = share_id(r.capture(content, shared=True))
+    assert content in r.recall(memory_id)
+    assert rows("SELECT access_count FROM engrams WHERE id=?", (memory_id,))[0][0] == 1
+    assert not r.db_path.exists()
+    r.close()
+
+
+def test_meaning_search_with_no_shared_query_words(monkeypatch):
+    import mnemos.store.embedding_index as ei
+
+    class Vector(list):
+        def tolist(self):
+            return list(self)
+
+    class Model:
+        def encode(self, texts, **kwargs):
+            def vector(text):
+                return Vector([1.0, 0.0] if any(w in text.lower() for w in ("beacon", "lighthouse")) else [0.0, 1.0])
+            return vector(texts) if isinstance(texts, str) else [vector(t) for t in texts]
+
+    class Embedder(ei._LocalEmbedder):
+        def _get_model(self):
+            return Model()
+
+    monkeypatch.setattr(ei, "_check_local_deps", lambda: True)
+    monkeypatch.setattr(ei, "_LocalEmbedder", Embedder)
+    r = runtime(monkeypatch, "writer")
+    memory_id = share_id(r.capture("The lighthouse shines nightly.", shared=True))
+    reader = runtime(monkeypatch, "reader")
+    assert memory_id in reader.recall("beacon")
+    assert rows("SELECT COUNT(*) FROM passage_vectors")[0][0] > 0
+    r.close(); reader.close()
+
+
+@pytest.mark.lived_time
+def test_existing_passes_fade_and_link_across_authors(monkeypatch):
+    from mnemos import shared_memory as sm
+    from mnemos.store.sqlite_store import EngramStore
+    a = runtime(monkeypatch, "writer")
+    first = share_id(a.capture(WORDS, shared=True))
+    b = runtime(monkeypatch, "reader")
+    second = share_id(b.capture("The cedar observatory telescope lenses need a clean west cabinet.", shared=True))
+    old = datetime.now(timezone.utc) - timedelta(days=4)
+    store = EngramStore(sm.path())
+    for memory_id in (first, second):
+        memory = store.get_engram(memory_id)
+        memory.last_accessed = old.isoformat()
+        store.save_engram(memory)
+        for day in range(5):
+            store.mark_lived(memory.owner_agent_id, old + timedelta(days=day))
+    store.close()
+    assert sm.maintain()
+    assert all(value < .5 for (value,) in rows("SELECT strength FROM engrams"))
+    assert rows("SELECT source_id, target_id FROM connections WHERE source_id=? AND target_id=?", (first, second))
+    assert rows("SELECT COUNT(*) FROM reflection_queue")[0][0] == 0
+    assert rows("SELECT COUNT(*) FROM hypomnema_entries")[0][0] == 0
+    a.close(); b.close()
+
+
+def test_dormant_shared_memory_wakes(monkeypatch):
+    from mnemos import shared_memory as sm
+    r = runtime(monkeypatch, "writer")
+    memory_id = share_id(r.capture(WORDS, shared=True))
+    with sqlite3.connect(sm.path()) as conn:
+        conn.execute("UPDATE engrams SET state='dormant', accessibility=.03 WHERE id=?", (memory_id,))
+    reader = runtime(monkeypatch, "reader")
+    assert memory_id in reader.recall("telescope lenses")
+    assert rows("SELECT state FROM engrams WHERE id=?", (memory_id,)) == [("active",)]
+    r.close(); reader.close()
+
+
+def test_upkeep_integration_and_failure_isolation(monkeypatch):
+    from mnemos import shared_memory as sm
+    r = runtime(monkeypatch, "writer")
+    r.capture(WORDS, shared=True)
+    assert "Completed:" in r.maintain()
+    assert rows("SELECT value FROM meta WHERE key=?", (sm.LAST_PASS,))
+    r.close()
+
+
+def test_mcp_tools_keep_twelve_and_shared_capture(monkeypatch):
+    import anyio
+    from mcp.server.fastmcp import FastMCP
+    from mnemos import simple_mcp
+    from mnemos.simple_runtime import SIMPLE_TOOL_NAMES
+    r = runtime(monkeypatch, "writer")
+    monkeypatch.setattr(simple_mcp, "_get_runtime", lambda: r)
+    server = FastMCP("shared-test")
+    simple_mcp.register_simple_tools(server)
+
+    async def check():
+        tools = await server.list_tools()
+        assert {t.name for t in tools} == set(SIMPLE_TOOL_NAMES)
+        assert len(tools) == 12
+        capture = next(t for t in tools if t.name == "mnemos_capture")
+        assert capture.inputSchema["properties"]["shared"]["default"] is False
+        result = await server.call_tool("mnemos_capture", {"content": WORDS, "shared": True})
+        assert "Saved to shared memory" in str(result)
+        assert not r.db_path.exists()
+    anyio.run(check)
+    assert "shared" not in simple_mcp.SERVER_INSTRUCTIONS.lower().replace("may share this memory", "")
+    r.close()
+
+
+def test_failed_pass_rolls_back_and_releases_lock(monkeypatch):
+    from mnemos import shared_memory as sm
+    import mnemos.consolidation.decay as decay
+    r = runtime(monkeypatch, "writer")
+    r.capture(WORDS, shared=True)
+    original = decay.run_decay_pass
+
+    def broken(store, *args, **kwargs):
+        store.set_meta("half-finished", "yes")
+        raise RuntimeError("pass failed")
+
+    monkeypatch.setattr(decay, "run_decay_pass", broken)
+    assert not sm.maintain()
+    assert not rows("SELECT key FROM meta WHERE key IN (?, ?)", (sm.LAST_PASS, "half-finished"))
+    monkeypatch.setattr(decay, "run_decay_pass", original)
+    assert sm.maintain()
+    r.close()
+
+
+def test_faded_id_restores_but_withdrawn_never_does(monkeypatch):
+    from mnemos import shared_memory as sm
+    from mnemos.store.sqlite_store import EngramStore
+    r = runtime(monkeypatch, "writer")
+    memory_id = share_id(r.capture(WORDS, shared=True))
+    store = EngramStore(sm.path())
+    store.archive_engram(store.get_engram(memory_id), reason="decay_below_threshold")
+    store.close()
+    assert WORDS in r.recall(memory_id)
+    assert rows("SELECT state FROM engrams WHERE id=?", (memory_id,)) == [("active",)]
+    assert "Withdrawn" in r.correct("", target_id=memory_id, action="archive")
+    assert WORDS not in r.recall(memory_id)
+    r.close()

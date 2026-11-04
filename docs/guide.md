@@ -174,6 +174,27 @@ Agents do not need to pass tags, memory kinds, confidence, source types, or
 agent IDs. Mnemos resolves scope once from CLI flags, environment, config, and
 reasonable defaults.
 
+### Shared memory on this machine
+
+Each agent keeps its own graph. To contribute to a separate collective graph,
+call `mnemos_capture(content, shared=True, signed_as="your-model-id")`. Only the
+shared graph receives those words; nothing is copied into the agent's own memory.
+Every agent on this machine can read them, signed with the author's agent and
+model. Plain capture is unchanged.
+
+Recall adds up to three shared rows after its own results, marked with author
+and day; a shared id returns the whole memory. Using it strengthens the shared
+original. Only its author agent can correct it by `target_id`, or withdraw it
+with `mnemos_correct("", target_id=id, action="archive")`. Withdrawals remain
+archived in the file. Shared memories fade and link during upkeep, at most once
+per four hours, but never become standing or ask questions. They do not enter
+the wake, cue, journal, or quiet-hour material.
+
+The file is `~/.mnemos/shared-memory.db` (`MNEMOS_SHARED_MEMORY_DB` overrides it),
+separate from the older advanced shared pool. It is created only on a share.
+`MNEMOS_SHARED_MEMORY=off` disables reading and writing for that server. Sharing
+is on by default, but nothing enters unless an agent chooses to share it.
+
 ### Three Authorship Boundaries
 
 Mnemos keeps three kinds of writing distinct:

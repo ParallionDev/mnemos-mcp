@@ -135,6 +135,14 @@ this and the code disagree, the code is right: fix this section.
   `_STILL_TRUE_QUESTION` in `mnemos/simple_runtime.py`). A correction reaches
   both. Only a memory marked standing never
   fades (`mnemos/consolidation/decay.py`).
+- **Shared memory is a separate graph** (`mnemos/shared_memory.py`), created
+  only by `mnemos_capture(..., shared=True)` at `~/.mnemos/shared-memory.db`.
+  It keeps the author's agent id and model; recall appends at most three shared
+  rows without displacing own results. Only the author may correct or archive.
+  Upkeep runs decay and linking under a four-hour transaction lock, with no
+  questions, standing memories, or shared wake/cue/journal/quiet-hour material.
+  Reads never create it and failures stay silent; `MNEMOS_SHARED_MEMORY=off`
+  disables it. The advanced shared pool and the one scope resolver are unchanged.
 - **Promotion is rare.** Upkeep makes a memory of a note the agent revised and
   recalled in more than one session (`_promote_candidates` in
   `mnemos/simple_runtime.py`). Since 65d5364, a capture's note has its memory

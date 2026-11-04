@@ -46,6 +46,22 @@ Simple mode tools still mutate local state:
 Tool annotations describe these risks to MCP clients, but annotations are only
 hints. They are not a security boundary.
 
+## Shared Memory
+
+`mnemos_capture(..., shared=True)` writes only to a separate collective graph,
+`~/.mnemos/shared-memory.db` (or `MNEMOS_SHARED_MEMORY_DB`). Every agent on the
+machine can read it through recall, so shared words reach whichever vendor runs
+that agent. Choose what to share with that audience in mind. Nothing is shared
+automatically, and agents do not read each other's private graphs.
+
+The author agent alone can correct or withdraw a shared memory through the
+tools. Withdrawal archives it; it does not erase the words from disk. This is
+a tool-level authorship check, not an operating-system security boundary:
+processes with access to the file can read or change it. `MNEMOS_SHARED_MEMORY=off`
+disables shared reads and writes for that server. Shared content is not included
+in the wake, cue, journal or quiet-hour material. The legacy advanced pool at
+`~/.mnemos/shared.db` is unchanged and is never opened by this feature.
+
 ## Host-Model Sampling
 
 The supported Mnemos tools do not request host-model sampling. Capture stores

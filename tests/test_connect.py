@@ -111,7 +111,7 @@ def test_a_preview_and_the_list_write_nothing(agents, tmp_path, capsys):
     assert "Gemini CLI: on this machine" in listing and "Pi: not installed here" in listing
     for key in ("codex", "grok", "gemini", "hermes", "openclaw", "pi", "muse"):
         assert main(["connect", key]) == 0
-        capsys.readouterr()
+        assert "can read and add to the machine's shared memory" in _out(capsys)
     assert sorted(p for p in tmp_path.rglob("*") if p.is_file()) == before
     assert not (tmp_path / "calls.log").exists()
     assert not (Path.home() / ".mnemos").exists()

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Add a separate, machine-local shared graph through `mnemos_capture(shared=True)`.
+  Captures remain signed and go only to that graph. Recall adds up to three
+  marked shared rows after the agent's own results; only the author can correct
+  or withdraw them. Decay and linking run under a four-hour upkeep lock, without
+  questions or standing memories. Missing or unreadable shared stores never
+  break recall or own upkeep. `MNEMOS_SHARED_MEMORY=off` opts a server out.
+- Connect previews explain shared memory access. Shared words are readable by
+  every agent on the machine and therefore by the vendors running those agents.
+  Maintenance code version is 27; the twelve simple tools are unchanged.
+
 ## 0.6.1 (2026-11-04)
 
 ### Connect Mnemos to more agents

@@ -4355,7 +4355,7 @@ class MnemosRuntime:
         that did not open one leaves no row. Code older than the store writes
         none, since what a row records is newer code's to decide.
         """
-        if self._store is None or self._read_only:
+        if self._store is None or self._read_only or trace.get("shared"):
             return
         try:
             if self._older_than_store() is not None:
@@ -5308,6 +5308,7 @@ class MnemosRuntime:
         signed_as: str = "",
         standing: bool = False,
         author_kind: str = "agent",
+        shared: bool = False,
     ) -> str:
         """Capture durable continuity without exposing Mnemos internals.
 
@@ -5337,6 +5338,15 @@ class MnemosRuntime:
         ``author_kind`` 'person' is the person's own words, through ``mnemos
         remember``: unsigned (no model is resolved), its impact the person's,
         and never counted as the agent's own."""
+
+        if shared:
+            from . import shared_memory
+            if self._trace is not None:
+                self._trace["shared"] = True
+            return shared_memory.capture(
+                content, context=context, agent_id=self.scope.agent_id,
+                model=shared_memory.author_model(self, signed_as), standing=standing,
+            )
 
         if author_kind not in ("agent", "person"):
             raise ValueError(f"author_kind must be 'agent' or 'person', not {author_kind!r}")
@@ -5487,6 +5497,20 @@ class MnemosRuntime:
     @_notice_when_older
     @_traced("recall")
     def recall(
+        self, query: str, max_results: int = RECALL_RESULTS,
+        include_archived: bool = False, standing: bool = False,
+    ) -> str:
+        from . import shared_memory
+        if standing or not query.strip():
+            return self._recall_own(query, max_results, include_archived, standing)
+        if query.strip().startswith(shared_memory.PREFIX):
+            shared = shared_memory.recall(query, agent_id=self.scope.agent_id, session=harness_session())
+            return shared or self._recall_own(query, max_results, include_archived, standing)
+        own = self._recall_own(query, max_results, include_archived, standing)
+        shared = shared_memory.recall(query, agent_id=self.scope.agent_id, session=harness_session())
+        return own + "\n\n" + shared if shared else own
+
+    def _recall_own(
         self,
         query: str,
         max_results: int = RECALL_RESULTS,
@@ -6435,6 +6459,15 @@ class MnemosRuntime:
         revision.
         """
 
+        from . import shared_memory
+        if target_id.strip().startswith(shared_memory.PREFIX):
+            if self._trace is not None:
+                self._trace["shared"] = True
+            return shared_memory.correct(
+                target_id.strip(), correction, action=(action or "update").strip().lower(),
+                agent_id=self.scope.agent_id, model=shared_memory.author_model(self, signed_as),
+            )
+
         action = (action or "").strip().lower() or "update"
         forget = action in _FORGET_ACTIONS
         marking = action in _STANDING_ACTIONS
@@ -6824,6 +6857,9 @@ class MnemosRuntime:
 
         if auto and not requested_deep and self._maintains_later():
             return self._maintain_later()
+
+        from . import shared_memory
+        shared_memory.maintain()
 
         can_run_deep = requested_deep and self._llm_client is not None
         # config={} meant the whole consolidation block in ~/.mnemos/config.json

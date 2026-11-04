@@ -51,7 +51,7 @@ def test_external_forget_during_recall_does_not_pin_stale_cache(provider, monkey
         use_dedicated_model=False,
     )
     other._ensure_init()
-    recall = provider._runtime.recall
+    recall = provider._runtime._recall_own
     calls = []
     revisions = []
 
@@ -69,7 +69,7 @@ def test_external_forget_during_recall_does_not_pin_stale_cache(provider, monkey
             revisions.append(provider._store_revision())
         return text
 
-    monkeypatch.setattr(provider._runtime, "recall", recall_then_concurrent_forget)
+    monkeypatch.setattr(provider._runtime, "_recall_own", recall_then_concurrent_forget)
     try:
         first = provider.prefetch("studio door code")
         assert token in first  # One in-flight read may return its older snapshot.

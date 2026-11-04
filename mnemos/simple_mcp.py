@@ -491,6 +491,7 @@ def register_simple_tools(server: FastMCP) -> None:
         impact: str = "",
         signed_as: str = "",
         standing: bool = False,
+        shared: bool = False,
     ) -> str:
         """Capture durable continuity from the current conversation.
 
@@ -511,6 +512,9 @@ def register_simple_tools(server: FastMCP) -> None:
                 is what it meant. Leave it out rather than padding it; your
                 memory will ask you later if it needs one.
             signed_as: Your exact model id, as your system prompt gives it.
+            shared: True to save only to the separate shared memory, readable
+                by every agent on this machine. Signed with your agent and model.
+                Shared memories cannot be standing and ask no questions.
             standing: True when this is how the human wants you to work in
                 every session, not just now.
         """
@@ -522,6 +526,7 @@ def register_simple_tools(server: FastMCP) -> None:
             impact=_text("impact", impact, MAX_REFLECTION_CHARS),
             signed_as=_text("signed_as", signed_as, MAX_ID_CHARS),
             standing=bool(standing),
+            shared=bool(shared),
         ))
 
     @server.tool(
@@ -560,7 +565,8 @@ def register_simple_tools(server: FastMCP) -> None:
         older ones a newer handoff replaced, each marked with who left
         it and when. Journal entries are searched too, marked as journal
         with who wrote them and when. A capture comes back once, as its
-        memory. max_results counts every row, of every kind.
+        memory. max_results counts your own rows. Up to three shared memories
+        follow, marked with their author and day. A shared id returns it whole.
 
         A memory that has gone quiet comes back when the query matches it
         well, and wakes. One that faded further, into the archive, comes
@@ -605,6 +611,8 @@ def register_simple_tools(server: FastMCP) -> None:
         two), or nothing is changed. Set action to forget/archive/remove/delete
         to archive it. A correction that names nothing is captured as fresh
         high-confidence continuity.
+
+        A shared target_id can only be corrected or archived by its author agent.
 
         Set action to mark_standing, with a memory's id as target_id, when it
         is how the human wants you to work in every session, not just now: it
