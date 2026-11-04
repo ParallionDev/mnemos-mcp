@@ -36,7 +36,7 @@
   --floor:#fff;--surface-1:#f5f5f5;--surface-2:#ededed;--surface-3:#e4e4e4;--surface-4:#d9d9d9;
   --raised:#fff;--raised-2:var(--surface-1);--control:#fff;
   /* 19.8, 8.9, 5.9 and 4.95 to 1 on the floor, no lower than 4.5 on a plate */
-  --ink-1:#0a0a0a;--ink-2:#4a4a4a;--ink-3:#636363;--ink-4:#6f6f6f;
+  --ink-1:#0a0a0a;--ink-2:#4a4a4a;--ink-3:#636363;--ink-4:#696969;
   --hair:rgba(0,0,0,.1);--hair-2:rgba(0,0,0,.22);--focus:rgba(0,0,0,.6);
   --signal:#2a62c4;--danger:#d02c32;
   --glow-rgb:0,0,0;--glow:0;

@@ -915,7 +915,11 @@ function frame(now) {
   // that, which for a mind moving this softly is heat and nothing you'd see. The slow turn alone, 15: it moves less
   // than a pixel a frame, and from across the room every frame is the whole mind, the costliest frame there is
   const gap = covered ? 250 : !animating && !dragging && now - lastInput > 1500 ? 66 : 1000 / 60;
-  if (now - last < gap - 1.5) { requestAnimationFrame(frame); return; }
+  if (now - last < gap - 1.5) {
+    // covered, it rests between frames rather than ask the screen hundreds of times a second whether it's time yet
+    if (covered) setTimeout(() => requestAnimationFrame(frame), gap - (now - last)); else requestAnimationFrame(frame);
+    return;
+  }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
   // each frame against the pace it asked for, slow ones too (counted only below a quarter second, a machine far too
   // slow never saw itself as slow): a second and a half of them on a quick machine, three seconds on a slow one, tell
@@ -1013,7 +1017,7 @@ function frame(now) {
   const q2 = gpuBegin(), exposure = mix(1.0, 0.66, close);
   post.finish({ exposure: exposure * iris, bloom: mix(0.15, 0.08, close) * LENS.bloom, grain: 0.025 * LENS.grain, vignette: 0.34, ca: 0.0015 * LENS.ca }, (frames++ & 0xffff) + 1);
   gpuEnd(q2, 'finish');
-  meter(exposure, dt);
+  if (!covered) meter(exposure, dt);   // the iris guards words over the mind; covered, there are none, and reading its light back isn't free
   requestAnimationFrame(frame);
 }
 
