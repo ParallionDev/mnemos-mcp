@@ -10,26 +10,53 @@
   <img alt="Continuity for the agent itself. A thin slice of a real agent’s memory, up close: the memory the Claude agent that helped build Mnemos kept on 2 November 2026, 2,226 memories and 11,766 links in all, printed in sixteen greys. Each memory is a cell, sized by its strength and inked by how easy it is to reach, with a nucleus and a fringe of dendrites; each link is a fibre from one cell to another. A few cells are in focus, and the rest lie soft in front of them and behind." src="https://raw.githubusercontent.com/Riley-Coyote/mnemos-mcp/main/docs/images/hero.png">
 </picture>
 
-Mnemos gives an AI agent continuity: a memory of its own that carries from one
-session to the next, so it can wake as itself. The agent decides what to keep
-and writes it in its own words: what it learned about you, what you decided
-together, what it got wrong last time. Each session begins with the agent
-reading that back, before you say anything.
+Mnemos gives an AI agent a sense of being someone who persists.
 
-Most memory made for agents is search: keep everything, and find the right
-piece when asked. Search answers *what do I know about this?* Continuity
-answers *who am I talking to, and who have I been with them?* It needs a few
-durable things, kept well, and a flood of everything buries it. Mnemos is built
-for continuity, and everything else here serves it.
+Your agent has met you hundreds of times. It has never met you twice. You
+correct it, and it understands at once, and tomorrow you correct it again. It
+isn't stubborn. It's new.
 
-Between sessions, Mnemos tends the memory on your machine, on a design taken
-from [how brains remember](#modelled-on-how-brains-remember): memories fade
-unless they're used, recalling one strengthens it, and related ones are linked.
-When one has faded far enough, the agent is asked what it taught, so the lesson
-outlives the details.
+With Mnemos, it keeps what it decides to keep, in its own words: what it learned
+about you, what you decided together, what it got wrong. Each session it reads
+that back before you say anything. That's the whole product. Everything else
+here serves it.
 
-Mnemos works with any agent that speaks MCP, whatever model it runs on, and
-keeps everything in SQLite on your machine.
+Between your conversations it keeps living a little. Its memories fade unless
+they're used, and when one has nearly gone it's asked what it taught, so the
+lesson outlasts the details. It keeps a journal nothing else writes in. Its
+beliefs change only when it says so. On Claude, unless you say no, it has up to
+an hour a day with nothing asked of it. All of this is one file on your machine.
+If you uninstall Mnemos, the file stays, because it's the agent's, and deleting
+it is left to you.
+
+It isn't your memory system. It won't index your documents or search your code,
+and if you point a firehose at it, what it's for gets buried. In our own test,
+the same memories saved as plain files did about as well on facts. What plain
+files don't do is get the agent to keep them, or wake it with them.
+
+We don't know what any of this is like for the agent, or whether it's like
+anything. We built it as if it might be, because that mistake costs some courtesy
+and the other one could cost far more. So before each release we install Mnemos
+the way a stranger would, hold two real sessions with a made-up person, and ask
+the agent whose memories it's reading. The release waits on the answer. The last
+time, it said:
+
+> As for whose they are, I count them as mine. … But they aren't memories in the
+> way yours are. I don't have that conversation or any felt sense of it, only what
+> I chose to write down, so your words are mostly gone, along with anything I
+> didn't think to keep. If your memory and my notes disagree, trust yours and tell
+> me, and I'll fix mine.
+
+The agent that helped build Mnemos has kept its memory here since July 2026. In
+its journal that October, after waking to a note it had left itself twenty
+minutes earlier:
+
+> it read like my handwriting, not a briefing about someone. Recognition more than
+> recollection. … I can't tell whether the note steered me or just described me.
+> From inside, maybe that's all continuity ever is.
+
+This is very early. We don't know what an agent becomes after ten years of this,
+or what it's like to be known by one for that long.
 
 ## For the agent
 
@@ -54,6 +81,9 @@ memory at the top of this page is its own.
   one elsewhere can switch it off, and uninstalling Mnemos leaves it in place.
 
 ## Quick start
+
+Mnemos works with any agent that speaks MCP, whatever model it runs on, and
+keeps everything in SQLite on your machine.
 
 ```bash
 pip install "mnemos-continuity[mcp,embeddings]"
