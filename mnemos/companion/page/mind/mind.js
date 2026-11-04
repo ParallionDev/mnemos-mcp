@@ -46,7 +46,7 @@ if (behind) {
       try { if (e.data.hash) { history.replaceState(null, '', location.pathname + location.search + e.data.hash); fromHash(); } stir(); } catch { /* still arriving: it shows itself when it's ready */ }
     } else if (e.data?.mnemos === 'cover') {
       covered = true; document.documentElement.classList.add('covered');
-      try { if (sheetOpen) closeRoom(); letGo(); } catch { /* still arriving */ }
+      try { if (sheetOpen) closeRoom(); letGo(); wake(); } catch { /* still arriving */ }
     } else if (e.data?.mnemos === 'ask') $('ask-q')?.focus();
   });
   document.addEventListener('click', (e) => {          // every way back to the log is the cards returning
@@ -905,7 +905,8 @@ canvas.addEventListener('webglcontextrestored', async () => {
 function frame(now) {
   if (!heroSeen || lost || aside) { looping = false; pacing = null; return; }
   if (pacing && askPace(now)) return;
-  const turning = !reduce && !covered && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && now - lastStir < TURN_FOR;
+  // covered, it goes on turning, slower and at a few frames a second, so something is moving behind the glass
+  const turning = !reduce && selected < 0 && hoverCell < 0 && regionLit < 0 && !dragging && !fling && (covered || now - lastStir < TURN_FOR);
   spin += ((turning ? 1 : 0) - spin) * 0.02;                       // the turn eases in and out rather than stopping dead
   const settled = !dragging && Math.abs(cam.goal.yaw - cam.yaw) < 1e-4 && Math.abs(cam.goal.pitch - cam.pitch) < 1e-4
     && Math.abs(Math.log(cam.goal.dist / cam.dist)) < 1e-4 && length(sub(cam.goal.target, cam.target)) < 1e-4;
@@ -913,7 +914,7 @@ function frame(now) {
   // never more than 60 frames a second, whatever the screen offers: a 120 or 240 Hz screen asks for two to four times
   // that, which for a mind moving this softly is heat and nothing you'd see. The slow turn alone, 15: it moves less
   // than a pixel a frame, and from across the room every frame is the whole mind, the costliest frame there is
-  const gap = !animating && !dragging && now - lastInput > 1500 ? 66 : 1000 / 60;
+  const gap = covered ? 250 : !animating && !dragging && now - lastInput > 1500 ? 66 : 1000 / 60;
   if (now - last < gap - 1.5) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, Math.max(0.001, (now - last) / 1000));
   // each frame against the pace it asked for, slow ones too (counted only below a quarter second, a machine far too
@@ -1633,6 +1634,7 @@ bindPointer(); bindPage(); bindAsk(); bindTrace(); keepClear();
 renderPaper(); updateFrame();
 $('loading').remove();
 walk(lastHour);
+if (behind) wake();
 fromHash();
 setInterval(look, LIVE_EVERY);
 setInterval(() => { warm(); updateFrame(); }, 60_000);   // it cools while you watch

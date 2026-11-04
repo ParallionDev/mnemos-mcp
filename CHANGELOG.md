@@ -15,8 +15,10 @@
 - The notebook and the mind are one place. On a computer, the mind runs behind the
   notebook, softened into the light of its floor, and "Open the mind" moves the cards out
   of the way instead of going to another page. The rail stays, floating over the mind, and
-  a tab brings its card back as you left it. It draws only when something's happening. On a phone, or where a browser can't draw it, it's
-  still a link to its own page, which works as it did. The page's security policy now
+  a tab brings its card back as you left it. The cards are very slightly see-through, and
+  covered, the mind goes on turning at a few frames a second, so something is moving behind
+  the glass; asked for less motion, it holds still. On a phone, or where a browser can't
+  draw it, it's still a link to its own page, which works as it did. The page's security policy now
   lets it hold itself in a frame, from its own address only.
 
 ## 0.6.2 (2026-11-04)
