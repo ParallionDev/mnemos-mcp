@@ -81,7 +81,7 @@ export function lifeWords(model, i, life) {
 /* ---------- in the reading room: the life, engraved once ---------- */
 
 const engraved = new Set();                   // a life already engraved isn't engraved again when the room redraws
-export function mountLife(canvas, model, i, { open } = {}) {
+export function mountLife(canvas, model, i, { open, again = false, wait = 0 } = {}) {
   const life = lifeOf(model, i);
   const box = canvas.parentElement.getBoundingClientRect();
   const w = Math.round(box.width), h = life.nodes.length > 1 ? 250 : 230;
@@ -89,10 +89,11 @@ export function mountLife(canvas, model, i, { open } = {}) {
   canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.height = `${h}px`;
   const ctx = canvas.getContext('2d'), colors = figureColors(canvas);
   const fig = composeFamily(model, life, { w, h }, { kMax: life.nodes.length > 1 ? 64 : 58, pad: 14 });
-  let hover = null, start = engraved.has(model.cells[i].id) || reduce ? -1e9 : performance.now(), raf = 0;
+  if (again) engraved.delete(model.cells[i].id);   // opened afresh in the lens, it's drawn afresh, once the card has opened round it
+  let hover = null, start = engraved.has(model.cells[i].id) || reduce ? -1e9 : performance.now() + wait, raf = 0;
   engraved.add(model.cells[i].id);
   const draw = (now) => {
-    const progress = Math.min(1, (now - start) / ENGRAVE);
+    const progress = Math.max(0, Math.min(1, (now - start) / ENGRAVE));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
     drawFamily(ctx, fig, { ...colors, t: 0, progress, hover: hover ?? i });
     raf = progress < 1 && canvas.isConnected ? requestAnimationFrame(draw) : 0;

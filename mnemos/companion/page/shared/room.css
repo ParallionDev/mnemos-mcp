@@ -115,7 +115,7 @@
 /* the memory up close, engraved as the herbarium draws it (specimens.js): on the floor itself, no plate */
 .specimen{margin:var(--s4) 0 var(--s2)}
 .specimen canvas{display:block;width:100%}
-.specimen figcaption{margin-top:var(--s3);display:grid;gap:var(--s3);font-size:var(--t-small);color:var(--ink-3);line-height:1.5}
+.specimen .figcap{margin-top:var(--s3);display:grid;gap:var(--s3);font-size:var(--t-small);color:var(--ink-3);line-height:1.5}
 .specimen .life{color:var(--ink-2);font-size:var(--t-body)}
 /* its readings, as a small table: what's measured over how much */
 .specimen .readings{display:grid;grid-template-columns:repeat(auto-fit,minmax(68px,1fr));gap:var(--s2) var(--s4);max-width:480px;font:400 var(--t-body)/1.2 var(--mono);color:var(--ink-1)}

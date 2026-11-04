@@ -20,6 +20,12 @@
   the glass; asked for less motion, it holds still. On a phone, or where a browser can't
   draw it, it's still a link to its own page, which works as it did. The page's security policy now
   lets it hold itself in a frame, from its own address only.
+- A memory opens over its list instead of replacing it, and the list is just as you left
+  it when it closes. The row lifts out and settles as a card in the middle of the screen,
+  with its figure coming into focus at the top. Everything around it falls out of focus,
+  more the further out, and each disc of light in the blur is a memory tied to that one.
+  Esc, the back button, Close or a click outside closes it, and it goes back into its row.
+  The mind's own sheet opens memories as it did.
 
 ## 0.6.2 (2026-11-04)
 

@@ -3,6 +3,7 @@
  * a note, a reply or an answer, and which of the agent's notes they've read, through `mnemos log`'s ../act. */
 
 import { Room, parseRoute } from '../shared/room.js';
+import { makeLens } from './lens.js';
 import { esc, at, ago, clock, dayName, plural, question, firstLine, temperature, tempWord, KIND, ASK, ASK_ORDER, person, sameModel, modelName, AGENT, withAgent,
   visit, sinceThen, waiting } from '../shared/words.js';
 import { tell, telling } from '../shared/tell.js';
@@ -167,13 +168,19 @@ function placeMind() {
   behind.setAttribute('aria-hidden', 'true');
   document.body.prepend(behind);
 }
+/* nothing behind whatever's in front can be reached: the cards under an open memory or the mind, the rail under a memory */
+function settleInert() {
+  const lensed = !!lens?.isOpen() && !parted;
+  document.querySelector('.page').inert = parted || lensed; $('drawer').inert = parted || lensed;
+  document.querySelector('.rail').inert = lensed;
+}
 function part(open, { hash = '', moved = false } = {}) {
   if (open === parted || (open && (!behind || !mindHere))) return;
   parted = open;
   if (open && floating()) drawer(false);
   if (open && !$('minds').hidden) showMinds(false);
   document.body.classList.toggle('parted', open);
-  document.querySelector('.page').inert = open; $('drawer').inert = open;
+  settleInert();
   behind.inert = !open;
   $('to-mind').textContent = open ? 'Back to the log' : 'Open the mind';
   showOpenTab();
@@ -316,12 +323,23 @@ async function look() {
   tell({ agent: life.identity.agentId, who: life.identity, notes: life.notes || [], open: () => room?.go({ tab: 'notes' }) });
 }
 
+let lens = null;
+function leaveMemory() {
+  if (history.state?.lens) history.back(); else room.go({ memory: null });
+}
 function start() {
+  lens = makeLens($('lens'), { leave: leaveMemory, changed: settleInert });
   room = new Room({
     tabsEl: $('tabs'), bodyEl: $('body'), tabs: TABS, sticky: false,
     ctx: () => ({ who: life.identity, life, mems, byId, since: V?.since || 0 }),
     hooks: {
-      route: (hash) => { history.replaceState(null, '', hash); document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true); },
+      lens, leave: leaveMemory,
+      // a memory opened from the list is one step back from it; one to another inside the card is still that one step
+      route: (hash) => {
+        if (room.s.memory && !history.state?.lens && location.hash !== hash) history.pushState({ lens: true }, '', hash);
+        else history.replaceState(room.s.memory && history.state?.lens ? { lens: true } : null, '', hash);
+        document.body.dataset.tab = room.s.tab; placeMarker(room.s.tab, true);
+      },
       transition,
       // where the content starts when you change tab: in the rail, the top of the page; under the track, just below it
       scroller: () => (railed.matches ? $('main') : document.scrollingElement),
@@ -353,6 +371,8 @@ function start() {
   room.render();
   margin();
   placeMarker(room.s.tab, false);
+  // Escape closes an open memory, unless it's being corrected: then it cancels that first, in the room
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && lens.isOpen() && !parted && !room.editing && !$('full').open) leaveMemory(); }, true);
   document.fonts.ready.then(() => placeMarker(room.s.tab, false));   // the labels' true width arrives with the font
   addEventListener('resize', () => placeMarker(room.s.tab, false));
   (window.requestIdleCallback || setTimeout)(placeMind);
