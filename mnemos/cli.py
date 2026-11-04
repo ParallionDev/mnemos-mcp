@@ -990,6 +990,15 @@ def _cmd_hook(args: argparse.Namespace) -> int:
     ships with the package and upgrades with it, instead of going stale in
     a copy someone's harness wrote out months ago.
     """
+    if getattr(args, "hook_command", None) in ("prompt", "session-start"):
+        # Another harness running Claude Code's hooks (Grok imports them): do
+        # nothing, no output and no write. Anything it printed would not reach
+        # its model, and a wake would count a day lived that no Claude Code
+        # session had. Unsure, it runs.
+        from .setup.harnesses import hook_run_by
+
+        if hook_run_by() is not None:
+            return 0
     if getattr(args, "hook_command", None) == "prompt":
         return _hook_prompt(args)
     if getattr(args, "hook_command", None) != "session-start":

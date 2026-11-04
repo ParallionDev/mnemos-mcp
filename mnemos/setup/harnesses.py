@@ -22,6 +22,7 @@ A harness's table row is a statement about the version listed in ``version``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 import re
 from typing import Mapping
 
@@ -109,6 +110,11 @@ class Harness:
     # Environment variables the harness sets in the servers it starts. Only
     # Claude Code's is known; the others are identified by what connect writes.
     markers: tuple[str, ...] = ()
+    # Environment variables the harness's hook runner sets on every hook
+    # process it starts, Claude-format hooks it imports from Claude Code's
+    # settings included (``hook_run_by``). Claude Code's own are not here: a hook
+    # it runs is the one case Mnemos's hooks are for.
+    hook_markers: tuple[str, ...] = ()
     # Hook events connect installs: the wake's event and the cue's, None if
     # the harness has no hook that reaches the model for it.
     wake_event: str | None = None
@@ -251,6 +257,7 @@ GROK = Harness(
     ),
     client_name=r"^grok-shell",
     markers=(),
+    hook_markers=("GROK_HOOK_EVENT",),
     notes=(
         "Grok imports the Claude Code MCP servers in ~/.claude.json and the hooks in "
         "~/.claude/settings.json, so on a machine with both it can open Claude's memory.",
@@ -471,6 +478,26 @@ def identify(
                 return harness
     for harness in HARNESSES:
         if any(env.get(marker) for marker in harness.markers):
+            return harness
+    return None
+
+
+def hook_run_by(environ: Mapping[str, str] | None = None) -> Harness | None:
+    """The other harness whose hook runner started this process, or None.
+
+    Grok imports the hooks in ``~/.claude/settings.json`` and runs them, so
+    Claude Code's Mnemos hooks (``mnemos hook session-start`` and ``prompt``)
+    run inside Grok too, where nothing they print reaches the model (seen) and
+    where a wake would only count a day lived that no Claude Code session had.
+    Told apart by ``GROK_HOOK_EVENT``, which Grok's docs say its hook runner
+    sets on every hook process and which was seen on a hook it ran. Not seen
+    on an imported Claude hook: running one on this Mac would have fired the
+    live hooks. ``CLAUDE_PROJECT_DIR`` cannot tell them apart, since Grok sets
+    it too. When no such variable is set, which is every Claude Code session,
+    it returns None and the hook runs."""
+    env = os.environ if environ is None else environ
+    for harness in HARNESSES:
+        if any((env.get(marker) or "").strip() for marker in harness.hook_markers):
             return harness
     return None
 

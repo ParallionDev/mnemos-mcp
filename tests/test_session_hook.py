@@ -472,3 +472,75 @@ class TestHookInstaller:
         assert main(["hooks", "install", "--settings", str(settings)]) == 0
         assert not settings.exists()
         assert "SessionStart" in capsys.readouterr().out
+
+
+class TestAnotherHarnessRunningClaudeCodesHooks:
+    """Grok imports the hooks in ~/.claude/settings.json and runs them, so
+    Claude Code's Mnemos hooks run inside Grok, where nothing they print
+    reaches the model (seen) and a wake would count a day lived that no Claude
+    Code session had. Grok sets GROK_HOOK_EVENT on every hook it runs; a
+    Claude Code session never does, and when unsure the hook runs."""
+
+    def _remembering(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        from mnemos.simple_runtime import MnemosRuntime
+
+        db_path = str(tmp_path / "grok.db")
+        runtime = MnemosRuntime(db_path=db_path, agent_id="demo")
+        runtime.capture("The staging deploy always runs before production", importance="high")
+        runtime.close()
+        return db_path
+
+    def test_the_wake_does_nothing_when_grok_runs_it(self, tmp_path, monkeypatch, capsys):
+        import os
+
+        from mnemos.cli import main
+
+        db_path = self._remembering(tmp_path, monkeypatch)
+        args = ["hook", "session-start", "--db-path", db_path, "--agent-id", "demo"]
+
+        # Claude Code, or anything that is not Grok's hook runner: it wakes.
+        assert main(args) == 0
+        assert "The staging deploy" in capsys.readouterr().out
+
+        before = os.stat(db_path).st_mtime_ns
+        monkeypatch.setenv("GROK_HOOK_EVENT", "session_start")
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        assert main(args) == 0
+        assert capsys.readouterr().out == ""
+        assert os.stat(db_path).st_mtime_ns == before
+
+    def test_the_cue_does_nothing_when_grok_runs_it(self, tmp_path, monkeypatch, capsys):
+        import sys
+
+        from mnemos import cue
+        from mnemos.cli import main
+
+        db_path = self._remembering(tmp_path, monkeypatch)
+        asked = []
+        monkeypatch.setattr(cue, "prompt_hook", lambda *a, **k: asked.append(1) or "a memory")
+        payload = tmp_path / "payload.json"
+        payload.write_text(json.dumps({"hook_event_name": "UserPromptSubmit",
+                                       "prompt": "the staging deploy?"}))
+        args = ["hook", "prompt", "--db-path", db_path, "--agent-id", "demo"]
+
+        with open(payload) as stdin:
+            monkeypatch.setattr(sys, "stdin", stdin)
+            assert main(args) == 0
+        assert asked and "a memory" in capsys.readouterr().out
+
+        asked.clear()
+        monkeypatch.setenv("GROK_HOOK_EVENT", "user_prompt_submit")
+        with open(payload) as stdin:
+            monkeypatch.setattr(sys, "stdin", stdin)
+            assert main(args) == 0
+        assert asked == []
+        assert capsys.readouterr().out == ""
+
+    def test_an_empty_marker_is_not_a_grok_hook(self):
+        from mnemos.setup.harnesses import hook_run_by
+
+        assert hook_run_by({}) is None
+        assert hook_run_by({"GROK_HOOK_EVENT": "  "}) is None
+        assert hook_run_by({"CLAUDECODE": "1", "CLAUDE_PROJECT_DIR": "/x"}) is None
+        assert hook_run_by({"GROK_HOOK_EVENT": "session_start"}).key == "grok"

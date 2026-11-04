@@ -63,7 +63,7 @@ def _isolate_mnemos_env(monkeypatch, tmp_path_factory):
         # CI takes the person's. A test about the agent's shell sets them.
         "CLAUDECODE", "AI_AGENT", "MNEMOS_HARNESS",
         # Where other agents keep their things: connect reads and writes there.
-        "CODEX_HOME", "GROK_HOME", "GROK_CLAUDE_MCPS_ENABLED", "GROK_CLAUDE_HOOKS_ENABLED",
+        "CODEX_HOME", "GROK_HOME", "GROK_HOOK_EVENT", "GROK_HOOK_NAME", "GROK_CLAUDE_MCPS_ENABLED", "GROK_CLAUDE_HOOKS_ENABLED",
         "GEMINI_CLI_HOME", "HERMES_HOME", "OPENCLAW_STATE_DIR", "OPENCLAW_CONFIG_PATH",
         # The cue's judge: a developer who switched it on would otherwise
         # send test messages to Jev.
