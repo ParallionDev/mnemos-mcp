@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 (2026-11-04)
 
 - The notebook (`mnemos log`) has a new look, and does what it did. True black and
   white, following the system until you pick one with the switch. What the page
