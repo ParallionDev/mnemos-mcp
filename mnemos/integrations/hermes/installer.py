@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ...file_security import atomic_write_text
+from ...setup.state import mnemos_command
 from .scope import default_hermes_home, save_hermes_mnemos_config, slugify
 
 
@@ -569,9 +570,11 @@ def _mcp_server_config(
     if project_scope:
         args.extend(["--project-scope", project_scope])
     return {
-        "command": shutil.which("mnemos") or "mnemos",
+        "command": mnemos_command(),
         "args": args,
-        "env": {},
+        # How the server knows which agent it is serving (Hermes sends nothing
+        # that says so).
+        "env": {"MNEMOS_HARNESS": "hermes"},
         "timeout": 120,
         "connect_timeout": 60,
     }
@@ -586,7 +589,8 @@ def _render_mcp_only_config(server_name: str, server: dict[str, Any]) -> str:
     ]
     lines.extend(f"      - {json.dumps(str(arg))}" for arg in server["args"])
     lines.extend([
-        "    env: {}",
+        "    env:",
+        '      MNEMOS_HARNESS: "hermes"',
         f"    timeout: {int(server['timeout'])}",
         f"    connect_timeout: {int(server['connect_timeout'])}",
     ])
@@ -732,10 +736,20 @@ def _read_active_provider(config_path: Path) -> str:
     except Exception:
         pass
     try:
+        # Without PyYAML: read the `provider:` line inside the top-level
+        # `memory:` block, and no other. The file also names the model
+        # provider (`model: provider: ...`), which is not the memory's.
+        in_memory = False
         for line in config_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            if not line[0].isspace():
+                in_memory = line.split("#", 1)[0].strip() == "memory:"
+                continue
             stripped = line.strip()
-            if stripped.startswith("provider:"):
-                return stripped.split(":", 1)[1].strip()
+            if in_memory and stripped.startswith("provider:"):
+                value = stripped.split(":", 1)[1].split("#", 1)[0].strip().strip("'\"")
+                return value
     except Exception:
         pass
     return os.environ.get("HERMES_MEMORY_PROVIDER", "")
