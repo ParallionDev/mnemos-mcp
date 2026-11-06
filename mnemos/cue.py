@@ -322,8 +322,25 @@ def read_once_more(read: Callable[[], _T], *, deadline: float | None = None) -> 
     """``read()``; when it meets a locked store, once more, unless ``deadline``
     (a ``time.monotonic()`` value) has passed. A lock the second time raises
     ``StoreBusy``."""
+    def attempt() -> _T:
+        if os.name != 'nt':
+            return read()
+        # SQLite's Windows busy handler counts requested sleeps, not elapsed
+        # time. A nominal 100 ms wait took 460 ms on Windows in the lock
+        # regression. Connections here use busy_timeout=0 on Windows; wait
+        # against a monotonic deadline ourselves, just as POSIX's handler does.
+        until = min(time.monotonic() + READ_BUSY_SECONDS, deadline or float('inf'))
+        while True:
+            try:
+                return read()
+            except sqlite3.OperationalError as exc:
+                remaining = until - time.monotonic()
+                if not is_busy(exc) or remaining <= 0:
+                    raise
+                time.sleep(min(0.01, remaining))
+
     try:
-        return read()
+        return attempt()
     except sqlite3.OperationalError as exc:
         if not is_busy(exc):
             raise
@@ -331,7 +348,7 @@ def read_once_more(read: Callable[[], _T], *, deadline: float | None = None) -> 
     if deadline is not None and time.monotonic() >= deadline:
         raise StoreBusy() from first
     try:
-        return read()
+        return attempt()
     except sqlite3.OperationalError as exc:
         if is_busy(exc):
             raise StoreBusy() from exc
@@ -1254,7 +1271,7 @@ class CueAnswerer:
 
             store = ReadOnlyEngramStore(self.db_path)
             # It waits on a lock briefly, as the hook does (WP-E2).
-            store._get_conn().execute(f"PRAGMA busy_timeout = {int(READ_BUSY_SECONDS * 1000)}")
+            store._get_conn().execute(f"PRAGMA busy_timeout = {0 if os.name == 'nt' else int(READ_BUSY_SECONDS * 1000)}")
             self._store = store
         from .simple_runtime import cue_memories
 
@@ -1529,7 +1546,7 @@ def prompt_hook(
             # still running at the deadline (or once meaning has answered, in
             # the words answer's thread) is stopped.
             conn = store._get_conn()
-            conn.execute(f"PRAGMA busy_timeout = {int(READ_BUSY_SECONDS * 1000)}")
+            conn.execute(f"PRAGMA busy_timeout = {0 if os.name == 'nt' else int(READ_BUSY_SECONDS * 1000)}")
             done_reading = threading.Event()
             conn.set_progress_handler(
                 lambda: int(done_reading.is_set() or time.monotonic() >= deadline), 1000,

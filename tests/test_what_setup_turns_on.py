@@ -22,6 +22,8 @@ the machine running the tests.
 
 from __future__ import annotations
 
+from tests.portable import python_command
+
 import json
 import os
 import plistlib
@@ -52,9 +54,7 @@ def claude(tmp_path, monkeypatch) -> Path:
     """A claude command on PATH, where Claude Code's installer leaves one."""
     folder = tmp_path / "local-bin"
     folder.mkdir()
-    binary = folder / "claude"
-    binary.write_text("#!/bin/sh\nexit 0\n")
-    binary.chmod(0o755)
+    binary = python_command(folder / "claude", 'pass\n')
     monkeypatch.delenv("MNEMOS_CLAUDE_BIN", raising=False)
     monkeypatch.setenv("PATH", str(folder))
     return binary
@@ -488,7 +488,7 @@ def test_hours_on_and_off_on_linux_schedulers(monkeypatch, os_scheduler, claude,
     assert main(["daemon", "install", *SCOPE, "--write"]) == 0, "upkeep again, hours kept"
     if backend == "systemd":
         service = (Path.home() / ".config" / "systemd" / "user" / "mnemos-nova-hour-mine.service").read_text()
-        assert f"MNEMOS_CLAUDE_BIN={claude}" in service and "WorkingDirectory=" in service
+        assert f'Environment={scheduler._systemd_value(f"MNEMOS_CLAUDE_BIN={claude}")}' in service and 'WorkingDirectory=' in service
         assert os_scheduler.enabled >= {"mnemos-nova-hour-mine.timer", "mnemos-nova-hour-ours.timer"}
     else:
         assert scheduler.cron_has(os_scheduler.crontab, "nova", "hour-mine")

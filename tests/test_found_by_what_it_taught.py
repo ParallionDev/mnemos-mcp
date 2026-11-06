@@ -15,6 +15,7 @@ each text a vector by the concepts it names.
 
 from __future__ import annotations
 
+import os
 import math
 import re
 import sqlite3
@@ -138,8 +139,8 @@ def test_a_memory_is_found_by_its_lesson_in_words_in_another_process(tmp_path):
 
     done = subprocess.run(
         [sys.executable, "-c", _RECALL, str(db), BY_WORDS], capture_output=True, text=True,
-        timeout=120, env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-                          "PYTHONPATH": ":".join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"},
+        timeout=120, env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+                          "PYTHONPATH": os.pathsep.join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"},
     )
 
     assert done.returncode == 0, done.stderr

@@ -21,6 +21,8 @@ the change these tests fail on what the packet says, not on a missing name.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import json
 import os
 import subprocess
@@ -72,10 +74,10 @@ def _hook(db: Path, tmp_path: Path, *, env: dict[str, str] | None = None,
          "--db-path", str(db), *SCOPE_ARGS, *extra],
         input=json.dumps(payload), capture_output=True, text=True, timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
             **(env or {}),
         },
     )
@@ -183,6 +185,7 @@ def test_to_a_reader_no_one_named_a_colleagues_note_is_still_a_colleagues(tmp_pa
     assert packet.count("I take what's useful and don't claim the work.") == 1, packet
 
 
+@needs_ps
 def test_the_launch_line_is_read_only_from_claude_codes_own_process():
     from mnemos.authorship import launch_model
 
@@ -326,7 +329,7 @@ def test_a_question_is_read_without_its_answering_instructions():
 
 
 def test_the_advanced_context_packet_knows_its_reader(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    set_home(monkeypatch, str(tmp_path / "home"))
     (tmp_path / "home" / ".mnemos").mkdir(parents=True)
     (tmp_path / "home" / ".mnemos" / "config.json").write_text('{"setup_complete": true}')
     db = _store(tmp_path)

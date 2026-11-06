@@ -29,6 +29,7 @@ not on a missing import.
 
 from __future__ import annotations
 
+import os
 import json
 import re
 import sqlite3
@@ -671,10 +672,10 @@ def _in_another_process(home: Path, *args: str) -> str:
         text=True,
         timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert done.returncode == 0, done.stderr

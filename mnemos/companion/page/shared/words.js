@@ -77,9 +77,10 @@ export const forPerson = (who) => (who.person ? `for ${who.person}` : 'for you')
 
 /* warmth: an hour's light, cooling since it ended (half-life six hours) */
 export const HALF_LIFE_H = 6;
-export const temperature = (h) => (h && h.end ? 2 ** (-(Date.now() - Date.parse(h.end)) / 36e5 / HALF_LIFE_H) : 0);
+export const temperature = (h) => (h && !h.handoff && h.end ? 2 ** (-(Date.now() - Date.parse(h.end)) / 36e5 / HALF_LIFE_H) : 0);
 export function tempWord(k, h) {
   if (!h) return 'Cold';
+  if (h.handoff) return 'Handed off';
   if (k >= 0.96) return 'White-hot';            // the first twenty minutes
   if (k >= 0.4) return 'Still warm';             // to about eight hours
   if (k >= 0.1) return 'Embers';                 // to about twenty
@@ -102,6 +103,7 @@ export const RELATION = { co_activated: 'came back together', distilled_into: 'a
 
 /* what an hour did, in a sentence, from its own record */
 export function trailSentence(h, inMemory = null) {
+  if (h.handoff) return 'Prompt handed off. Mnemos did not execute a session.';
   const t = h.trail || {};
   const woke = (t.woke || []).length, waiting = (t.waiting || []).length, reached = (t.reached || []).length;
   const memRefused = (h.refused || []).some((r) => /^mnemos_/.test(r));
@@ -154,7 +156,7 @@ export function sinceThen(life, mems, since) {
   const ask = waiting(life.notes || []).length;
   const unread = (life.notes || []).filter((n) => n.author === 'agent' && !n.read && after(n.at) && !/\?\s*$/.test(n.text.trim())).length;
   const made = mems.filter((m) => after(m.born)).length;
-  const hours = (life.hours || []).filter((h) => after(h.end)).length;
+  const hours = (life.hours || []).filter((h) => !h.handoff && after(h.end)).length;
   const journal = (life.journal || []).filter((j) => after(j.at)).length;
   const beliefs = (life.beliefs || []).filter((b) => after(b.revised) || after(b.born)).length;
   return [

@@ -22,6 +22,9 @@ column.
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import hashlib
 import json
 import re
@@ -225,8 +228,8 @@ def test_only_this_sessions_introduction_signs_its_writes(tmp_path, monkeypatch)
         [sys.executable, "-m", "mnemos.cli", "remember", "--db-path", str(db), *SCOPE_ARGS,
          "Written from another process of this session."],
         capture_output=True, text=True, timeout=60,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path), "CLAUDE_CODE_SESSION_ID": SESSION,
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path), "CLAUDE_CODE_SESSION_ID": SESSION,
              "CLAUDECODE": "1"},
     )
     assert proc.returncode == 0, proc.stderr
@@ -278,8 +281,8 @@ def test_the_tools_take_signed_as_over_the_real_protocol(tmp_path):
             command=sys.executable,
             args=["-m", "mnemos.cli", "serve", "--mode", "simple", "--db-path", str(db),
                   *SCOPE_ARGS],
-            env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-                 "PYTHONPATH": ":".join(sys.path), "CLAUDE_CODE_SESSION_ID": SESSION},
+            env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+                 "PYTHONPATH": os.pathsep.join(sys.path), "CLAUDE_CODE_SESSION_ID": SESSION},
         )
         async with stdio_client(params) as streams:
             async with ClientSession(*streams) as session:
@@ -491,7 +494,7 @@ def _encode_as_the_indexer_did(db: Path) -> None:
 
 
 def test_an_indexed_memory_is_a_tools_and_never_becomes_a_lesson(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    set_home(monkeypatch, str(tmp_path / "home"))
     (tmp_path / "home" / ".mnemos").mkdir(parents=True)
     from mnemos.consolidation.softening import run_softening_pass
 
@@ -650,8 +653,8 @@ def test_the_hook_knows_its_reader_from_the_sessions_own_introduction(tmp_path, 
         [sys.executable, "-m", "mnemos.cli", "hook", "session-start", "--db-path", str(db),
          *SCOPE_ARGS],
         input=json.dumps({"session_id": SESSION}), capture_output=True, text=True, timeout=60,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path)},
     )
     assert proc.returncode == 0, proc.stderr
     packet = json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
@@ -666,7 +669,7 @@ def test_the_hook_knows_its_reader_from_the_sessions_own_introduction(tmp_path, 
 def test_the_daemon_install_preview_lists_no_substrate_job(tmp_path, monkeypatch, capsys):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     monkeypatch.setattr("mnemos.setup.scheduler.detect_backend", lambda system=None: "launchd")
 
     assert main(["daemon", "install", "--agent-id", "nova"]) == 0
@@ -678,7 +681,7 @@ def test_the_daemon_install_preview_lists_no_substrate_job(tmp_path, monkeypatch
 def test_installing_removes_the_substrate_job_an_earlier_install_left(tmp_path, monkeypatch, capsys):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     monkeypatch.setattr("mnemos.setup.scheduler.detect_backend", lambda system=None: "launchd")
     agents = home / "Library" / "LaunchAgents"
     agents.mkdir(parents=True)
@@ -911,7 +914,7 @@ def test_the_advanced_tools_record_the_agents_own_words(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
     (home / ".mnemos" / "config.json").write_text(json.dumps({"setup_complete": True}))
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     _as_session(monkeypatch, tmp_path, SESSION)
     for name in ("_store", "_encoder", "_llm_client", "_embedding_index",
                  "_shared_pool", "_config"):

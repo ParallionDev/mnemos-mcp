@@ -8,8 +8,7 @@ the hooks and the schedule; the one thing kept here is that choice
 (``record_hours_choice``), so a first session doesn't ask what setup already
 did.
 
-Nothing here imports the quiet hours' runner (``life``), which can't be
-imported where fcntl is missing: knowing about them must not need it.
+Reading setup state does not start a runner or create a memory store.
 """
 
 from __future__ import annotations
@@ -77,7 +76,7 @@ def mnemos_command() -> str:
 
     # Running as `python -m mnemos.cli`: the console script installed
     # alongside this interpreter is still the right installation.
-    sibling = Path(sys.executable).parent / "mnemos"
+    sibling = Path(sys.executable).parent / ("mnemos.exe" if os.name == 'nt' else 'mnemos')
     if sibling.is_file():
         return str(sibling)
 
@@ -190,6 +189,8 @@ def scheduled(agent_id: str, job, backend: str, crontab: str = "") -> bool:
             (scheduler.systemd_unit_dir() / scheduler.systemd_unit_names(agent_id, job)[1]).exists()
             and scheduler.systemd_timer_active(agent_id, job)
         )
+    if backend == 'windows':
+        return scheduler.windows_job_active(agent_id, job)
     return scheduler.cron_has(crontab, agent_id, job.name)
 
 

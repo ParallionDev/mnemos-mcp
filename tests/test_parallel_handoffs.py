@@ -20,6 +20,7 @@ hand.
 
 from __future__ import annotations
 
+import os
 import json
 import re
 import sqlite3
@@ -101,10 +102,10 @@ def _handoff_from(session: str, text: str, db_path: Path, tmp_path: Path,
         timeout=120,
         cwd=cwd,
         env={
-            "HOME": str(_home(tmp_path)),
+            "HOME": str(_home(tmp_path)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(tmp_path)),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
             "CLAUDE_CODE_SESSION_ID": session,
             "CLAUDE_CONFIG_DIR": str(config),
         },
@@ -124,10 +125,10 @@ def _hook(db_path: Path, tmp_path: Path, payload: dict) -> str:
         text=True,
         timeout=120,
         env={
-            "HOME": str(_home(tmp_path)),
+            "HOME": str(_home(tmp_path)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(tmp_path)),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert proc.returncode == 0, proc.stderr

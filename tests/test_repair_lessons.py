@@ -9,6 +9,8 @@ verified backup before anything goes, and only the misfiled links go.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 from pathlib import Path
 
 import pytest
@@ -25,7 +27,7 @@ GREP = ("When I claim something is clean, the verification must match how the th
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     r = MnemosRuntime(db_path=str(tmp_path / "r.db"), agent_id="demo", use_dedicated_model=False)
     r._ensure_init()
     yield r

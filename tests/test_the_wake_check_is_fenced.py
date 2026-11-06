@@ -27,13 +27,13 @@ SETUP_WROTE = {"hooks": {
 
 def test_the_callers_name_and_account_stay_out():
     env = wake_check.clean_env({
-        "PATH": "/usr/bin", "HOME": "/Users/someone", "LANG": "en_GB.UTF-8",
+        "PATH": "/usr/bin", "HOME": "/Users/someone", "PYTHONUTF8": "1", "USERPROFILE": "/Users/someone", "LANG": "en_GB.UTF-8",
         "MNEMOS_PERSON_NAME": "Riley", "MNEMOS_AGENT_ID": "claude-code",
         "CLAUDE_CODE_USER_EMAIL": "someone@example.com", "CLAUDE_CODE_ACCOUNT_UUID": "a",
         "CLAUDE_CODE_ORGANIZATION_UUID": "o", "CLAUDECODE": "1",
         "CLAUDE_CODE_SESSION_ID": "the-callers-session", "CLAUDE_PID": "123",
     })
-    assert env == {"PATH": "/usr/bin", "HOME": "/Users/someone", "LANG": "en_GB.UTF-8"}
+    assert env == {"PATH": "/usr/bin", "HOME": "/Users/someone", "PYTHONUTF8": "1", "USERPROFILE": "/Users/someone", "LANG": "en_GB.UTF-8"}
 
 
 def test_every_hook_runs_with_the_runs_own_home_and_the_wake_is_kept(tmp_path):
@@ -44,11 +44,13 @@ def test_every_hook_runs_with_the_runs_own_home_and_the_wake_is_kept(tmp_path):
         home, config, wakes)
     commands = {event: groups[0]["hooks"][0]["command"]
                 for event, groups in fenced["hooks"].items()}
-    prefix = f"env HOME={home} CLAUDE_CONFIG_DIR={config} HF_HUB_OFFLINE=1 "
+    import shlex
+
+    prefix = f"env HOME={shlex.quote(str(home))} CLAUDE_CONFIG_DIR={shlex.quote(str(config))} HF_HUB_OFFLINE=1 "
     for event, command in commands.items():
         original = SETUP_WROTE["hooks"][event][0]["hooks"][0]["command"]
         assert command.startswith(prefix + original), command
-    assert commands["SessionStart"].endswith(f'| tee "$(mktemp {wakes}/wake.XXXXXX)"')
+    assert commands["SessionStart"].endswith(f'| tee "$(mktemp {shlex.quote(str(wakes))}/wake.XXXXXX)"')
     assert commands["UserPromptSubmit"] == prefix + SETUP_WROTE["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
 
 

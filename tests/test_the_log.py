@@ -589,17 +589,27 @@ def test_a_note_of_the_persons_own_is_kept_too(mind):
 
 def test_nothing_but_the_page_itself_can_write(mind):
     with serving(Exporter.for_scope(agent_id=AGENT, person="Riley")) as server:
+        def rejected(body, status, **kwargs):
+            # Windows can abort a TCP connection when an early rejection
+            # leaves request bytes unread. That is denial, never acceptance;
+            # the database assertions below still prove no write landed.
+            try:
+                assert post(server, body, **kwargs)[0] == status
+            except (ConnectionAbortedError, ConnectionResetError) as exc:
+                if os.name != 'nt' or exc.winerror not in (10053, 10054):
+                    raise
+
         note = agents_note(server)
         reply = {"command": "reply", "note_id": note["id"], "text": "From somewhere else."}
         read = {"command": "read", "note_ids": [note["id"]]}
         for origin in ("", "https://example.com", "http://127.0.0.1:1", "null"):
-            assert post(server, reply, origin=origin)[0] == 403, origin
-            assert post(server, read, origin=origin)[0] == 403, origin
-        assert post(server, reply, host="example.com")[0] == 403                          # another site's name
-        assert post(server, reply, path="/not-the-token/act")[0] == 404                  # not this run's page
-        assert post(server, reply, kind="text/plain")[0] == 415                          # a plain form can't send it
-        assert post(server, b"x" * (33 * 1024))[0] == 413
-        assert post(server, b"not json")[0] == 400
+            rejected(reply, 403, origin=origin)
+            rejected(read, 403, origin=origin)
+        rejected(reply, 403, host='example.com')
+        rejected(reply, 404, path='/not-the-token/act')
+        rejected(reply, 415, kind='text/plain')
+        rejected(b'x' * (33 * 1024), 413)
+        rejected(b'not json', 400)
         life = json.loads(server.documents()[0])
         assert [n for n in life["notes"] if n["author"] == "person"] == []
         assert not agents_note(server)["read"]
@@ -763,8 +773,9 @@ def test_jev_is_off_until_the_person_saves_a_key_and_turns_it_on(mind, jev_unset
         assert status == 200, answer
         assert KEY not in json.dumps(answer)
         assert key_path.read_text() == KEY + "\n"
-        assert oct(key_path.stat().st_mode & 0o777) == "0o600"
-        assert oct(key_path.parent.stat().st_mode & 0o777) == "0o700"
+        if os.name != 'nt':
+            assert oct(key_path.stat().st_mode & 0o777) == "0o600"
+            assert oct(key_path.parent.stat().st_mode & 0o777) == "0o700"
         life = json.loads(server.documents()[0])
         assert (life["jev"]["key"], life["jev"]["on"]) == (True, False)
         assert KEY.encode() not in server.documents()[0]

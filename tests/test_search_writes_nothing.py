@@ -15,6 +15,7 @@ found it, decided where recall's own rows decide it.
 
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 import sqlite3
@@ -121,8 +122,8 @@ def test_a_search_in_another_process_changes_nothing(tmp_path):
         [sys.executable, "-m", "mnemos.cli", "--db-path", str(db), *SCOPE_ARGS,
          "search", "--json", "ferry timetable"],
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(tmp_path), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(tmp_path), "PYTHONUTF8": "1", "USERPROFILE": str(tmp_path), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path)},
     )
 
     assert done.returncode == 0, done.stderr

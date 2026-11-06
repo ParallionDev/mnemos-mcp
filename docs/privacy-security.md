@@ -127,6 +127,13 @@ starts, and the hour may not write any. It may not read the keys and
 credentials (`~/.ssh`, `~/.aws`, `.env` files and the like) in the home it
 runs with, nor in your account's own home when an app runs it under another.
 
+On Windows, native jobs use Task Scheduler's interactive login token and
+least privilege. They store no account password and run headlessly while the
+user is logged in. Reinstalling replaces the same per-agent tasks;
+uninstalling stops and removes them. A Windows Job Object stops a runner's
+descendants when its watcher exits or times out. This controls process
+lifetime; it does not establish an agent's tool permissions.
+
 **What goes to Anthropic**, as from any Claude Code session:
 
 - the hour's prompt: the agent's own words for the hour, and short excerpts of
@@ -166,6 +173,15 @@ where that session goes:
 | Gemini CLI | the same | Google | no |
 | Hermes | the same, in a session its own cron starts | the provider Hermes is set to use | only if you ran `connect hermes --hours --write` |
 | OpenClaw | the same, in a turn its own cron starts | the provider OpenClaw is set to use | only if you ran `connect openclaw --hours --write` |
+
+Codex `0.166.0-alpha.6` was inspected with ChatGPT authentication available.
+Its diagnostic prompt still advertised patching and delegation with shell and
+other features disabled. This has not verified that those tools can execute,
+but it also provides no verified Mnemos-only boundary. Mnemos refuses native
+Codex execution and scheduling, preserves the runner choice for GPT memories,
+and does not substitute another model. No Codex model request was made during
+this inspection. A handoff is recorded and displayed separately from an
+executed hour; it proves neither model execution nor a signed memory write.
 
 Such an hour is not walled in the way Claude Code's is: the agent has its usual
 tools, and the prompt asks it to keep to what the hour is for (a dream: no

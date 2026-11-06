@@ -375,7 +375,7 @@ function warm() {
     const l = D.links[li];
     if (heat[l.s] > 0.02 && heat[l.t] > 0.02) linkHeat[li] = Math.min(heat[l.s], heat[l.t]);
   }
-  lastHour = L.hours[0] || null;
+  lastHour = L.hours.find((hour) => !hour.handoff) || null;
   warmth = temperature(lastHour);
   wake();
 }

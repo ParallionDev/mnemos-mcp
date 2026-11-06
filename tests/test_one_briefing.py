@@ -16,6 +16,9 @@ change they fail on behaviour rather than on a missing name.
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import json
 import re
 import sqlite3
@@ -261,10 +264,10 @@ def _hook(db: Path, tmp_path: Path, *, session: str = OWN, model: str = OPUS,
         text=True,
         timeout=180,
         env={
-            "HOME": str(_home(tmp_path)),
+            "HOME": str(_home(tmp_path)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(tmp_path)),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert done.returncode == 0, done.stderr
@@ -669,7 +672,7 @@ def test_building_the_packet_runs_no_maintenance(tmp_path, monkeypatch):
     (home / ".mnemos" / "config.json").write_text(
         json.dumps({"consolidation": {"min_idle_minutes": 0}})
     )
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     db = tmp_path / "memory.db"
     runtime = _runtime(db)
     try:

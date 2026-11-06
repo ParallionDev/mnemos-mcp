@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 import sys
@@ -143,7 +144,7 @@ def test_both_repairs_print_and_exit_zero(runtime, tmp_path):
         done = subprocess.run(
             [sys.executable, "-m", "mnemos.cli", "--db-path", str(runtime.db_path), *SCOPE_ARGS, "repair", repair],
             capture_output=True, text=True, timeout=180,
-            env={"HOME": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": ":".join(sys.path)},
+            env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": os.pathsep.join(sys.path)},
         )
         assert done.returncode == 0, done.stderr
         assert "Dry run: nothing changed." in done.stdout

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import json
 import re
 import shutil
@@ -70,7 +71,7 @@ def _hook(db: Path, tmp_path: Path, *, env: dict[str, str] | None = None,
     return subprocess.run(
         [sys.executable, "-m", "mnemos.cli", "hook", "session-start", "--db-path", str(db), *SCOPE_ARGS, *extra],
         input=json.dumps(payload), capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": ":".join(sys.path), **(env or {})},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": os.pathsep.join(sys.path), **(env or {})},
     )
 
 

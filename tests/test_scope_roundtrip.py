@@ -12,6 +12,8 @@ explicit scope to the writer and the reader. These tests deliberately pass
 no scope at all, which is exactly how an agent calls these tools.
 """
 
+
+from tests.portable import set_home
 import json
 import os
 from pathlib import Path
@@ -38,7 +40,7 @@ def test_project_scope_does_not_follow_the_working_directory(tmp_path, monkeypat
     """
     from mnemos.simple_scope import resolve_scope
 
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+    set_home(monkeypatch, str(_seed_home(tmp_path)))
 
     workdir_a = tmp_path / "project-alpha"
     workdir_b = tmp_path / "project-beta"
@@ -58,7 +60,7 @@ def test_explicit_project_scope_still_wins(tmp_path, monkeypatch):
     """Killing the cwd default must not disable deliberate partitioning."""
     from mnemos.simple_scope import resolve_scope
 
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+    set_home(monkeypatch, str(_seed_home(tmp_path)))
 
     assert resolve_scope(project_scope="sanctuary").project_scope == "sanctuary"
 
@@ -74,7 +76,7 @@ def test_legacy_tool_defaults_resolve_to_the_configured_scope(tmp_path, monkeypa
     """
     from mnemos.simple_scope import resolve_tool_scope
 
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path, {
+    set_home(monkeypatch, str(_seed_home(tmp_path, {
         "agent_id": "nova",
         "person_id": "alex",
         "project_scope": "sanctuary",
@@ -99,7 +101,7 @@ def test_capture_then_context_packet_round_trips_with_no_explicit_scope(
     them. Before the fix this returned "No scoped continuity entries
     matched" while the note sat in the store under a different partition.
     """
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+    set_home(monkeypatch, str(_seed_home(tmp_path)))
 
     from mnemos.simple_runtime import MnemosRuntime
     from mnemos.simple_scope import resolve_tool_scope
@@ -132,7 +134,7 @@ def test_capture_then_context_packet_round_trips_with_no_explicit_scope(
 
 def test_context_packet_tool_reads_what_the_capture_tool_wrote(tmp_path, monkeypatch):
     """Same round trip, but through the registered MCP tool functions."""
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path, {"setup_complete": True})))
+    set_home(monkeypatch, str(_seed_home(tmp_path, {"setup_complete": True})))
     db_path = str(tmp_path / "tools.db")
     monkeypatch.setenv("MNEMOS_DB_PATH", db_path)
     monkeypatch.setenv("MNEMOS_AGENT_ID", "claude-code")

@@ -9,6 +9,8 @@ would have doubled.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import pytest
 
 from mnemos.core.engram import Engram
@@ -21,7 +23,7 @@ TEXT = "Verify the rendered result, not the declaration."
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     r = MnemosRuntime(db_path=str(tmp_path / "t.db"), agent_id="demo", use_dedicated_model=False)
     r._ensure_init()
     yield r

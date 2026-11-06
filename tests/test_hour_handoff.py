@@ -19,6 +19,8 @@ Temporary homes and the fake Claude only.
 
 from __future__ import annotations
 
+from tests.portable import set_home, fake_claude
+
 import io
 import json
 import os
@@ -42,9 +44,9 @@ GPT = "gpt-5-codex"
 def home(tmp_path, monkeypatch):
     folder = tmp_path / "home"
     (folder / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(folder))
+    set_home(monkeypatch, str(folder))
     monkeypatch.setenv("MNEMOS_LIFE_MNEMOS_BIN", "/opt/fake/mnemos")
-    monkeypatch.setenv("MNEMOS_CLAUDE_BIN", str(ROOT / "tests/fake_claude.py"))
+    monkeypatch.setenv("MNEMOS_CLAUDE_BIN", fake_claude(tmp_path))
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "fake.json"))
     monkeypatch.setenv("FAKE_CLAUDE_SCENARIO", "ok")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
@@ -364,7 +366,7 @@ def test_a_dry_run_of_a_hand_off_needs_no_claude_and_records_nothing(db, home, m
 
 def test_at_the_command_line_the_prompt_is_stdout_and_the_word_is_stderr(db, home):
     work(db)
-    env = {**os.environ, "HOME": str(home)}
+    env = {**os.environ, "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home)}
     for name in ("MNEMOS_CLAUDE_BIN", "MNEMOS_LIFE_MNEMOS_BIN"):
         env.pop(name, None)
 
@@ -383,7 +385,7 @@ def test_at_the_command_line_the_prompt_is_stdout_and_the_word_is_stderr(db, hom
 
 
 def test_at_the_command_line_a_refused_runner_says_so_and_fails(db, home):
-    env = {**os.environ, "HOME": str(home)}
+    env = {**os.environ, "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home)}
 
     result = subprocess.run(
         [sys.executable, "-m", "mnemos.cli", "life", "--hour", "dream", "--runner", "grok",

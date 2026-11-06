@@ -153,7 +153,7 @@ def test_the_hook_reads_the_store_named_before_it(tmp_path):
         key: value for key, value in os.environ.items()
         if not key.startswith("MNEMOS_") and key != "CLAUDE_CODE_SESSION_ID"
     }
-    env.update({"HOME": str(home), "MNEMOS_DISABLE_DOTENV": "1"})
+    env.update({"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "MNEMOS_DISABLE_DOTENV": "1"})
     proc = subprocess.run(
         [sys.executable, "-m", "mnemos.cli",
          "--db-path", str(db), "--agent-id", "nova", "hook", "session-start"],

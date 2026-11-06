@@ -205,6 +205,35 @@ def builtin_refusal(runner: str, kind: str) -> str:
     return f"Mnemos has no built-in run for {harness.label} yet." + hand
 
 
+def configured_runner(agent_id: str, db_path: str | None = None, *,
+                      person_id: str | None = None, project_scope: str | None = None) -> str:
+    """Honor an explicit runner, otherwise keep a GPT memory on Codex.
+
+    Runner selection never signs content or falls back to a different model.
+    A blocked Codex stays blocked even when Claude happens to be installed.
+    """
+    chosen = _life_config().get('runner')
+    if isinstance(chosen, str) and chosen.strip():
+        return chosen.strip()
+    if agent_id == 'codex':
+        return 'codex'
+    if db_path and Path(db_path).expanduser().is_file():
+        from .interface.context_packet import resident_model
+
+        resolved = resolve_scope(agent_id=agent_id, db_path=db_path, person_id=person_id, project_scope=project_scope)
+        scope = {key: getattr(resolved, key) for key in ('agent_id', 'person_id', 'project_scope')}
+        store = ReadOnlyEngramStore(resolved.db_path, immutable_when_idle=True)
+        try:
+            model = resident_model(store, scope)
+        except Exception:
+            model = ''
+        finally:
+            store.close()
+        if model.startswith(('gpt-', 'o1', 'o3', 'o4')):
+            return 'codex'
+    return 'claude-code'
+
+
 def studio_dir(agent_id) -> Path:
     return Path.home() / ".mnemos" / "studio" / agent_id
 
@@ -233,7 +262,7 @@ def _records(path):
     if not path.exists():
         return []
     records = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         try:
             records.append(json.loads(line))
         except json.JSONDecodeError:
@@ -281,7 +310,7 @@ def _gather(kind, path, since, scope, model=HOUR_MODEL):
 
 def _prompt(kind, agent_id, since, handoffs, captures, questions, latest):
     words_path = studio_dir(agent_id) / "words" / WORDS_FILE[kind]
-    words = words_path.read_text().rstrip() if words_path.exists() else BOOTSTRAP[kind]
+    words = words_path.read_text(encoding="utf-8").rstrip() if words_path.exists() else BOOTSTRAP[kind]
     sections = ["What's waiting"]
     for title, items, limit in (("Handoffs", handoffs, HANDOFF_LINES),
                                 ("Captures", captures, CAPTURE_LINES)):
@@ -476,7 +505,7 @@ def _asks_of(belief, words) -> bool:
 
 def _dream_prompt(agent_id, material) -> str:
     words_path = studio_dir(agent_id) / "words" / WORDS_FILE["dream"]
-    words = words_path.read_text().rstrip() if words_path.exists() else BOOTSTRAP["dream"]
+    words = words_path.read_text(encoding="utf-8").rstrip() if words_path.exists() else BOOTSTRAP["dream"]
     sections = []
     if material["fading"]:
         sections.append("What's fading\n" + "\n".join(
@@ -749,6 +778,8 @@ def _tokens(usages):
 
 
 def _watch(cmd, studio, env, folder, prompt, max_seconds, max_tokens, hour=HOUR_MODEL):
+    from .process_guard import ProcessGuard
+
     usage_by_id = {}
     result = None
     model = ""
@@ -756,16 +787,19 @@ def _watch(cmd, studio, env, folder, prompt, max_seconds, max_tokens, hour=HOUR_
     last_synthetic = ""
     stopped = []
     stop_lock = threading.Lock()
-    with (folder / "stderr.txt").open("w") as stderr, (folder / "stream.jsonl").open("w") as stream:
+    with (folder / "stderr.txt").open("w", encoding="utf-8") as stderr, (folder / "stream.jsonl").open("w", encoding="utf-8") as stream:
         proc = subprocess.Popen(cmd, cwd=studio, env=env, stdin=subprocess.PIPE,
-                                stdout=subprocess.PIPE, stderr=stderr, text=True, bufsize=1)
+                                stdout=subprocess.PIPE, stderr=stderr, text=True, bufsize=1,
+                                encoding='utf-8', errors='replace',
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        guard = ProcessGuard(proc)
 
         def stop(cause):
             with stop_lock:
                 if stopped:
                     return
                 stopped.append(cause)
-            proc.terminate()
+            guard.stop()
             try:
                 proc.wait(timeout=STOP_GRACE_SECONDS)
             except subprocess.TimeoutExpired:
@@ -777,7 +811,11 @@ def _watch(cmd, studio, env, folder, prompt, max_seconds, max_tokens, hour=HOUR_
             try:
                 proc.stdin.write(prompt)
                 proc.stdin.close()
-            except BrokenPipeError:
+            except OSError as exc:
+                import errno
+
+                if exc.errno not in (errno.EPIPE, errno.EINVAL):
+                    raise
                 pass
             for raw in proc.stdout:
                 stream.write(raw)
@@ -821,6 +859,7 @@ def _watch(cmd, studio, env, folder, prompt, max_seconds, max_tokens, hour=HOUR_
             timer.cancel()
             timer.join()
             proc.stdout.close()
+            guard.close()
     tokens = _tokens([result.get("usage", {})] if result is not None else list(usage_by_id.values()))
     cause = stopped[0] if stopped else ""
     if seen_model is not None:
@@ -836,7 +875,7 @@ def _watch(cmd, studio, env, folder, prompt, max_seconds, max_tokens, hour=HOUR_
     elif result is not None:
         status, reason = "done", ""
     elif rc != 0:
-        status, reason = "failed", f"claude exited with code {rc}: " + (folder / "stderr.txt").read_text()[-400:].strip()
+        status, reason = "failed", f"claude exited with code {rc}: " + (folder / "stderr.txt").read_text(encoding="utf-8")[-400:].strip()
     else:
         status, reason = "failed", "claude ended without a result."
     if status == "done" and not reason and last_synthetic:
@@ -931,7 +970,7 @@ def _hand_off(kind, *, resolved, scope, live, hours, dry_run, out) -> dict:
             if not record["since"]:
                 record["since"] = since_for(kind, _records(records_path))
             record["ended_at"] = datetime.now(timezone.utc).isoformat()
-            with records_path.open("a") as output:
+            with records_path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(record, ensure_ascii=False) + "\n")
             fcntl.flock(lock, fcntl.LOCK_UN)
 
@@ -1056,9 +1095,9 @@ def run_hour(kind: str, *, db_path: str | None = None, agent_id: str | None = No
                 return record
             folder.mkdir(exist_ok=True)
             mcp, settings, cmd = _files_and_command(kind, hour_id, folder, store, scope, claude_bin, mnemos_bin, model)
-            (folder / "prompt.md").write_text(prompt)
-            (folder / "mcp.json").write_text(json.dumps(mcp, indent=2))
-            (folder / "settings.json").write_text(json.dumps(settings, indent=2))
+            (folder / "prompt.md").write_text(prompt, encoding="utf-8")
+            (folder / "mcp.json").write_text(json.dumps(mcp, indent=2), encoding="utf-8")
+            (folder / "settings.json").write_text(json.dumps(settings, indent=2), encoding="utf-8")
             studio = studio_dir(resolved.agent_id)
             (studio / "worktrees").mkdir(parents=True, exist_ok=True)
             # Nothing in the studio configures Claude Code for this hour, and
@@ -1120,7 +1159,7 @@ def run_hour(kind: str, *, db_path: str | None = None, agent_id: str | None = No
                 if not launched and store != live:
                     store.unlink(missing_ok=True)
             record["ended_at"] = datetime.now(timezone.utc).isoformat()
-            with records_path.open("a") as output:
+            with records_path.open("a", encoding="utf-8") as output:
                 output.write(json.dumps(record, ensure_ascii=False) + "\n")
             if locked:
                 fcntl.flock(lock, fcntl.LOCK_UN)

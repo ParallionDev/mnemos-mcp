@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import importlib
 import json
 import os
@@ -584,7 +586,7 @@ def test_durable_memories_do_not_leak_between_people_sharing_an_agent(tmp_path, 
     """
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     from mnemos.simple_runtime import MnemosRuntime
 
     db = str(tmp_path / "shared.db")

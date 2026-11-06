@@ -18,6 +18,8 @@ maintenance uses (0.3, #71) would have dropped the one link that is right.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import json
 import re
 
@@ -92,7 +94,7 @@ def test_the_runtime_applies_the_configured_bar(tmp_path, monkeypatch):
     """The setting in ~/.mnemos/config.json reaches the encoder the runtime saves with."""
     (tmp_path / ".mnemos").mkdir()
     (tmp_path / ".mnemos" / "config.json").write_text(json.dumps({"encoding": {"keyword_overlap": 0.3}}))
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, str(tmp_path))
 
     def saved(runtime, content):
         return re.search(r"Memory ID: (\S+)", runtime.capture(content)).group(1)

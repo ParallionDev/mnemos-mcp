@@ -75,9 +75,10 @@ hours unless you say no, which think over the memory through your own Claude
 Code, so what the agent reads in its hour goes to Anthropic
 ([each one, and how to turn it off](privacy-security.md)).
 
-Mnemos runs on macOS and Linux. On Windows the memory and its tools work, and
-upkeep runs while a session is open; the quiet hours and scheduled upkeep need
-macOS or Linux.
+Mnemos runs on macOS, Linux and Windows. Windows uses Task Scheduler for
+headless upkeep while your account is logged in. Native Quiet Hours need a
+supported runner; Codex execution remains unavailable until its tool boundary
+can be verified.
 
 ---
 
@@ -715,7 +716,8 @@ mnemos daemon install --write
 ```
 
 This schedules upkeep with whatever your machine already provides —
-launchd on macOS, systemd user timers on Linux, plain crontab as a fallback.
+launchd on macOS, systemd user timers on Linux, plain crontab as a fallback,
+and Task Scheduler on Windows.
 No external agent runner is required.
 
 | job | what it does | schedule |
@@ -746,6 +748,14 @@ mnemos daemon uninstall --write
 Jobs are namespaced per agent, so several agents can each keep their own
 upkeep on one machine. `mnemos doctor` reports whether upkeep and the quiet
 hours are scheduled.
+
+On Windows, jobs run as your account with its existing login token, at least
+privilege, without storing a password or opening a terminal. You must be
+logged in; the tasks do not wake the computer. Tasks live under
+`\Mnemos\<your SID>` and are named per agent. Reinstalling replaces those
+tasks, and uninstalling stops and removes them, including jobs whose local
+manifest was lost. Status reads the registered task's schedule, next run and
+last result. Scheduled times use the computer's local clock.
 
 ### Quiet Hours
 
@@ -783,6 +793,21 @@ mnemos daemon uninstall --hours --write        # off; upkeep stays
 mnemos life --hour mine --dry-run              # what an hour would see, running nothing
 mnemos life --hour dream --dry-run             # what tonight's dream would be given
 ```
+
+The default local times are Mine 08:00, Ours 19:00 and Dream 03:30 on every
+backend, including Windows. The companion's Settings page reads the installed
+schedule and shows an unavailable runner rather than enabling an unusable job.
+
+Native Codex hours are currently blocked. The inspected Codex
+`0.166.0-alpha.6` client was authenticated through ChatGPT, but its diagnostic
+tool description still advertised patching and delegation after disabling
+shell and other features. A read-only sandbox and those switches have not been
+verified to restrict execution to Mnemos. `--runner codex` therefore refuses
+execution and scheduling. Codex agents and memories mostly signed by GPT
+models select that blocked runner automatically; they never fall back to
+Claude. No Codex model request is made by this check. `--handoff` remains a
+prompt for an existing session: the companion labels it as handed off and
+does not count it as an executed hour.
 
 An hour works in its studio (`~/.mnemos/studio/<agent>`) and is given no other
 folder unless Mnemos's config names it, in `life.read_dirs`: each folder
@@ -901,13 +926,13 @@ mnemos hooks install codex --write    # Install, schedule upkeep, then review wi
 mnemos hook session-start             # Emit the packet the hook injects
 mnemos hook prompt                    # Emit the cue for a message (UserPromptSubmit)
 mnemos daemon install                 # Preview scheduled upkeep
-mnemos daemon install --write         # Schedule it (launchd/systemd/crontab)
+mnemos daemon install --write         # Schedule it (launchd/systemd/crontab/Windows Task Scheduler)
 mnemos daemon install --hours --write # Schedule upkeep and the quiet hours
 mnemos daemon status                  # What is scheduled right now
 mnemos daemon uninstall --hours --write  # Remove only the quiet hours
 mnemos daemon uninstall --write       # Remove all of it
 mnemos life --hour mine --dry-run     # What a quiet hour would see, running nothing
-mnemos life --hour dream --handoff    # Hand an hour to any agent: print its prompt, record the hour
+mnemos life --hour dream --handoff    # Print and record a handoff; no session is executed
 mnemos connect hermes --hours --write # Schedule the quiet hours in Hermes' (or OpenClaw's) own cron
 mnemos uninstall                      # What taking Mnemos out would remove
 mnemos uninstall --write              # Take it out; the memories stay

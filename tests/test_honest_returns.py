@@ -20,6 +20,9 @@ than the store reinforces nothing.
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import hashlib
 import re
 import sqlite3
@@ -161,10 +164,10 @@ finally:
 
 def _recall_in_another_process(db, cue: str, *, home: Path, session: str | None = None) -> str:
     env = {
-        "HOME": str(home),
+        "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "MNEMOS_DISABLE_DOTENV": "1",
-        "PYTHONPATH": ":".join(sys.path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
     }
     if session:
         env["CLAUDE_CODE_SESSION_ID"] = session
@@ -433,7 +436,7 @@ def test_a_version_is_written_only_when_content_impact_or_resolution_changes(tmp
 def test_maintenance_records_no_access(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     db = tmp_path / "l.db"
     runtime = MnemosRuntime(db_path=str(db), agent_id="demo", use_dedicated_model=False)
     try:

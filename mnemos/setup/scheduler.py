@@ -20,17 +20,19 @@ transcript indexer, which both wrote memories in a model's words.
 None of that work was ever OpenClaw-specific. ``mnemos consolidate`` and
 ``mnemos life`` are plain CLI commands; only the *scheduling* was bound to
 OpenClaw. This module supplies the missing half with whatever the host
-actually provides: launchd on macOS, systemd user timers on Linux, and plain
-crontab where systemd is absent.
+actually provides: launchd on macOS, systemd user timers on Linux, plain
+crontab where systemd is absent, and Task Scheduler on Windows.
 
-Everything here is pure generation. Nothing touches the system until the
-CLI decides to write, which keeps the whole surface testable without
-shelling out to ``launchctl`` or ``systemctl``.
+Plans are generated without installing anything. Status reads native jobs;
+the CLI explicitly applies or removes them. Windows registration restores
+earlier definitions if applying a batch fails.
 """
 
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 import plistlib
 import re
 import shlex
@@ -211,7 +213,9 @@ def find_claude() -> str | None:
 # What a job's PATH holds besides the claude command's own folder: launchd
 # starts a job with /usr/bin:/bin:/usr/sbin:/sbin, where a claude installed
 # by Claude Code's installer, Homebrew or npm is not.
-_SYSTEM_PATH = ("/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin")
+_SYSTEM_PATH = ((str(Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32'),
+                 str(Path(os.environ.get('SystemRoot', r'C:\Windows')))) if os.name == 'nt'
+                else ('/usr/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'))
 
 
 def hour_environment(
@@ -237,6 +241,12 @@ def hour_environment(
 def account_home() -> Path:
     """The account's own home folder, as the system has it, whatever HOME
     says; HOME's when the system has none to give."""
+    if os.name == 'nt':
+        import ctypes
+
+        profile = ctypes.create_unicode_buffer(32768)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 40, None, 0, profile) == 0:
+            return Path(profile.value)
     try:
         import pwd
 
@@ -255,7 +265,7 @@ def home_environment() -> dict[str, str]:
     home = Path.home()
     if os.path.normpath(home) == os.path.normpath(account_home()):
         return {}
-    return {"HOME": str(home)}
+    return {"HOME": str(home), **({'USERPROFILE': str(home)} if os.name == 'nt' else {})}
 
 
 def working_directory() -> str:
@@ -267,11 +277,13 @@ def working_directory() -> str:
 def detect_backend(system: str | None = None) -> str:
     """Pick the scheduler this host actually provides.
 
-    Returns "launchd", "systemd", "crontab", or "unsupported".
+    Returns "launchd", "systemd", "crontab", "windows", or "unsupported".
     """
     system = (system or sys.platform).lower()
     if system.startswith("darwin"):
         return "launchd"
+    if system.startswith(("win32", "windows")):
+        return "windows"
     if system.startswith("linux"):
         if shutil.which("systemctl"):
             return "systemd"
@@ -429,6 +441,8 @@ def launchd_job_active(agent_id: str, job: SchedulerJob) -> bool:
     """Return true only when launchd has the generated job loaded."""
     import os
 
+    if not hasattr(os, 'getuid'):
+        return False
     try:
         result = subprocess.run(
             ["launchctl", "print", f"gui/{os.getuid()}/{label_for(agent_id, job)}"],
@@ -658,6 +672,16 @@ def _entry(
         entry["timer_name"] = timer_name
     elif backend == "crontab":
         entry["line"] = cron_line(job, **made)
+    elif backend == "windows":
+        from .windows_tasks import task_xml
+
+        entry['task_name'] = windows_task_name(agent_id, job)
+        entry['path'] = windows_config_path(agent_id, job)
+        entry['config'] = {'argv': command_for(job, mnemos_command=mnemos_command, scope_args=scope_args),
+                           'environment': dict(environment or {}), 'working_dir': working_dir,
+                           'log': entry['log']}
+        entry['content'] = task_xml(job, entry['path'], working_dir)
+        entry['command'] = subprocess.list2cmdline(entry['config']['argv'])
     return entry
 
 
@@ -717,6 +741,9 @@ def plan(
                 systemd_unit_dir() / timer_name,
             ]
             entry["timer_name"] = timer_name
+        elif backend == 'windows':
+            entry['task_name'] = windows_task_name(agent_id, job)
+            entry['path'] = windows_config_path(agent_id, job)
         retired.append(entry)
 
     return {
@@ -742,6 +769,10 @@ def installed(blueprint: dict, entries: list[dict], crontab: str = "") -> list[d
             present = entry["path"].exists()
         elif backend == "systemd":
             present = any(path.exists() for path in entry["units"])
+        elif backend == 'windows':
+            from .windows_tasks import query
+
+            present = query(entry['task_name']) is not None
         else:
             present = cron_has(crontab, blueprint["agent_id"], entry["job"].name)
         if present:
@@ -769,6 +800,10 @@ def installed_daily_at(blueprint: dict, entry: dict, crontab: str = "") -> tuple
             timer = next(path for path in entry["units"] if str(path).endswith(".timer"))
             found = _ON_CALENDAR.search(Path(timer).read_text())
             return (int(found.group(1)), int(found.group(2))) if found else None
+        if backend == 'windows':
+            from .windows_tasks import query, daily_at
+
+            return daily_at(query(entry['task_name']))
         for line in crontab.splitlines():
             if cron_marks(line, blueprint["agent_id"], entry["job"].name):
                 minute, hour = line.split()[:2]
@@ -776,3 +811,54 @@ def installed_daily_at(blueprint: dict, entry: dict, crontab: str = "") -> tuple
     except (OSError, ValueError, KeyError, TypeError, StopIteration, plistlib.InvalidFileException):
         return None
     return None
+
+
+def windows_task_name(agent_id: str, job: SchedulerJob) -> str:
+    """Stable, collision-resistant task name; COM adds the current SID folder."""
+    safe = re.sub(r'[^A-Za-z0-9_.-]', '_', agent_id)[:48]
+    digest = hashlib.sha256(agent_id.encode('utf-8')).hexdigest()[:12]
+    return f'mnemos.{safe}.{digest}.{job.name}'
+
+
+def windows_config_path(agent_id: str, job: SchedulerJob) -> Path:
+    """Manifest for a task's headless action, under this Mnemos home."""
+    return Path.home() / '.mnemos' / 'tasks' / 'windows' / (windows_task_name(agent_id, job) + '.json')
+
+
+def windows_job_active(agent_id: str, job: SchedulerJob) -> bool:
+    """Whether the actual Windows task exists and is enabled."""
+    from .windows_tasks import query
+
+    info = query(windows_task_name(agent_id, job))
+    return bool(info and info.get('enabled'))
+
+
+def apply_windows(entries: list[dict]) -> None:
+    """Register a batch with rollback of both OS definitions and manifests."""
+    from . import windows_tasks
+    from ..file_security import atomic_write_bytes, atomic_write_text
+
+    previous = []
+    try:
+        for entry in entries:
+            path = entry['path']
+            old = windows_tasks.query(entry['task_name'])
+            previous.append((entry, old, path.read_bytes() if path.is_file() else None))
+            atomic_write_text(path, json.dumps(entry['config'], ensure_ascii=False))
+            windows_tasks.register(entry['task_name'], entry['content'])
+    except Exception as exc:
+        failures = []
+        for entry, old, content in reversed(previous):
+            try:
+                if content is None:
+                    entry['path'].unlink(missing_ok=True)
+                else:
+                    atomic_write_bytes(entry['path'], content)
+                if old:
+                    windows_tasks.register(entry['task_name'], old['xml'])
+                else:
+                    windows_tasks.remove(entry['task_name'])
+            except Exception as rollback:
+                failures.append(str(rollback))
+        detail = ' Rollback also failed: ' + '; '.join(failures) if failures else ''
+        raise RuntimeError(str(exc) + detail) from exc

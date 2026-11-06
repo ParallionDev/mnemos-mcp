@@ -32,7 +32,9 @@ def test_mcp_install_claude_code_prints_runs_or_says_claude_is_missing(monkeypat
     assert main(["mcp", "install", "claude-code"]) == 0
     line = capsys.readouterr().out.strip()
     command = cli._mnemos_command()
-    assert line == f"claude mcp add --scope user mnemos -- {command} serve --mode simple", line
+    import shlex
+
+    assert shlex.split(line) == ['claude', 'mcp', 'add', '--scope', 'user', 'mnemos', '--', command, 'serve', '--mode', 'simple'], line
 
     ran: list = []
 
@@ -54,10 +56,7 @@ def test_mcp_install_claude_code_prints_runs_or_says_claude_is_missing(monkeypat
     monkeypatch.setattr(cli.shutil, "which", lambda name: None)
     assert main(["mcp", "install", "claude-code", "--write"]) == 1
     out = capsys.readouterr().out
-    assert out.splitlines() == [
-        "Claude Code isn't on your PATH. Run this yourself once it is:",
-        f"claude mcp add --scope user mnemos -- {command} serve --mode simple",
-    ], out
+    assert out.splitlines() == ["Claude Code isn't on your PATH. Run this yourself once it is:", line], out
     assert len(ran) == 1, "nothing ran without claude"
 
 

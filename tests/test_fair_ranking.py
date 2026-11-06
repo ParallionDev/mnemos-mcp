@@ -18,6 +18,9 @@ each text a vector by the concepts it names, so every cosine is exact.
 
 from __future__ import annotations
 
+from tests.portable import require_unix_socket
+from tests.portable import set_home
+
 import json
 import math
 import os
@@ -841,16 +844,19 @@ def home(tmp_path, monkeypatch):
     """HOME reached by a path short enough for a unix socket under it."""
     real = tmp_path / "home"
     real.mkdir()
-    link = Path("/tmp") / f"mnf-{uuid.uuid4().hex[:10]}"
-    os.symlink(real, link)
-    monkeypatch.setenv("HOME", str(link))
+    link = real if os.name == 'nt' else Path("/tmp") / f"mnf-{uuid.uuid4().hex[:10]}"
+    if link != real:
+        os.symlink(real, link)
+    set_home(monkeypatch, str(link))
     yield link
-    os.unlink(link)
+    if link != real:
+        os.unlink(link)
 
 
 def test_the_hook_does_not_trust_an_answerer_on_the_old_gate(tmp_path, home):
     """A server still running the code before this change speaks protocol 1,
     whose gate let common words in. The hook answers from words instead."""
+    require_unix_socket()
     from mnemos import cue
 
     db = _store(tmp_path / "memory.db", [_memory("A brass lock for the lighthouse door.")],

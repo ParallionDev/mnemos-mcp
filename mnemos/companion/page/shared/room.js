@@ -190,7 +190,7 @@ export class Room {
       const pics = h.made.map((p) => life.studio.find((f) => f.path === p)).filter((f) => f && f.picture);
       const ok = h.status === 'done' && !h.reason;
       const facts = [
-        h.modelName ? (h.model && who.model && !sameModel(h.model, who.model) ? `<span class="flag">ran as ${esc(h.modelName)}; nothing it wrote was kept</span>` : `ran as ${esc(h.modelName)}`) : null,
+        h.modelName ? (h.handoff ? `prepared for ${esc(h.modelName)}` : h.model && who.model && !sameModel(h.model, who.model) ? `<span class="flag">ran as ${esc(h.modelName)}; nothing it wrote was kept</span>` : `ran as ${esc(h.modelName)}`) : null,
         h.practice ? (h.check === 'rows' ? (h.untouched === false ? '<span class="flag">left something in the real memory</span>' : 'real memory untouched') : 'checked the older way') : null,
         h.refused.length ? `<span class="flag">refused: ${[...new Set(h.refused)].map(esc).join(', ')}</span>` : 'nothing refused',
         ok ? null : `<span class="flag">${esc(h.reason || h.status)}</span>`,
@@ -564,6 +564,8 @@ export class Room {
     const h = this.hours || saved, changed = JSON.stringify(h) !== JSON.stringify(saved);
     const notice = this.notices.get('hours');
     const off = plan.filter((p) => !p.loaded);
+    const blocked = life.hoursRunner?.available === false || Boolean(life.scheduleError);
+    const unavailable = life.scheduleError || life.hoursRunner?.message;
     const row = (k, label, what) => `<label class="set-row"><span><span class="set-k">${label}</span><span class="set-d">${what}</span></span>
       <input class="set-time" type="time" data-hours-time="${k}" value="${esc(h[k])}"${h.on ? '' : ' disabled'} aria-label="${label}, starts at"></label>`;
     const hoursPanel = who.unfiled ? `<div class="belief set"><div class="set-title">Quiet hours</div>
@@ -571,11 +573,11 @@ export class Room {
     return `<section class="settings">
       ${hoursPanel || `<div class="belief set">
         <div class="set-head"><div><div class="set-title">Quiet hours</div>
-          <p class="set-d">Time between conversations that’s ${esc(who.name)}’s own: an hour a day to itself, half an hour for the day’s work, and a short time each night to dream over its memory. They run Claude on its own and use ${person(who) === 'you' ? 'your' : `${esc(person(who))}’s`} Claude plan.</p></div>
-          <button class="switch" type="button" role="switch" aria-checked="${h.on}" data-hours-on="${h.on ? 'off' : 'on'}"><span class="knob" aria-hidden="true"></span><span class="vh">Quiet hours</span></button></div>
+          <p class="set-d">${blocked ? esc(unavailable) : `Time between conversations that’s ${esc(who.name)}’s own: an hour a day to itself, half an hour for the day’s work, and a short time each night to dream over its memory. They run Claude on its own and use ${person(who) === 'you' ? 'your' : `${esc(person(who))}’s`} Claude plan.`}</p></div>
+          <button class="switch" type="button" role="switch" aria-checked="${h.on}" data-hours-on="${h.on ? 'off' : 'on'}"${blocked && !h.on ? ' disabled' : ''}><span class="knob" aria-hidden="true"></span><span class="vh">Quiet hours</span></button></div>
         <div class="set-rows">${row('mine', 'Its own hour', 'An hour to itself')}${row('ours', 'Our hour', 'Half an hour for the day’s work')}${row('dream', 'The dream', 'A short time each night')}</div>
         ${off.length ? `<p class="set-d flag">${off.length === plan.length ? 'Scheduled, but not loaded: they won’t run until they are.' : `${plural(off.length, 'hour')} scheduled but not loaded.`}</p>` : ''}
-        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || (changed ? 'Not saved yet.' : h.on ? 'Scheduled on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
+        <div class="acts"><span class="hint${notice ? ' flag' : ''}" aria-live="polite">${esc(notice || life.scheduleError || (changed ? 'Not saved yet.' : h.on ? 'Scheduled on this machine.' : 'Off. Nothing runs between conversations.'))}</span>
           ${changed ? '<button class="cancel" type="button" data-hours-reset="1">Undo</button>' : ''}
           <button class="send" type="button" data-hours-save="1"${changed && this.sending !== 'hours' ? '' : ' disabled'}>${this.sending === 'hours' ? 'Saving…' : 'Save'}</button></div>
       </div>`}

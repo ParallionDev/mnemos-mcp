@@ -11,6 +11,8 @@ visible, because a health card that only ever says "fine" is worth
 nothing on the day it isn't.
 """
 
+
+from tests.portable import set_home
 import pytest
 
 from mnemos.simple_runtime import MnemosRuntime, format_health_card
@@ -24,7 +26,7 @@ def _seed_home(tmp_path):
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+    set_home(monkeypatch, str(_seed_home(tmp_path)))
     r = MnemosRuntime(db_path=str(tmp_path / "signals.db"), agent_id="demo")
     yield r
     r.close()

@@ -25,7 +25,7 @@ async function json(path) {
 /* ---------- who, how warm, and what you can check ---------- */
 
 function head() {
-  const who = life.identity, h = life.hours[0] || null, k = temperature(h);
+  const who = life.identity, h = life.hours.find((hour) => !hour.handoff) || null, k = temperature(h);
   const asks = waiting(life.notes || []).length;                  // what's waiting on you, counted in the tab
   document.title = `${asks ? `(${asks}) ` : ''}${who.name} · the log`;
   $('name').textContent = who.name;
@@ -55,7 +55,7 @@ function head() {
     return d.getTime();
   };
   const next = [...(life.schedule || [])].sort((a, b) => b.loaded - a.loaded || soon(a) - soon(b))[0];
-  v.push(next ? `<span>next hour ${Number.isFinite(soon(next)) ? `at ${clock(new Date(soon(next)))}` : 'scheduled'}${next.loaded ? '' : ', but not loaded'}</span>` : '<span>hours not scheduled</span>');
+  v.push(life.scheduleError ? '<span class="flag">hour schedule unavailable</span>' : next ? `<span>next hour ${Number.isFinite(soon(next)) ? `at ${clock(new Date(soon(next)))}` : 'scheduled'}${next.loaded ? '' : ', but not loaded'}</span>` : '<span>hours not scheduled</span>');
   const made = at(life.made), stale = Date.now() - made.getTime() > STALE_AFTER;
   v.push(`<span class="fresh">${stale ? `stopped updating ${ago(Date.now() - made.getTime())}` : `read ${ago(Date.now() - made.getTime())}`}</span>`);
   const el = $('verify'); el.innerHTML = v.join(''); el.classList.toggle('stale', stale);

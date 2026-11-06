@@ -27,6 +27,7 @@ in another process from the one that captured.
 
 from __future__ import annotations
 
+import os
 import asyncio
 import json
 import re
@@ -170,10 +171,10 @@ def _home(folder: Path) -> Path:
 
 def _env(folder: Path, session: str = "") -> dict[str, str]:
     env = {
-        "HOME": str(_home(folder)),
+        "HOME": str(_home(folder)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(folder)),
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "MNEMOS_DISABLE_DOTENV": "1",
-        "PYTHONPATH": ":".join(sys.path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
     }
     if session:
         # A Claude Code session with no transcript to read.

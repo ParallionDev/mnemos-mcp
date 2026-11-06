@@ -69,6 +69,6 @@ def test_mnemos_life_says_plainly_where_the_hours_cant_run(tmp_path, monkeypatch
 
     err = capsys.readouterr().err
     assert code == 1
-    assert "The quiet hours can't run on this system" in err, err
-    assert "they run on macOS and Linux" in err, err
+    assert "The quiet hours runner couldn't be imported" in err, err
+    assert 'mnemos.life' in err, err
     assert not db.exists()

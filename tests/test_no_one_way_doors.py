@@ -23,6 +23,7 @@ none of it: it wakes, fades and restores nothing.
 
 from __future__ import annotations
 
+import os
 import hashlib
 import re
 import sqlite3
@@ -179,10 +180,10 @@ def _recall_in_another_process(db, cue: str, *, home: Path, session: str) -> str
         text=True,
         timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
             "CLAUDE_CODE_SESSION_ID": session,
         },
     )

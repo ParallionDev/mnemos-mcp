@@ -18,6 +18,8 @@ things went wrong on a real store:
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import pytest
 
 from mnemos.consolidation.softening import _create_or_reinforce_lesson
@@ -81,7 +83,7 @@ def test_a_placeholder_impact_is_not_a_lesson(store):
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     r = MnemosRuntime(db_path=str(tmp_path / "l.db"), agent_id="demo", use_dedicated_model=False)
     yield r
     r.close()

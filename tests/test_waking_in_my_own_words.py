@@ -12,6 +12,8 @@ hook reads the launch line with ``ps``, which the build sandbox blocks.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import json
 import math
 import random
@@ -36,7 +38,7 @@ SCOPE = {"agent_id": "nova", "person_id": "riley", "project_scope": "demo"}
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     rt = MnemosRuntime(db_path=str(tmp_path / "memory.db"), use_dedicated_model=False, **SCOPE)
     rt._ensure_init()
     yield rt

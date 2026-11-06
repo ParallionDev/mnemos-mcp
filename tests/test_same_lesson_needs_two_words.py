@@ -16,6 +16,8 @@ near-duplicate.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import pytest
 
 from mnemos.consolidation.softening import run_softening_pass
@@ -136,7 +138,7 @@ def test_a_one_word_lesson_is_still_its_own(store):
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     r = MnemosRuntime(db_path=str(tmp_path / "r.db"), agent_id="demo", use_dedicated_model=False)
     r._ensure_init()
     yield r

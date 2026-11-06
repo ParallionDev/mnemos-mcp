@@ -7,6 +7,9 @@ injects the packet before the first turn. Both are easy to break silently
 looks identical to a hook with nothing to say.
 """
 
+
+import os
+from tests.portable import set_home
 import json
 
 import pytest
@@ -52,7 +55,7 @@ class TestServerInstructions:
 
 class TestSessionStartHook:
     def test_emits_a_valid_session_start_payload(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
         from mnemos.simple_runtime import MnemosRuntime
 
@@ -80,7 +83,7 @@ class TestSessionStartHook:
         The harness treats a non-zero exit as a failed hook. Whatever goes
         wrong in here, the session must still start — silently.
         """
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         corrupt = tmp_path / "corrupt.db"
@@ -98,7 +101,7 @@ class TestSessionStartHook:
         create a fresh empty memory at every session start and report a
         perfectly healthy — and permanently empty — packet.
         """
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         missing = tmp_path / "typo" / "memory.db"
@@ -141,10 +144,12 @@ class TestTheHookNeverBlocksOnStdin:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env={
-                "HOME": str(_seed_home(tmp_path)),
+                # Python 3.10 needs SystemRoot to initialize Windows entropy.
+                **({"SystemRoot": os.environ["SystemRoot"]} if os.name == "nt" else {}),
+                "HOME": str(_seed_home(tmp_path)), "PYTHONUTF8": "1", "USERPROFILE": str(_seed_home(tmp_path)),
                 "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
                 "MNEMOS_DISABLE_DOTENV": "1",
-                "PYTHONPATH": ":".join(sys.path),
+                "PYTHONPATH": os.pathsep.join(sys.path),
             },
         )
         try:
@@ -183,7 +188,7 @@ class TestContinuityOnlyPacket:
         return db_path
 
     def test_the_hook_omits_the_graph_by_default(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         db_path = self._seed(tmp_path)
@@ -201,7 +206,7 @@ class TestContinuityOnlyPacket:
         assert "Riley prefers cold brew" in context, "continuity was dropped too"
 
     def test_the_graph_can_be_opted_back_in(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         db_path = self._seed(tmp_path)
@@ -225,7 +230,7 @@ class TestContinuityOnlyPacket:
         notes, later sections — was hard-cut mid-word by the clamp. On the
         live store this was cutting a sentence off at "...and every".
         """
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.interface.context_packet import build_context_packet
         from mnemos.simple_runtime import MnemosRuntime
         from mnemos.store.sqlite_store import EngramStore
@@ -266,7 +271,7 @@ class TestContinuityOnlyPacket:
         ordinary continuity note in this path, spending a packet slot on the
         machinery describing itself.
         """
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.dream_journal import write_dream_entry
         from mnemos.interface.context_packet import build_context_packet
         from mnemos.simple_runtime import MnemosRuntime
@@ -302,7 +307,7 @@ class TestContinuityOnlyPacket:
 class TestHookInstaller:
     def test_codex_uses_its_own_default_hook_file(self, tmp_path, monkeypatch):
         home = _seed_home(tmp_path)
-        monkeypatch.setenv("HOME", str(home))
+        set_home(monkeypatch, str(home))
         from mnemos.cli import main
 
         assert main(["hooks", "install", "codex", "--write"]) == 0
@@ -312,7 +317,7 @@ class TestHookInstaller:
     def test_codex_install_preserves_config_and_covers_compaction(
         self, tmp_path, monkeypatch, capsys
     ):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "folder with spaces" / "hooks.json"
@@ -357,7 +362,7 @@ class TestHookInstaller:
         assert "/hooks" in capsys.readouterr().out
 
     def test_codex_refuses_invalid_json(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "hooks.json"
@@ -368,7 +373,7 @@ class TestHookInstaller:
         assert settings.read_text() == "{ invalid"
 
     def test_write_preserves_unrelated_settings_and_hooks(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "settings.json"
@@ -396,7 +401,7 @@ class TestHookInstaller:
         assert any("mnemos" in c for c in commands)
 
     def test_reinstall_replaces_rather_than_stacks(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "settings.json"
@@ -413,7 +418,7 @@ class TestHookInstaller:
         assert len(commands) == 1, f"hook stacked on reinstall: {commands}"
 
     def test_refuses_to_clobber_an_unparseable_settings_file(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "settings.json"
@@ -423,7 +428,7 @@ class TestHookInstaller:
         assert settings.read_text() == "{ this is not json"
 
     def test_refuses_invalid_hook_shapes(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         for payload in ({"hooks": []}, {"hooks": {"SessionStart": {}}}):
@@ -442,7 +447,7 @@ class TestHookInstaller:
         baked into the hook, pointing every future session at a different
         installation and a different store than the one just set up.
         """
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         wrong = tmp_path / "elsewhere" / "mnemos"
@@ -461,11 +466,13 @@ class TestHookInstaller:
         assert main(["hooks", "install", "--write", "--settings", str(settings)]) == 0
 
         command = json.loads(settings.read_text())["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-        assert command.startswith(str(running)), command
+        import shlex
+
+        assert shlex.split(command)[0] == str(running), command
         assert str(wrong) not in command
 
     def test_dry_run_writes_nothing(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         settings = tmp_path / "settings.json"
@@ -482,7 +489,7 @@ class TestAnotherHarnessRunningClaudeCodesHooks:
     Claude Code session never does, and when unsure the hook runs."""
 
     def _remembering(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.simple_runtime import MnemosRuntime
 
         db_path = str(tmp_path / "grok.db")

@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from mnemos import portable_flock
 
 
@@ -59,3 +61,35 @@ def test_native_hour_module_and_companion_can_import():
 
     assert callable(life.run_hour)
     assert Exporter.hours_dir.fget is not None
+
+
+@pytest.mark.parametrize('content', [b'', b'old lock\x00'])
+def test_lock_never_changes_the_file(tmp_path, content):
+    path = tmp_path / 'old.lock'
+    path.write_bytes(content)
+    with path.open('a') as handle:
+        portable_flock.flock(handle, portable_flock.LOCK_EX | portable_flock.LOCK_NB)
+        portable_flock.flock(handle, portable_flock.LOCK_UN)
+    assert path.read_bytes() == content
+
+
+def test_lock_is_released_when_holder_is_killed(tmp_path):
+    path = tmp_path / 'crash.lock'
+    child = subprocess.Popen([
+        sys.executable, '-c',
+        "from mnemos import portable_flock as f; import sys; "
+        "h=open(sys.argv[1], 'a'); f.flock(h, f.LOCK_EX|f.LOCK_NB); "
+        "print('locked', flush=True); sys.stdin.read()", str(path),
+    ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    try:
+        assert child.stdout.readline().strip() == b'locked'
+        assert _child(path) == 'busy'
+        child.kill()
+        child.wait(timeout=5)
+        assert _child(path) == 'acquired'
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        child.stdin.close()
+        child.stdout.close()

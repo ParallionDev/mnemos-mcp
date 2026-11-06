@@ -1,3 +1,5 @@
+
+from tests.portable import set_home
 import pytest
 
 from mnemos.consolidation.softening import run_softening_pass
@@ -10,7 +12,7 @@ IMPACT = "The ferry decides every trip."
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, str(tmp_path))
     runtime = MnemosRuntime(db_path=tmp_path / "memory.db", use_dedicated_model=False, agent_id="demo")
     yield runtime
     runtime.close()

@@ -21,6 +21,8 @@ machine fails the test too. The keys are fake.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import io
 import json
 import logging
@@ -161,7 +163,7 @@ def home(tmp_path, monkeypatch) -> Path:
     working folder is the home folder, so its .env is ~/.env."""
     home = tmp_path / "home"
     home.mkdir()
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.chdir(home)
     return home

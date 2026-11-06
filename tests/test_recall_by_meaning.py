@@ -974,8 +974,8 @@ def test_a_handoff_and_a_capture_are_recalled_in_another_process(tmp_path):
     done = subprocess.run(
         [sys.executable, "-c", _RECALL, str(db), "lighthouse storm log"],
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path)},
     )
 
     assert done.returncode == 0, done.stderr

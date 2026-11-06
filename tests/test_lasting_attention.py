@@ -32,6 +32,8 @@ No test reaches a real network, a real model or a real ~/.mnemos.
 
 from __future__ import annotations
 
+import os
+
 import sqlite3
 import subprocess
 import sys
@@ -147,10 +149,10 @@ finally:
 def _in_another_process(db: Path, home: Path, call: str, *args: str, session: str = "") -> str:
     """One runtime call in a process of its own, as each session is."""
     env = {
-        "HOME": str(home),
+        "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "MNEMOS_DISABLE_DOTENV": "1",
-        "PYTHONPATH": ":".join(sys.path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
         "PYTHONDONTWRITEBYTECODE": "1",
     }
     if session:

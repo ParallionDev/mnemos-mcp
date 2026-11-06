@@ -18,6 +18,7 @@ decides. Its words are kept as written and never read for a yes or a no.
 
 from __future__ import annotations
 
+import os
 import json
 import re
 import shutil
@@ -948,10 +949,10 @@ def _cli(*args, home):
         [sys.executable, "-m", "mnemos.cli", *args],
         capture_output=True, text=True, timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
 
@@ -961,10 +962,10 @@ def _python(code: str, *, home):
         [sys.executable, "-c", code],
         capture_output=True, text=True, timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
 

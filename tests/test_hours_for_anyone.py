@@ -33,12 +33,13 @@ stand-in.
 
 from __future__ import annotations
 
+from tests.portable import set_home, fake_claude
+
 import io
 import json
 import os
 from pathlib import Path
 import plistlib
-import pwd
 import shlex
 import sqlite3
 import subprocess
@@ -59,9 +60,9 @@ FAKE_MNEMOS = '/opt/fake/mnemos'
 def home(tmp_path, monkeypatch):
     folder = tmp_path / 'home'
     (folder / '.mnemos').mkdir(parents=True)
-    monkeypatch.setenv('HOME', str(folder))
+    set_home(monkeypatch, str(folder))
     monkeypatch.setenv('MNEMOS_LIFE_MNEMOS_BIN', FAKE_MNEMOS)
-    monkeypatch.setenv('MNEMOS_CLAUDE_BIN', str(ROOT / 'tests/fake_claude.py'))
+    monkeypatch.setenv('MNEMOS_CLAUDE_BIN', fake_claude(tmp_path))
     monkeypatch.setenv('FAKE_CLAUDE_LOG', str(tmp_path / 'fake.json'))
     monkeypatch.setenv('FAKE_CLAUDE_SCENARIO', 'ok')
     # The executable fake uses env python3 and must use this suite's interpreter.
@@ -354,7 +355,8 @@ def test_everything_an_hour_writes_stays_under_the_home_it_runs_with(tmp_path):
     before = _files(tmp_path, outside=host_home)
     env = {
         **os.environ,
-        'HOME': str(host_home),
+        'HOME': str(host_home), "PYTHONUTF8": "1",
+        'USERPROFILE': str(host_home),
         'PYTHONPATH': os.pathsep.join([str(ROOT), os.environ.get('PYTHONPATH', '')]),
         'PYTHONDONTWRITEBYTECODE': '1',
     }
@@ -392,7 +394,16 @@ def test_everything_an_hour_writes_stays_under_the_home_it_runs_with(tmp_path):
     mcp = json.loads((folder / 'mcp.json').read_text())['mcpServers']['mnemos']['args']
     assert mcp[mcp.index('--db-path') + 1] == str(store)
     from mnemos.life import SECRET_PATHS
-    account = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    if os.name == 'nt':
+        import ctypes
+
+        profile = ctypes.create_unicode_buffer(32768)
+        assert ctypes.windll.shell32.SHGetFolderPathW(None, 40, None, 0, profile) == 0
+        account = Path(profile.value)
+    else:
+        import pwd
+
+        account = Path(pwd.getpwuid(os.getuid()).pw_dir)
     assert account != host_home
     deny = json.loads((folder / 'settings.json').read_text())['permissions']['deny']
     secrets = [rule for rule in deny if rule.startswith('Read(/') and '**/.env' not in rule]
@@ -453,7 +464,12 @@ def test_a_linked_claude_folder_is_set_aside_as_the_link(db, home, tmp_path):
     (elsewhere / 'settings.json').write_text('{"hooks": {}}')
     studio = life.studio_dir('claude-code')
     studio.mkdir(parents=True)
-    (studio / '.claude').symlink_to(elsewhere, target_is_directory=True)
+    try:
+        (studio / '.claude').symlink_to(elsewhere, target_is_directory=True)
+    except OSError as exc:
+        if getattr(exc, 'winerror', None) == 1314:
+            pytest.skip('Windows account has no symlink privilege')
+        raise
 
     record = run(db)
 

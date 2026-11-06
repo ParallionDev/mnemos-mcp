@@ -13,6 +13,8 @@ The watchdog reads only, so the last tests check that looking changes nothing.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import hashlib
 import re
 import sqlite3
@@ -40,7 +42,7 @@ AHEAD = 999
 def _home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     # Recall by words only, whatever this machine has installed; the tests of
     # the meaning index give it a backend of their own (``meaning``).
     monkeypatch.setattr(ei, "_check_local_deps", lambda: False)

@@ -15,6 +15,9 @@ controlled. Sockets live under a HOME short enough for a unix socket path.
 
 from __future__ import annotations
 
+from tests.portable import require_unix_socket
+from tests.portable import set_home
+
 import json
 import math
 import os
@@ -125,7 +128,7 @@ def home(tmp_path, monkeypatch):
         link = Path("/tmp") / f"mnq-{uuid.uuid4().hex[:10]}"
         os.symlink(real, link)
         path = link
-    monkeypatch.setenv("HOME", str(path))
+    set_home(monkeypatch, str(path))
     yield path
     if link is not None:
         os.unlink(link)
@@ -483,6 +486,7 @@ def test_a_store_newer_than_the_hook_gets_nothing_printed(tmp_path, meaning, hom
 
 def _answerer(db: Path, claude_pid: int | None = None) -> cue.CueAnswerer:
     """A warm answerer, as a server starts one where the prompt hook is in use."""
+    require_unix_socket()
     cue.mark_hook_in_use()
     answerer = cue.CueAnswerer(str(db), claude_pid=claude_pid or os.getpid(), **SCOPE)
     assert answerer.start()
@@ -518,6 +522,7 @@ def test_the_warm_answerer_answers_on_a_private_socket(tmp_path, meaning, home):
 
 
 def test_an_answerer_never_takes_a_live_socket_and_replaces_a_dead_one(tmp_path, meaning, home):
+    require_unix_socket()
     db = _store(tmp_path / "memory.db", *_gate_memories().values())
     first = _answerer(db, claude_pid=4242)
     try:
@@ -544,6 +549,7 @@ def test_where_the_hook_is_not_in_use_the_model_loads_only_when_a_cue_asks(tmp_p
     model at start: the socket opens, and the model loads when the first cue
     asks. That cue, and any before the model is ready, are answered from
     words by the hook; after that, by meaning."""
+    require_unix_socket()
     found = _gate_memories()
     db = _store(tmp_path / "memory.db", *found.values())
     made = []
@@ -576,6 +582,7 @@ def test_where_the_hook_is_not_in_use_the_model_loads_only_when_a_cue_asks(tmp_p
 def _fake_answerer(path: Path, reply: bytes | None) -> threading.Thread:
     """Something listening at ``path`` that answers ``reply`` to anything, or
     never answers at all (None)."""
+    require_unix_socket()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(path))
@@ -657,6 +664,7 @@ def test_a_first_message_asks_another_sessions_answerer_while_its_own_loads(tmp_
 
 
 def test_another_sessions_answerer_for_other_memories_is_never_asked(tmp_path, meaning, home):
+    require_unix_socket()
     found = _gate_memories()
     db = _store(tmp_path / "memory.db", *found.values())
     elsewhere = cue.CueAnswerer(str(db), claude_pid=4242, **{**SCOPE, "project_scope": "elsewhere"})
@@ -677,6 +685,7 @@ def test_another_sessions_answerer_for_other_memories_is_never_asked(tmp_path, m
 def test_of_the_other_sessions_answerers_the_last_to_answer_is_asked_first(tmp_path, meaning, home):
     """The one that answered last is likeliest to be awake. A dead one's socket
     (a server that crashed) is passed over however recent it looks."""
+    require_unix_socket()
     found = _gate_memories()
     db = _store(tmp_path / "memory.db", *found.values())
     used = _answerer(db, claude_pid=4242)
@@ -715,8 +724,8 @@ def test_a_server_that_cannot_start_its_answerer_runs_the_same(monkeypatch):
 
 
 def _env(home: Path, **extra) -> dict[str, str]:
-    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-           "PYTHONPATH": ":".join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+           "PYTHONPATH": os.pathsep.join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"}
     env.update(extra)
     return env
 
@@ -852,6 +861,7 @@ def test_the_hook_imports_nothing_heavy(tmp_path, meaning, home):
 
 
 def test_per_session_files_are_private_and_old_ones_go(tmp_path, home):
+    require_unix_socket()
     old = cue.SeenFile("old-session-0001", "0123456789ab")
     old.record(["engram_OLD"])
     week_ago = time.time() - 8 * 86400
@@ -918,6 +928,7 @@ def test_a_real_server_answers_the_hook_across_processes_and_after_clear(tmp_pat
     runs with the new id, and still reaches the same server. What the old
     session was offered can be offered again, since /clear emptied the
     model's context, and never twice within the new one."""
+    require_unix_socket()
     found = _gate_memories()
     db = _store(tmp_path / "memory.db", *found.values())
     before = _state(db)
@@ -978,7 +989,9 @@ def test_the_prompt_hook_is_installed_by_default(tmp_path, capsys):
         written = json.loads(settings.read_text())
         [entry] = written["hooks"]["UserPromptSubmit"]
         [handler] = entry["hooks"]
-        parts = handler["command"].split()
+        import shlex
+
+        parts = shlex.split(handler['command'])
         assert parts[1:3] == ["hook", "prompt"]
         assert ["--db-path", str(tmp_path / "memory.db")] == parts[parts.index("--db-path"):parts.index("--db-path") + 2]
         assert "--agent-id" in parts and handler["timeout"] >= 1
@@ -991,7 +1004,8 @@ def test_the_prompt_hook_is_installed_by_default(tmp_path, capsys):
     older.write_text("#!/bin/sh\necho 'mnemos: error: invalid choice' >&2\nexit 2\n")
     older.chmod(0o755)
     command = handler["command"].replace(parts[0], str(older), 1)
-    assert subprocess.run(["/bin/sh", "-c", command], capture_output=True).returncode == 0
+    if os.name != 'nt':
+        assert subprocess.run(["/bin/sh", "-c", command], capture_output=True).returncode == 0
 
 
 def test_no_prompt_leaves_the_cue_out_and_takes_out_an_earlier_one(tmp_path, capsys):

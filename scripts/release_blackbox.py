@@ -376,6 +376,10 @@ def main() -> int:
     env.update(
         {
             "HOME": str(home),
+            'USERPROFILE': str(home),
+            'CODEX_HOME': str(home / '.codex'),
+            'MNEMOS_DISABLE_DOTENV': '1',
+            'MNEMOS_SHARED_MEMORY': 'off',
             "PYTHONPATH": str(blocker),
             "MNEMOS_NETWORK_MARKER": str(network_marker),
         }

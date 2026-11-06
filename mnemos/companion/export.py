@@ -75,7 +75,7 @@ HOUR_ID = re.compile(r"[0-9A-Za-z_-]{1,128}")
 NOT_MADE = {"worktrees", "node_modules", "__pycache__"}
 MOST_STUDIO_FILES = 5000
 # A scheduled command that runs the hours: `mnemos … life --hour mine|ours|dream`.
-RUNS_LIFE = re.compile(r"(?:^|[\s/])mnemos(?:\s+\S+)*?\s+life\s")
+RUNS_LIFE = re.compile(r"(?:^|[\s/\\])mnemos(?:\.exe)?['\"]?(?:\s+\S+)*?\s+life\s", re.IGNORECASE)
 HOUR_KIND = re.compile(r"--hour[\s=](mine|ours|dream)\b")
 NAMED_AGENT = re.compile(r"--agent-id[\s=](\S+)")
 # A systemd timer that fires once a day, at a time of day.
@@ -498,6 +498,7 @@ class Exporter:
     scope: MnemosScope
     person: str = ""
     _hour_cache: dict[str, tuple[Any, dict]] = field(default_factory=dict, repr=False)
+    _schedule_error: str = field(default='', init=False, repr=False)
 
     @classmethod
     def for_scope(cls, *, db_path: str | None = None, agent_id: str | None = None,
@@ -516,7 +517,7 @@ class Exporter:
         """Where the hours keep their records, or None where hours can't run."""
         try:
             from ..life import hours_dir
-        except ImportError:  # the runner needs fcntl, which Windows lacks
+        except ImportError:
             return None
         return hours_dir(self.scope.agent_id)
 
@@ -530,7 +531,11 @@ class Exporter:
 
     def _store_shown(self) -> str:
         home, path = str(Path.home()), str(self.db)
-        return "~" + path[len(home):] if path == home or path.startswith(home + os.sep) else path
+        if path == home:
+            return '~'
+        if path.startswith(home + os.sep):
+            return '~/' + self.db.relative_to(Path.home()).as_posix()
+        return path
 
     def identity(self, model: str = "") -> dict:
         """Who this is: the model that signs its memories, named as Mnemos names it."""
@@ -624,6 +629,7 @@ class Exporter:
             model = r.get("model") or ""
             out.append({
                 "id": r["id"], "kind": r.get("kind"), "practice": practice, "status": r.get("status"),
+                'handoff': bool(r.get('handoff')),
                 "reason": r.get("reason") or "", "start": r.get("started_at"), "end": r.get("ended_at"),
                 "minutes": round((end - start).total_seconds() / 60, 1) if start and end else None,
                 "model": model, "modelName": display_name(model) if model else "",
@@ -671,10 +677,27 @@ class Exporter:
 
     def schedule(self) -> list[dict]:
         """Whether anything wakes the hours on its own: a LaunchAgent, a
-        systemd user timer (what `mnemos daemon install --hours` writes where
-        systemd runs) or a crontab line that runs them for this agent. ``when``
+        systemd user timer, Windows task or crontab line that runs them for
+        this agent. ``when``
         is the time of day when the schedule names one, else None."""
         found = []
+        self._schedule_error = ''
+        from ..setup import scheduler, windows_tasks
+
+        if scheduler.detect_backend() == 'windows':
+            try:
+                for job in scheduler.HOUR_JOBS:
+                    name = scheduler.windows_task_name(self.scope.agent_id, job)
+                    info = windows_tasks.query(name)
+                    if info:
+                        at = windows_tasks.daily_at(info)
+                        found.append({'label': name, 'kind': job.args[-1],
+                                      'when': {'Hour': at[0], 'Minute': at[1]} if at else None,
+                                      'loaded': bool(info['enabled']), 'lastResult': info['last_result'],
+                                      'lastRun': info['last_run'], 'nextRun': info['next_run']})
+            except (OSError, RuntimeError, subprocess.TimeoutExpired):
+                self._schedule_error = 'Windows Task Scheduler status is unavailable.'
+                logger.debug(self._schedule_error, exc_info=True)
         agents = _launch_agents()
         for plist_path in sorted(agents.glob("*.plist")) if agents.is_dir() else []:
             try:
@@ -761,6 +784,8 @@ class Exporter:
             "identity": who,
             "hours": hours,
             "schedule": self.schedule(),
+            'scheduleError': self._schedule_error,
+            'hoursRunner': self.hours_runner(),
             "jev": self.jev(),
             "shared": shared,
             "journal": journal,
@@ -781,6 +806,17 @@ class Exporter:
             "handoffs": handoffs,
         }
         return life, {"version": version, "made": iso(now), "memories": memories, "recalled": recalled}
+
+    def hours_runner(self) -> dict:
+        """State the selected runner's availability without executing it."""
+        from .. import life
+
+        runner = life.configured_runner(self.scope.agent_id, str(self.db),
+                                       person_id=self.scope.person_id, project_scope=self.scope.project_scope)
+        why = life.builtin_refusal(runner, 'mine')
+        message = ('Codex Quiet Hours are unavailable: this client has no verified Mnemos-only tool boundary.'
+                   if why and runner == 'codex' else why)
+        return {'runner': runner, 'available': not bool(why), 'reason': why, 'message': message}
 
 
 # ── What came to mind just now ──

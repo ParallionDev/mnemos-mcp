@@ -11,6 +11,8 @@ Novelty breaks the cycle. Something unlike anything already remembered is
 genuinely surprising, and measuring that needs neither beliefs nor a model.
 """
 
+
+from tests.portable import set_home
 import pytest
 
 from mnemos.core.types import SourceType
@@ -67,7 +69,7 @@ class TestCapturePathUsesIt:
         """The skip existed because the path returned 0.0. It no longer does."""
         home = tmp_path / "home"
         (home / ".mnemos").mkdir(parents=True)
-        monkeypatch.setenv("HOME", str(home))
+        set_home(monkeypatch, str(home))
         from mnemos.simple_runtime import MnemosRuntime
 
         r = MnemosRuntime(db_path=str(tmp_path / "s.db"), agent_id="demo",

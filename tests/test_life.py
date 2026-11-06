@@ -1,4 +1,6 @@
 """The closed R24 quiet-hour contract, using only temporary homes and a fake."""
+
+from tests.portable import set_home, fake_claude
 from mnemos import portable_flock as fcntl
 import hashlib
 import io
@@ -26,9 +28,9 @@ RECORD_KEYS = ['id', 'kind', 'started_at', 'ended_at', 'model', 'status', 'reaso
 def home(tmp_path, monkeypatch):
     folder = tmp_path / 'home'
     (folder / '.mnemos').mkdir(parents=True)
-    monkeypatch.setenv('HOME', str(folder))
+    set_home(monkeypatch, str(folder))
     monkeypatch.setenv('MNEMOS_LIFE_MNEMOS_BIN', '/opt/fake/mnemos')
-    monkeypatch.setenv('MNEMOS_CLAUDE_BIN', str(ROOT / 'tests/fake_claude.py'))
+    monkeypatch.setenv('MNEMOS_CLAUDE_BIN', fake_claude(tmp_path))
     monkeypatch.setenv('FAKE_CLAUDE_LOG', str(tmp_path / 'fake.json'))
     monkeypatch.setenv('FAKE_CLAUDE_SCENARIO', 'ok')
     # The executable fake uses env python3 and must use this suite's interpreter.
@@ -327,7 +329,7 @@ def test_second_hour_waits_for_the_first(db):
 def test_config_dir_sets_the_login(db, tmp_path, monkeypatch):
     monkeypatch.setenv('CLAUDE_CONFIG_DIR', 'inherited')
     run(db, config_dir='~/.claude-2')
-    assert log(tmp_path)['env_config'].endswith('/.claude-2')
+    assert Path(log(tmp_path)['env_config']).name == '.claude-2'
     run(db)
     assert log(tmp_path)['env_config'] == 'inherited'
 

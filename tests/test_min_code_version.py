@@ -17,6 +17,7 @@ on a missing import.
 
 from __future__ import annotations
 
+import os
 import hashlib
 import json
 import re
@@ -115,10 +116,10 @@ def _run(*args, home):
         text=True,
         timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
 
@@ -271,10 +272,10 @@ def test_an_older_process_capture_is_read_back_by_another_process(tmp_path):
          "rt = MnemosRuntime(); print(rt.recall(sys.argv[1])); rt.close()", token],
         capture_output=True, text=True, timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert read.returncode == 0, read.stderr

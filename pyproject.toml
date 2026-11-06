@@ -65,6 +65,8 @@ all = [
     "anthropic>=0.25.0",
 ]
 dev = [
+    # Windows fakes need native launchers: .cmd wrappers split multiline argv.
+    "distlib>=0.4.0; sys_platform == 'win32'",
     "pytest>=7.0",
     "pytest-cov>=5.0",
     "ruff>=0.12",

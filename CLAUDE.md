@@ -178,6 +178,14 @@ Claude Code, walled in (`mnemos/life.py`); every other agent's flags failed or
 were not shown to wall a run in (`Runner` in `mnemos/setup/harnesses.py`)
 (`docs/privacy-security.md`, "Quiet Hours").
 
+Native scheduling supports launchd, systemd, cron and Windows Task Scheduler.
+Windows tasks are headless, per-user and least privilege, and require a logged
+in account. `portable_flock.py` keeps native hour records mutually exclusive
+without Unix-only imports. Codex remains fail-closed: the inspected client did
+not establish a Mnemos-only tool boundary. Runner selection must preserve a
+Codex/GPT memory's identity rather than substituting Claude, and a handoff must
+never appear as executed Quiet Hours in the companion.
+
 ---
 
 ## Continuity is the product

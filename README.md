@@ -104,9 +104,10 @@ brings the local model's libraries, PyTorch among them (several hundred MB), and
 `mnemos embeddings download` fetches the model once (about 90 MB). Without it,
 Mnemos still works, but recall matches words only.
 
-It runs on macOS and Linux. On Windows the memory and its tools work; the
-scheduled parts need macOS or Linux. [The guide][guide] has every setup, and
-what each one turns on.
+It runs on macOS, Linux and Windows. Windows schedules upkeep through Task
+Scheduler, headlessly while your account is logged in. Native Quiet Hours
+still require a supported runner; unattended Codex hours remain unavailable.
+[The guide][guide] has every setup, and what each one turns on.
 
 ## What it does
 
@@ -262,7 +263,10 @@ them goes to Anthropic: its words for the hour, short excerpts of its recent
 memory, its wake, and whatever it reads or recalls. Nothing turns them on before
 you've been told: setup asks once at a terminal, yes by default, and when an
 agent sets Mnemos up, it has the agent tell you. With no `claude` command they
-stay off. To turn them off:
+stay off. A Codex or GPT memory does not fall back to Claude: native Codex
+execution has no verified Mnemos-only tool boundary in the inspected client,
+so its hours stay off. A handed-off prompt is not completed execution. To turn
+them off:
 
 ```bash
 mnemos daemon uninstall --hours --write

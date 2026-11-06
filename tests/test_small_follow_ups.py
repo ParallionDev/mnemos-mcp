@@ -27,6 +27,9 @@ No test reaches a real network, a real Jev or a real ~/.mnemos.
 
 from __future__ import annotations
 
+from tests.portable import require_unix_socket
+from tests.portable import set_home
+
 import json
 import math
 import os
@@ -123,8 +126,8 @@ def _engram(content: str, **fields) -> Engram:
 
 
 def _env(home: Path, **extra) -> dict[str, str]:
-    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-           "PYTHONPATH": ":".join(sys.path), "PYTHONDONTWRITEBYTECODE": "1",
+    env = {"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+           "PYTHONPATH": os.pathsep.join(sys.path), "PYTHONDONTWRITEBYTECODE": "1",
            "MNEMOS_JEV_KEY_FILE": os.devnull}
     env.update(extra)
     return env
@@ -141,7 +144,7 @@ def home(tmp_path, monkeypatch):
         link = Path("/tmp") / f"mnr-{uuid.uuid4().hex[:10]}"
         os.symlink(real, link)
         path = link
-    monkeypatch.setenv("HOME", str(path))
+    set_home(monkeypatch, str(path))
     yield path
     if link is not None:
         os.unlink(link)
@@ -507,6 +510,7 @@ def _lights(db: Path) -> Path:
 
 def _answerer(db: Path, judge=None, claude_pid: int | None = None):
     """A warm answerer, as a server starts one where the prompt hook is in use."""
+    require_unix_socket()
     cue.mark_hook_in_use()
     answerer = cue.CueAnswerer(str(db), claude_pid=claude_pid or os.getpid(), judge=judge, **SCOPE)
     assert answerer.start()
@@ -1058,7 +1062,7 @@ def test_doctor_says_whether_the_judge_is_on_where_the_switch_was_read_and_wheth
     config.write_text(json.dumps({"cue_judge": "jev"}))
     monkeypatch.setenv("MNEMOS_JEV_KEY_FILE", str(tmp_path / "no-key-here"))
     keyless = _judge_line(_doctor(db, capsys))
-    assert '"cue_judge": "jev" in ~/.mnemos/config.json' in keyless, keyless
+    assert '"cue_judge": "jev" in ~/.mnemos/config.json' in keyless.replace('\\', '/'), keyless
     assert "no key" in keyless and "no-key-here: missing" in keyless, keyless
 
 

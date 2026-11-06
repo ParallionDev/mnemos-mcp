@@ -20,6 +20,7 @@ exactly controlled; no test needs sentence-transformers or torch.
 
 from __future__ import annotations
 
+import os
 import math
 import re
 import sqlite3
@@ -298,8 +299,8 @@ def test_a_memory_one_sentence_from_the_question_is_found_in_another_process(tmp
     done = subprocess.run(
         [sys.executable, "-c", _RECALL, str(db), "lighthouse"],
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path)},
     )
 
     assert done.returncode == 0, done.stderr

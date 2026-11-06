@@ -1,14 +1,17 @@
 """A small cross-platform advisory lock for Mnemos Quiet Hours.
 
 POSIX keeps fcntl.flock. Windows uses a one-byte region with msvcrt.locking,
-at byte zero of the same .lock file used by the Unix runner. The sentinel
-ensures Windows can lock an initially empty file; no memory data is stored.
+at byte zero of the same .lock file used by the Unix runner. Windows permits
+locking beyond EOF, so even an empty file needs no unsynchronized write.
 """
 from __future__ import annotations
 
 import errno
+import logging
 import os
 from typing import IO
+
+log = logging.getLogger(__name__)
 
 LOCK_EX = 2
 LOCK_NB = 4
@@ -37,11 +40,8 @@ def flock(stream: IO[str] | IO[bytes], operation: int) -> None:
     if not (operation & LOCK_EX):
         raise ValueError("Mnemos Quiet Hours require an exclusive lock")
 
-    # Windows locks a byte range, whereas POSIX flock locks the file.
-    # A sentinel is required for an initially empty .lock file.
-    if os.fstat(fd).st_size == 0:
-        os.lseek(fd, 0, os.SEEK_END)
-        os.write(fd, b"\0")
+    # _locking permits bytes beyond EOF. Writing a sentinel before locking
+    # would race another process acquiring a newly created, empty file.
     os.lseek(fd, 0, os.SEEK_SET)
     mode = msvcrt.LK_NBLCK if operation & LOCK_NB else msvcrt.LK_LOCK
     try:

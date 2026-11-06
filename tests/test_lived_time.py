@@ -13,6 +13,8 @@ before this at its own line.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import math
 import re
 import sqlite3
@@ -162,7 +164,7 @@ def test_two_lived_days_in_a_month_are_two_days_of_fading(tmp_path):
 def test_living_marks_the_day(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     today = _today().date().isoformat()
 
     captured = tmp_path / "captured.db"
@@ -205,7 +207,7 @@ def test_living_marks_the_day(tmp_path, monkeypatch):
 def test_a_person_at_the_command_line_isnt_the_agent_living(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     from mnemos.cli import main
 
     remembered = tmp_path / "remembered.db"

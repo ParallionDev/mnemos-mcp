@@ -16,6 +16,9 @@ concepts it names, as in ``test_the_cue``, so every cosine is controlled.
 
 from __future__ import annotations
 
+from tests.portable import require_unix_socket
+from tests.portable import set_home
+
 import http.server
 import json
 import logging
@@ -117,7 +120,7 @@ def home(tmp_path, monkeypatch):
         link = Path("/tmp") / f"mnj-{uuid.uuid4().hex[:10]}"
         os.symlink(real, link)
         path = link
-    monkeypatch.setenv("HOME", str(path))
+    set_home(monkeypatch, str(path))
     yield path
     if link is not None:
         os.unlink(link)
@@ -244,6 +247,7 @@ class _Judge:
 
 def _answerer(db: Path, judge=None):
     """A warm answerer, as a server starts one where the prompt hook is in use."""
+    require_unix_socket()
     cue.mark_hook_in_use()
     answerer = cue.CueAnswerer(str(db), claude_pid=os.getpid(), judge=judge, **SCOPE)
     assert answerer.start()
@@ -558,6 +562,7 @@ def test_with_the_switch_on_no_answerer_that_judged_means_nothing(tmp_path, mean
 def _socket_answerer(db: Path, reply: dict, *, delay: float, seen: list) -> threading.Thread:
     """Something at the session's answerer socket that keeps the request it
     got and answers ``reply`` after ``delay`` seconds."""
+    require_unix_socket()
     path = cue.answerer_path(os.getpid(), cue.scope_key(str(db), **SCOPE))
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -734,7 +739,7 @@ def test_no_key_no_call_and_nothing_listening_is_an_error(tmp_path, fake_jev, ke
     port = closed.getsockname()[1]
     closed.close()
     with pytest.raises(jev.JevFailed) as failed:
-        jev.ask(MESSAGE, ["a line"], url=f"http://127.0.0.1:{port}{URL_PATH}", timeout=1.0,
+        jev.ask(MESSAGE, ["a line"], url=f"http://127.0.0.1:{port}{URL_PATH}", timeout=3.0 if os.name == 'nt' else 1.0,
                 environ={"MNEMOS_JEV_KEY_FILE": str(key)})
     assert failed.value.kind == "error"
 
@@ -881,8 +886,8 @@ sys.exit(main(sys.argv[1:]))
 
 
 def _env(home: Path, **extra) -> dict[str, str]:
-    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-           "PYTHONPATH": ":".join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"}
+    env = {"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+           "PYTHONPATH": os.pathsep.join(sys.path), "PYTHONDONTWRITEBYTECODE": "1"}
     env.update(extra)
     return env
 
@@ -891,6 +896,7 @@ def test_a_real_server_judges_for_the_hook_across_processes(tmp_path, meaning, h
     """`mnemos serve`, started as Claude Code starts it, judges for the prompt
     hook in its own process: one request to Jev per message, only the judged
     lines printed, the key in no process's output, the store unchanged."""
+    require_unix_socket()
     db = _store(tmp_path / "memory.db")
     order = _candidates(db)
     before = _state(db)

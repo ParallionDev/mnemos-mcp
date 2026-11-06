@@ -7,10 +7,13 @@ learning.
 Two things had to be true and were not. Softening only ran in deep,
 model-gated cycles, so memories never faded at all. And even when a lesson
 engram was created, nothing ever linked it back to the experience it came
+
 from — the DISTILLED_INTO edge count was 0 across a 37,000-edge graph.
 """
 
 import pytest
+
+from tests.portable import set_home
 
 from mnemos.core.types import ConnectionRelation
 from mnemos.simple_runtime import MnemosRuntime
@@ -20,7 +23,7 @@ from mnemos.simple_runtime import MnemosRuntime
 def runtime(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     r = MnemosRuntime(db_path=str(tmp_path / "l.db"), agent_id="demo",
                       use_dedicated_model=False)
     yield r

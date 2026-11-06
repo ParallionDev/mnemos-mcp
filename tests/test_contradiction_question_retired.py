@@ -23,6 +23,7 @@ What these tests hold:
 
 from __future__ import annotations
 
+import os
 import json
 import re
 import sqlite3
@@ -147,8 +148,8 @@ def _hook(db: Path, tmp_path: Path) -> str:
         input=json.dumps({"hook_event_name": "SessionStart", "source": "startup",
                           "session_id": "33333333-cccc-4ddd-8eee-000000000003"}),
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-             "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+             "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": os.pathsep.join(sys.path)},
     )
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]

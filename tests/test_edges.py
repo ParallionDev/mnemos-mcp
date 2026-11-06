@@ -14,6 +14,9 @@
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import json
 import re
 import sqlite3
@@ -50,7 +53,7 @@ WORD_ASK = (
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(tmp_path))
+    set_home(monkeypatch, str(tmp_path))
     runtime = MnemosRuntime(db_path=tmp_path / "memory.db", use_dedicated_model=False, **SCOPE)
     runtime._ensure_init()
     yield runtime
@@ -226,7 +229,7 @@ def _hook(db: Path, tmp_path: Path, *, extra: tuple[str, ...] = ()):
     return subprocess.run(
         [sys.executable, "-m", "mnemos.cli", "hook", "session-start", "--db-path", str(db), *SCOPE_ARGS, *extra],
         input=json.dumps(payload), capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": os.pathsep.join(sys.path)},
     )
 
 

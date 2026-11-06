@@ -350,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     p_life.add_argument("--handoff", action="store_true",
                         help="Print the hour's prompt for the agent to take in its own session, "
                              "run nothing, and record the hour. Needs no claude; works for any agent")
-    p_life.add_argument("--runner", default="claude-code", metavar="AGENT",
+    p_life.add_argument("--runner", default=None, metavar="AGENT",
                         help="Whose command runs the hour built in. Only claude-code does; "
                              "any other agent has the hour handed to it (--handoff)")
 
@@ -859,6 +859,8 @@ def main(argv: list[str] | None = None) -> int:
     ):
         _p = daemon_sub.add_parser(_name, help=_help)
         _scope_options(_p)
+        _p.add_argument('--runner', choices=('claude-code', 'codex'), default=None,
+                        help='Quiet Hours runner; otherwise life.runner or the memory owner')
         if _name != "status":
             _p.add_argument(
                 "--write",
@@ -1291,7 +1293,7 @@ def _cmd_daemon(args: argparse.Namespace) -> int:
     if backend == "unsupported":
         print(
             "No supported scheduler found on this system (looked for launchd, "
-            "systemd and crontab).\n"
+            "systemd, crontab and Windows Task Scheduler).\n"
             "Mnemos still maintains itself opportunistically while a session is "
             "open; only unattended background maintenance is unavailable.",
             file=sys.stderr,
@@ -1324,21 +1326,29 @@ def _blueprint(
     scope = _cli_scope(args)
     mnemos_command = _mnemos_command()
     hour_env = None
+    from . import life
+
+    runner = getattr(args, 'runner', None) or life.configured_runner(
+        scope.agent_id, scope.db_path, person_id=scope.person_id, project_scope=scope.project_scope)
+    refusal = life.builtin_refusal(runner, 'mine')
     if hours:
-        claude = scheduler.find_claude()
+        claude = scheduler.find_claude() if not refusal else None
         if claude:
             hour_env = scheduler.hour_environment(
                 claude_bin=claude,
                 mnemos_command=mnemos_command,
                 config_dir=os.environ.get("CLAUDE_CONFIG_DIR") or None,
             )
-    return scheduler.plan(
+    blueprint = scheduler.plan(
         agent_id=scope.agent_id,
         mnemos_command=mnemos_command,
         scope_args=_scope_args(args),
         hours=scheduler.hour_jobs(mine_at=mine_at, ours_at=ours_at, dream_at=dream_at),
         hour_env=hour_env,
     )
+    blueprint['runner'] = runner
+    blueprint['hours_unavailable'] = refusal
+    return blueprint
 
 
 # What the quiet hours are, said wherever they're offered or scheduled: what
@@ -1386,7 +1396,7 @@ def _daemon_install(blueprint: dict, *, write: bool, hours: bool = False) -> int
             f"(set MNEMOS_LLM_PROVIDER and a key, then reinstall)"
         )
     if no_claude:
-        print(f"\n  The quiet hours are not scheduled: {_NO_CLAUDE}.")
+        print(f"\n  The quiet hours are not scheduled: {blueprint.get('hours_unavailable') or _NO_CLAUDE}.")
     elif hours:
         print(f"\n  Quiet hours give the agent {QUIET_HOURS}.")
         for entry in blueprint["hours"]:
@@ -1454,6 +1464,8 @@ def _apply_schedule(blueprint: dict, entries: list[dict], retired: list[dict]) -
             _systemctl("daemon-reload")
             for entry in entries:
                 _systemctl("enable", "--now", entry["timer_name"])
+    elif backend == 'windows':
+        scheduler.apply_windows(entries)
     else:
         names = [entry["job"].name for entry in entries]
         names += [job.name for job in scheduler.RETIRED_JOBS]
@@ -1483,6 +1495,13 @@ def _unschedule(backend: str, entries: list[dict]) -> None:
                 _unlink_with_backup(Path(path))
         _systemctl("daemon-reload")
 
+    elif backend == 'windows':
+        from .setup import windows_tasks
+
+        for entry in entries:
+            windows_tasks.remove(entry['task_name'])
+            _unlink_with_backup(entry['path'])
+
 
 def _unlink_with_backup(path: Path) -> None:
     path.unlink(missing_ok=True)
@@ -1509,6 +1528,8 @@ def _scheduled(blueprint: dict, entry: dict, crontab: str) -> bool:
             all(path.exists() for path in entry["units"])
             and scheduler.systemd_timer_active(agent_id, job)
         )
+    if backend == 'windows':
+        return scheduler.windows_job_active(agent_id, job)
     return scheduler.cron_has(crontab, agent_id, job.name)
 
 
@@ -1538,6 +1559,15 @@ def _daemon_status(blueprint: dict) -> int:
         print(f"  {entry['job'].name:<16} {'scheduled':<15} {schedule}")
     if not hours_on:
         print(f"  {'quiet hours':<16} {'off':<15} to turn them on: {_HOURS_ON}")
+    if blueprint.get('hours_unavailable'):
+        print('  ' + blueprint['hours_unavailable'])
+    if backend == 'windows':
+        from .setup.windows_tasks import query
+
+        for entry in [*blueprint['entries'], *blueprint['hours']]:
+            info = query(entry['task_name'])
+            if info:
+                print(f"  {entry['job'].name}: last result {info['last_result']}; next {info['next_run']} (local)")
 
     for entry in scheduler.retired_installed(blueprint, crontab):
         print(
@@ -1589,7 +1619,7 @@ def _daemon_uninstall(blueprint: dict, *, write: bool, only_hours: bool = False)
         return 0
 
     try:
-        if backend in ("launchd", "systemd"):
+        if backend in ("launchd", "systemd", 'windows'):
             _unschedule(backend, found)
         else:
             names = [entry["job"].name for entry in targets] if only_hours else None
@@ -1708,7 +1738,10 @@ def _quiet_hours_setup(blueprint: dict, scope) -> bool:
         print(f"Quiet hours: on. Turn them off: {_HOURS_OFF}")
         return False
     if not blueprint["hours_ready"]:
-        print(f"Quiet hours: off, because {_NO_CLAUDE}. Once it's there: {_HOURS_ON}")
+        if blueprint.get('hours_unavailable'):
+            print('Quiet hours: off. ' + blueprint['hours_unavailable'])
+        else:
+            print(f"Quiet hours: off, because {_NO_CLAUDE}. Once it's there: {_HOURS_ON}")
         return False
     if not _can_ask():
         if _state.hours_choice(agent_id) == "no":
@@ -2787,9 +2820,9 @@ def _close_note(runtime, content: str) -> dict | None:
 def _cmd_life(args: argparse.Namespace) -> int:
     try:
         from . import life
-    except ImportError as exc:  # the runner locks with fcntl, which Windows lacks
+    except ImportError as exc:
         print(
-            f"The quiet hours can't run on this system ({exc}); they run on macOS and Linux.",
+            f"The quiet hours runner couldn't be imported ({exc}).",
             file=sys.stderr,
         )
         return 1
@@ -2799,10 +2832,14 @@ def _cmd_life(args: argparse.Namespace) -> int:
         key: getattr(args, key, None)
         for key in ("db_path", "agent_id", "person_id", "project_scope")
     }
+    selected_scope = resolve_scope(**scope_args)
+    runner = args.runner or life.configured_runner(
+        selected_scope.agent_id, selected_scope.db_path,
+        person_id=selected_scope.person_id, project_scope=selected_scope.project_scope)
     record = life.run_hour(
         args.hour, **scope_args, dry_run=args.dry_run, config_dir=args.config_dir,
         store_copy=args.store_copy, max_minutes=args.max_minutes, max_tokens=args.max_tokens,
-        handoff=args.handoff, runner=args.runner,
+        handoff=args.handoff, runner=runner,
     )
     if record.get("status") == "failed" and (args.dry_run or not record.get("id")):
         print(record["reason"], file=sys.stderr)

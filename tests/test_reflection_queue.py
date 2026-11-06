@@ -12,6 +12,8 @@ properties matter more than any other here:
   make an agent ignore its own memory.
 """
 
+
+from tests.portable import set_home
 import pytest
 
 from mnemos.simple_runtime import MnemosRuntime
@@ -25,7 +27,7 @@ def _seed_home(tmp_path):
 
 @pytest.fixture
 def runtime(tmp_path, monkeypatch):
-    monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+    set_home(monkeypatch, str(_seed_home(tmp_path)))
     r = MnemosRuntime(
         db_path=str(tmp_path / "reflect.db"), agent_id="demo",
         use_dedicated_model=False,
@@ -171,7 +173,7 @@ class TestPacketPresence:
 
 class TestScopeIsolation:
     def test_reflections_do_not_leak_across_agents(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         db = str(tmp_path / "shared.db")
         a = MnemosRuntime(db_path=db, agent_id="agent-a", use_dedicated_model=False)
         try:

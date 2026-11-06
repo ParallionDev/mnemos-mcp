@@ -20,6 +20,8 @@ new kind open and never spends it.
 
 from __future__ import annotations
 
+from tests.portable import set_home
+
 import re
 import sqlite3
 from pathlib import Path
@@ -47,7 +49,7 @@ EXPERIENCE = "Debugged the ferry timetable parser for an afternoon."
 def db(tmp_path, monkeypatch) -> Path:
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     return tmp_path / "memory.db"
 
 

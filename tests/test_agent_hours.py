@@ -20,6 +20,8 @@ Hermes, OpenClaw, scheduler and gateway are never touched.
 
 from __future__ import annotations
 
+from tests.portable import python_command
+
 import json
 import os
 from pathlib import Path
@@ -83,9 +85,7 @@ def agents(tmp_path, monkeypatch):
     folder.mkdir()
     jobs, log = tmp_path / "jobs.json", tmp_path / "calls.jsonl"
     for command in ("hermes", "openclaw", "codex", "grok", "gemini"):
-        script = folder / command
-        script.write_text(FAKE_AGENT.replace("{python}", sys.executable))
-        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        python_command(folder / command, FAKE_AGENT.replace("{python}", sys.executable))
     monkeypatch.setenv("PATH", f"{folder}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setenv("FAKE_JOBS", str(jobs))
     monkeypatch.setenv("FAKE_LOG", str(log))
@@ -223,7 +223,8 @@ def test_an_agent_with_no_scheduler_gets_none_and_is_told_to_ask_for_an_hour(age
 def test_a_failing_scheduler_stops_and_says_so(agents, tmp_path, capsys):
     jobs, log = agents
     bad = tmp_path / "bin" / "hermes"
-    bad.write_text(f"#!/bin/sh\necho \"$@\" >> {log}\ncase \"$2\" in list) exit 0;; *) echo no gateway >&2; exit 1;; esac\n")
+    python_command(bad, 'import sys\nprint("no gateway", file=sys.stderr)\n'
+                        'raise SystemExit(0 if sys.argv[1:3] == ["cron", "list"] else 1)\n')
 
     assert main(["connect", "hermes", "--hours", "--write", "--no-upkeep"]) == 1
 

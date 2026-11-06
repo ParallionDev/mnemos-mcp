@@ -265,7 +265,7 @@ def test_an_advanced_server_answers_a_sessions_first_recalls_over_stdio(tmp_path
         args=["-m", "mnemos.cli", "serve", "--mode", "advanced",
               "--db-path", str(tmp_path / "memory.db"), *SCOPE_ARGS],
         env={
-            "HOME": os.environ["HOME"],
+            "HOME": os.environ["HOME"], "PYTHONUTF8": "1", "USERPROFILE": os.environ["HOME"],
             "PATH": "/usr/bin:/bin",
             "MNEMOS_DISABLE_DOTENV": "1",
             "PYTHONPATH": os.pathsep.join(sys.path),

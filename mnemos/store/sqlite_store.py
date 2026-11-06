@@ -5715,17 +5715,25 @@ class ReadOnlyEngramStore(EngramStore):
     looking at memory never brings a store into being.
     """
 
-    def __init__(self, db_path: str | Path):
+    def __init__(self, db_path: str | Path, *, immutable_when_idle: bool = False):
         self.db_path = Path(db_path).expanduser()
         if not self.db_path.is_file():
             raise FileNotFoundError(f"No Mnemos store at {self.db_path}")
         self._conn: sqlite3.Connection | None = None
         self._transaction_depth = 0
+        # Brief diagnostics may avoid creating WAL sidecars for an idle
+        # database. Long-lived readers must keep ordinary WAL visibility.
+        self._immutable_when_idle = immutable_when_idle
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
+            real = self.db_path.resolve()
+            uri = f"{real.as_uri()}?mode=ro"
+            if (self._immutable_when_idle and not Path(f'{real}-wal').exists()
+                    and not Path(f'{real}-journal').exists()):
+                uri += '&immutable=1'
             self._conn = sqlite3.connect(
-                f"{self.db_path.resolve().as_uri()}?mode=ro",
+                uri,
                 uri=True,
                 check_same_thread=False,
             )

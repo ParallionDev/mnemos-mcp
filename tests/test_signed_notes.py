@@ -9,6 +9,7 @@ with the model that wrote it, and the packet shows the signature.
 
 from __future__ import annotations
 
+import os
 import json
 import sqlite3
 import subprocess
@@ -62,10 +63,10 @@ def _hook(db_path: Path, home: Path, payload: dict) -> str:
         text=True,
         timeout=60,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert proc.returncode == 0, proc.stderr

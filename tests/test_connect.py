@@ -12,8 +12,11 @@ Nothing here talks to a real agent.
 
 from __future__ import annotations
 
+from tests.portable import python_command
+
 import asyncio
 import json
+import shlex
 import os
 from pathlib import Path
 import sys
@@ -45,9 +48,10 @@ def agents(tmp_path, monkeypatch):
     folder.mkdir()
     log = tmp_path / "calls.log"
     for command in ("codex", "grok", "gemini", "hermes", "openclaw"):
-        script = folder / command
-        script.write_text(f'#!/bin/sh\necho "{command} $@" >> "{log}"\nexit 0\n')
-        script.chmod(0o755)
+        python_command(folder / command,
+                       'import sys\nfrom pathlib import Path\n'
+                       + f'with Path({str(log)!r}).open("a") as f: '
+                       + f'f.write({command!r} + " " + " ".join(sys.argv[1:]) + "\\n")\n')
     monkeypatch.setenv("PATH", f"{folder}{os.pathsep}{os.environ.get('PATH', '')}")
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex"))
     monkeypatch.setenv("GROK_HOME", str(tmp_path / "grok"))
@@ -361,7 +365,7 @@ def test_the_first_session_names_the_exact_command_for_gemini(agents, tmp_path):
         packet = runtime.context()
     finally:
         runtime.close()
-    line = f"{MNEMOS} --agent-id zed --db-path {tmp_path / 'm.db'} connect gemini --write"
+    line = shlex.join([MNEMOS, '--agent-id', 'zed', '--db-path', str(tmp_path / 'm.db'), 'connect', 'gemini', '--write'])
     assert line in packet
     assert "waking with this memory, and the memories that bear on each message" in packet
 
@@ -374,7 +378,7 @@ def test_an_agent_that_cannot_be_told_is_told_so_and_pointed_at_connect(agents, 
     finally:
         runtime.close()
     assert "I can't tell which agent you are running in" in packet
-    assert f"--agent-id zed --db-path {tmp_path / 'm.db'} connect\n" in packet
+    assert shlex.join(['--agent-id', 'zed', '--db-path', str(tmp_path / 'm.db'), 'connect']) + '\n' in packet
     assert "I can't say what they would cost" in packet and "don't offer them" in packet
 
 

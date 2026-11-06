@@ -18,6 +18,8 @@ the machine running the tests.
 
 from __future__ import annotations
 
+from tests.portable import python_command
+
 import shlex
 from pathlib import Path
 
@@ -57,9 +59,7 @@ def claude(tmp_path, monkeypatch) -> Path:
     """A claude command on PATH, which the quiet hours run."""
     folder = tmp_path / "local-bin"
     folder.mkdir()
-    binary = folder / "claude"
-    binary.write_text("#!/bin/sh\nexit 0\n")
-    binary.chmod(0o755)
+    binary = python_command(folder / "claude", 'pass\n')
     monkeypatch.delenv("MNEMOS_CLAUDE_BIN", raising=False)
     monkeypatch.setenv("PATH", str(folder))
     return binary

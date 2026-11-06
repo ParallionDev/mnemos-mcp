@@ -6,7 +6,11 @@ invocation is indistinguishable from one that works, so the generation
 is asserted directly rather than trusted.
 """
 
+
+from tests.portable import set_home
 import json
+import os
+from pathlib import Path
 import plistlib
 import shlex
 
@@ -101,7 +105,7 @@ class TestPathExpansion:
     def test_scheduled_commands_carry_an_absolute_database_path(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         import argparse
 
         from mnemos.cli import _scope_args
@@ -114,13 +118,13 @@ class TestPathExpansion:
         db_index = emitted.index("--db-path") + 1
         db_path = emitted[db_index]
         assert "~" not in db_path, f"unexpanded path would break a scheduled job: {db_path}"
-        assert db_path.startswith("/"), db_path
+        assert Path(db_path).is_absolute(), db_path
 
     def test_the_expanded_path_still_points_at_the_resolved_store(
         self, tmp_path, monkeypatch
     ):
         """Expansion must not quietly change which store is maintained."""
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         import argparse
         from pathlib import Path
 
@@ -301,7 +305,7 @@ class TestTccWarning:
     """
 
     def test_warns_for_a_protected_install_location(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         protected = tmp_path / "Documents" / "repo" / ".venv" / "bin" / "mnemos"
         protected.parent.mkdir(parents=True)
         protected.touch()
@@ -312,11 +316,11 @@ class TestTccWarning:
         assert "Documents" in warning
 
     def test_silent_for_a_normal_install_location(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         assert scheduler.tcc_warning("/opt/homebrew/bin/mnemos", backend="launchd") is None
 
     def test_only_applies_to_launchd(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         protected = tmp_path / "Documents" / "bin" / "mnemos"
         protected.parent.mkdir(parents=True)
         protected.touch()
@@ -325,7 +329,7 @@ class TestTccWarning:
 
 class TestPlan:
     def test_plan_describes_without_touching_the_system(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
 
         blueprint = scheduler.plan(
             agent_id="nova",
@@ -346,7 +350,7 @@ class TestPlan:
 
 class TestDaemonCli:
     def test_dry_run_schedules_nothing(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         assert main(["daemon", "install", "--agent-id", "nova"]) == 0
@@ -355,7 +359,7 @@ class TestDaemonCli:
         assert not (tmp_path / "home" / "Library" / "LaunchAgents").exists()
 
     def test_status_reports_when_nothing_is_scheduled(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         from mnemos.cli import main
 
         assert main(["daemon", "status", "--agent-id", "nova"]) == 0
@@ -407,15 +411,16 @@ class TestQuietHours:
 
     def test_the_environment_finds_claude_and_mnemos_without_a_shell(self):
         env = self._env()
-        assert env["PATH"].split(":")[0] == "/Users/me/.local/bin"
-        assert "/usr/bin" in env["PATH"].split(":")
+        assert Path(env["PATH"].split(os.pathsep)[0]) == Path('/Users/me/.local/bin')
+        system_bin = str(Path(os.environ.get('SystemRoot', r'C:\Windows')) / 'System32') if os.name == 'nt' else '/usr/bin'
+        assert system_bin in env['PATH'].split(os.pathsep)
         assert env["MNEMOS_CLAUDE_BIN"] == self.CLAUDE
         assert env["MNEMOS_LIFE_MNEMOS_BIN"] == self.MNEMOS
         assert "CLAUDE_CONFIG_DIR" not in env
-        assert self._env(config_dir="/Users/me/.claude-2")["CLAUDE_CONFIG_DIR"] == "/Users/me/.claude-2"
+        assert self._env(config_dir="/Users/me/.claude-2")["CLAUDE_CONFIG_DIR"] == str(Path('/Users/me/.claude-2').absolute())
 
     def test_launchd_carries_the_environment_and_the_folder(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         mine = scheduler.hour_jobs()[0]
         payload = plistlib.loads(scheduler.launchd_plist(
             mine, agent_id="nova", mnemos_command=self.MNEMOS,
@@ -454,7 +459,7 @@ class TestQuietHours:
         assert scheduler.cron_marks(line, "nova", "hour-mine")
 
     def test_the_plan_holds_the_hours_whether_or_not_it_schedules_them(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         unready = scheduler.plan(agent_id="nova", mnemos_command=self.MNEMOS, has_model=False,
                                  backend="launchd")
         assert unready["hours_ready"] is False
@@ -474,7 +479,7 @@ class TestQuietHours:
         assert "EnvironmentVariables" not in upkeep
 
     def test_an_installed_hours_time_is_read_back(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         hours = scheduler.hour_jobs(mine_at=(6, 5))
         for backend in ("launchd", "systemd"):
             blueprint = scheduler.plan(agent_id="nova", mnemos_command=self.MNEMOS, has_model=False,
@@ -513,7 +518,12 @@ class TestFindingClaude:
         version = self._claude(tmp_path / "versions" / "2.1.0")
         link_dir = tmp_path / "bin"
         link_dir.mkdir()
-        (link_dir / "claude").symlink_to(version)
+        try:
+            (link_dir / "claude").symlink_to(version)
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) == 1314:
+                pytest.skip('Windows account has no symlink privilege')
+            raise
         monkeypatch.delenv("MNEMOS_CLAUDE_BIN", raising=False)
         monkeypatch.setenv("PATH", str(link_dir))
 
@@ -563,7 +573,7 @@ class TestTheIndexerJobIsRetired:
         """The first `mnemos daemon install` scheduled `mnemos index` every 30
         minutes when a provider was configured. It is retired with the
         indexer, and found where an earlier install left it."""
-        monkeypatch.setenv("HOME", str(_seed_home(tmp_path)))
+        set_home(monkeypatch, str(_seed_home(tmp_path)))
         [index] = [job for job in scheduler.RETIRED_JOBS if job.name == "index"]
         assert index.args == ("index",)
 
@@ -587,7 +597,7 @@ class TestTccWarningFindsTheCode:
     background job may not read."""
 
     def test_a_checkout_under_documents_warns_though_the_command_is_elsewhere(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         checkout = tmp_path / "Documents" / "Repositories" / "mnemos" / "mnemos"
         checkout.mkdir(parents=True)
 
@@ -601,7 +611,7 @@ class TestTccWarningFindsTheCode:
         assert "PyPI" in warning and "wheel" in warning
 
     def test_an_install_outside_those_folders_is_quiet(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         site = tmp_path / ".local" / "pipx" / "venvs" / "mnemos-continuity" / "lib" / "mnemos"
         site.mkdir(parents=True)
         assert scheduler.tcc_warning(
@@ -609,7 +619,7 @@ class TestTccWarningFindsTheCode:
         ) is None
 
     def test_by_default_it_looks_at_this_packages_own_folder(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("HOME", str(tmp_path))
+        set_home(monkeypatch, str(tmp_path))
         inside = tmp_path / "Desktop" / "mnemos" / "mnemos"
         inside.mkdir(parents=True)
         monkeypatch.setattr(scheduler, "package_folder", lambda: inside)

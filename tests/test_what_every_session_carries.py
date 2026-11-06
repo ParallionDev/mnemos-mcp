@@ -19,6 +19,9 @@ SessionStart hook in another process.
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import json
 import re
 import subprocess
@@ -81,10 +84,10 @@ def _served_instructions(mode: str, folder: Path) -> str:
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
     env = {
-        "HOME": str(_home(folder)),
+        "HOME": str(_home(folder)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(folder)),
         "PATH": "/usr/bin:/bin",
         "MNEMOS_DISABLE_DOTENV": "1",
-        "PYTHONPATH": ":".join(sys.path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
     }
     params = StdioServerParameters(
         command=sys.executable,
@@ -123,10 +126,10 @@ def _hook(db: Path, folder: Path) -> str:
         text=True,
         timeout=180,
         env={
-            "HOME": str(_home(folder)),
+            "HOME": str(_home(folder)), "PYTHONUTF8": "1", "USERPROFILE": str(_home(folder)),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert done.returncode == 0, done.stderr
@@ -211,7 +214,7 @@ def test_each_belief_line_carries_the_id_a_correction_takes(tmp_path, monkeypatc
 
     # The reader corrects one belief and retires the other, naming each by
     # the id its line carries.
-    monkeypatch.setenv("HOME", str(_home(tmp_path)))
+    set_home(monkeypatch, str(_home(tmp_path)))
     monkeypatch.setenv("MNEMOS_DISABLE_DOTENV", "1")
     runtime = MnemosRuntime(db_path=str(db), use_dedicated_model=False, **SCOPE)
     try:

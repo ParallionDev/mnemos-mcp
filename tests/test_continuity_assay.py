@@ -13,6 +13,7 @@ hand. If these fail, Mnemos does not do the one thing it exists to do,
 regardless of what the rest of the suite says.
 """
 
+import os
 import json
 import sqlite3
 import subprocess
@@ -39,11 +40,11 @@ def _run(*args, home, cwd=None, timeout=180):
         timeout=timeout,
         cwd=str(cwd) if cwd else None,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
             # A developer's real provider keys must never reach the assay.
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     return result
@@ -62,10 +63,10 @@ def _recall(*queries, home):
         text=True,
         timeout=180,
         env={
-            "HOME": str(home),
+            "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
             "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             "MNEMOS_DISABLE_DOTENV": "1",
-            "PYTHONPATH": ":".join(sys.path),
+            "PYTHONPATH": os.pathsep.join(sys.path),
         },
     )
     assert result.returncode == 0, result.stderr

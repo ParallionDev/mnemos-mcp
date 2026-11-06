@@ -34,6 +34,7 @@ No test reaches a real network, a real model or a real ~/.mnemos.
 
 from __future__ import annotations
 
+import os
 import ast
 import json
 import math
@@ -112,10 +113,10 @@ def _home(folder: Path) -> Path:
 def _env(home: Path, **extra: str) -> dict[str, str]:
     """A process of its own, with only what an agent's harness gives it."""
     return {
-        "HOME": str(home),
+        "HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home),
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
         "MNEMOS_DISABLE_DOTENV": "1",
-        "PYTHONPATH": ":".join(sys.path),
+        "PYTHONPATH": os.pathsep.join(sys.path),
         **extra,
     }
 
@@ -873,7 +874,7 @@ def test_the_only_code_that_writes_these_words_is_the_tools_and_the_persons_own_
                         here = parents[here]
                         if isinstance(here, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                             names.append(here.name)
-                    found.append(f"{path.relative_to(ROOT / 'mnemos')}:{'.'.join(reversed(names))}")
+                    found.append(f"{path.relative_to(ROOT / 'mnemos').as_posix()}:{'.'.join(reversed(names))}")
         return sorted(found)
 
     assert calls("write_journal_entry") == ["simple_runtime.py:MnemosRuntime.journal"]
@@ -898,7 +899,7 @@ def test_the_only_code_that_writes_these_words_is_the_tools_and_the_persons_own_
     for path in sorted((ROOT / "mnemos").rglob("*.py")):
         for match in re.finditer(r"(INSERT INTO|UPDATE|DELETE FROM)\s+(journal_entries|notes)\b(\s+SET\s+\S+)?",
                                  path.read_text(encoding="utf-8")):
-            statements.setdefault(str(path.relative_to(ROOT / "mnemos")), []).append(
+            statements.setdefault(path.relative_to(ROOT / 'mnemos').as_posix(), []).append(
                 " ".join(f"{match.group(1)} {match.group(2)}{match.group(3) or ''}".split())
             )
     assert statements == {"store/sqlite_store.py": [

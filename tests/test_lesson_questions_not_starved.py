@@ -16,6 +16,7 @@ taught before it fades.
 
 from __future__ import annotations
 
+import os
 import re
 import sqlite3
 import subprocess
@@ -269,8 +270,8 @@ def test_a_question_asked_in_one_process_is_answered_in_another(tmp_path):
     done = subprocess.run(
         [sys.executable, "-c", _MAINTAIN, str(db)],
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path)},
     )
     assert done.returncode == 0, done.stderr
     assert "Cycle: shallow" in done.stdout, done.stdout

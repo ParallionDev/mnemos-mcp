@@ -10,6 +10,7 @@ each with the request's id, and an error as one plain sentence.
 
 from __future__ import annotations
 
+import os
 import json
 import sqlite3
 import subprocess
@@ -57,8 +58,8 @@ def _interface(db: Path, home: Path, requests: list[dict], **env: str) -> list[d
         [sys.executable, "-m", "mnemos.cli", "interface", "--db-path", str(db), *SCOPE_ARGS],
         input="".join(json.dumps(request) + "\n" for request in requests),
         capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
-             "PYTHONPATH": ":".join(sys.path), **env},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin", "MNEMOS_DISABLE_DOTENV": "1",
+             "PYTHONPATH": os.pathsep.join(sys.path), **env},
     )
     assert done.returncode == 0, done.stderr
     lines = done.stdout.splitlines()

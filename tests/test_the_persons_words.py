@@ -15,6 +15,9 @@ Hook packets set the model in the payload: the hook reads the launch line with
 
 from __future__ import annotations
 
+import os
+from tests.portable import set_home
+
 import json
 import re
 import subprocess
@@ -47,7 +50,7 @@ KEPT_BEFORE = "I still have what I kept before:"
 def home(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
+    set_home(monkeypatch, str(home))
     # A person's terminal, not an agent's own shell: `remember` keeps the
     # agent's words when Claude Code (or another agent) runs it.
     monkeypatch.delenv("CLAUDECODE", raising=False)
@@ -365,8 +368,8 @@ def _hook(db: Path, home: Path, session: str) -> str:
         [sys.executable, "-m", "mnemos.cli", "hook", "session-start",
          "--db-path", str(db), *SCOPE_ARGS],
         input=json.dumps(payload), capture_output=True, text=True, timeout=180,
-        env={"HOME": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
-             "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": ":".join(sys.path)},
+        env={"HOME": str(home), "PYTHONUTF8": "1", "USERPROFILE": str(home), "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+             "MNEMOS_DISABLE_DOTENV": "1", "PYTHONPATH": os.pathsep.join(sys.path)},
     )
     assert done.returncode == 0, done.stderr
     if not done.stdout.strip():

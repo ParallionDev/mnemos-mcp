@@ -171,7 +171,7 @@ CODEX = Harness(
     label="Codex",
     command="codex",
     level=INSTALLS,
-    version="0.166",
+    version="0.166.0-alpha.6 (Windows diagnostic)",
     mcp=Ability(True, "codex mcp add (writes ~/.codex/config.toml)", SAW),
     wake=Ability(
         True,
@@ -188,20 +188,21 @@ CODEX = Harness(
     hours=Hours(
         vendor="OpenAI",
         cost=(
-            "no hour runs by itself in Codex: it has no scheduler Mnemos uses, and Mnemos "
-            "can't wall a Codex run in. If they ask you to take one, you take it inside the "
+            "no hour runs by itself in Codex: Mnemos has not verified a Codex run limited "
+            "to its memory tools. If they ask you to take one, you take it inside the "
             "session, on that session's model, so it spends what the session spends and what "
             "you think over in it goes to OpenAI, as your sessions do"
         ),
         runner=Runner(
             command="codex exec",
-            flags="--sandbox read-only --ignore-user-config --ephemeral",
-            mcp="-c mcp_servers.mnemos.command=... (from its help; not run)",
+            flags="--sandbox read-only --ignore-user-config --ignore-rules --ephemeral; features.shell_tool=false",
+            mcp="isolated mcp_servers config (execution not certified)",
             walled=None,
-            proof=UNTESTED,
+            proof=SAW,
             why=(
-                "its help says --sandbox sets the policy for shell commands it runs, so the "
-                "shell stays; no flag removes it, or the file and web tools"
+                "0.166.0-alpha.6 on Windows still advertises apply_patch and agent delegation "
+                "in debug prompt-input with shell, apps, plugins, browser and multi_agent disabled; "
+                "an exclusive Mnemos tool boundary, model provenance and run limits are not verified"
             ),
         ),
     ),
@@ -210,7 +211,7 @@ CODEX = Harness(
     markers=(),
     wake_event="SessionStart",
     cue_event="UserPromptSubmit",
-    notes=("Not run with a model here: its login was not safe to use unattended.",),
+    notes=("ChatGPT authentication was observed; no unattended model run was launched because tool isolation is uncertified.",),
 )
 
 GROK = Harness(

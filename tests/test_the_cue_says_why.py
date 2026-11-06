@@ -19,6 +19,9 @@ fixes it. What the cue offers (the gate, the floors, the lines) is unchanged.
 
 from __future__ import annotations
 
+from tests.portable import require_unix_socket
+from tests.portable import set_home
+
 import json
 import logging
 import os
@@ -277,9 +280,10 @@ def test_the_socket_path_is_checked_and_reported(tmp_path, meaning, monkeypatch,
     bytes or more): the server says so, the hook answers by words and says why,
     and the health card names the fix, a shorter HOME. Before, nothing said so
     but the fact that every answer came by words."""
+    require_unix_socket()
     deep = tmp_path / ("h" * 90)
     deep.mkdir()
-    monkeypatch.setenv("HOME", str(deep))
+    set_home(monkeypatch, str(deep))
     found = _gate_memories()
     db = _store(tmp_path / "memory.db", *found.values())
     key = cue.scope_key(str(db), **SCOPE)
@@ -324,6 +328,7 @@ def test_failures_counted_before_kinds_were_kept_stay_counted(tmp_path, home):
 def _late_answerer(path: Path, reply: dict, delay: float, asked: list) -> threading.Thread:
     """An answerer that answers ``reply`` after ``delay`` seconds: slow, not
     gone. What it was asked goes to ``asked``."""
+    require_unix_socket()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.bind(str(path))

@@ -19,6 +19,8 @@ Temporary homes and the fake Claude only; meaning is a fake index.
 
 from __future__ import annotations
 
+from tests.portable import set_home, fake_claude
+
 import io
 import json
 import os
@@ -42,9 +44,9 @@ OPUS = "claude-opus-5-5"
 def home(tmp_path, monkeypatch):
     folder = tmp_path / "home"
     (folder / ".mnemos").mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(folder))
+    set_home(monkeypatch, str(folder))
     monkeypatch.setenv("MNEMOS_LIFE_MNEMOS_BIN", "/opt/fake/mnemos")
-    monkeypatch.setenv("MNEMOS_CLAUDE_BIN", str(ROOT / "tests/fake_claude.py"))
+    monkeypatch.setenv("MNEMOS_CLAUDE_BIN", fake_claude(tmp_path))
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "fake.json"))
     monkeypatch.setenv("FAKE_CLAUDE_SCENARIO", "ok")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])

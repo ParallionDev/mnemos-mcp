@@ -3,6 +3,13 @@ import os
 import tempfile
 import pytest
 
+
+@pytest.fixture
+def tmp_path(request, tmp_path_factory):
+    """Keep Windows socket paths short without needing symlink privileges."""
+    name = 't' if os.name == 'nt' else request.node.name[:30]
+    return tmp_path_factory.mktemp(name)
+
 # mcp's stdio_client takes the server's stderr as ``errlog=sys.stderr``, a
 # default bound when mcp is first imported. Imported first inside a test that
 # uses capsys, it bound pytest's in-memory capture, which has no file
@@ -76,6 +83,8 @@ def _isolate_mnemos_env(monkeypatch, tmp_path_factory):
         # A host app's budget for the one hour it runs: from a developer's
         # shell, every hour in the suite would have it.
         "MNEMOS_HOUR_MINUTES", "MNEMOS_HOUR_TOKEN_CEILING",
+        "MNEMOS_HOUR_MODEL", "MNEMOS_CLAUDE_BIN", "MNEMOS_LIFE_MNEMOS_BIN",
+        "MNEMOS_SHARED_MEMORY",
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("MNEMOS_DISABLE_DOTENV", "1")
@@ -100,6 +109,19 @@ class FakeScheduler:
         self.loaded: set[str] = set()
         self.enabled: set[str] = set()
         self.crontab = ""
+        self.windows: dict[str, dict] = {}
+
+    def windows_query(self, name):
+        return self.windows.get(name)
+
+    def windows_register(self, name, xml):
+        self.calls.append(('windows', 'register', name))
+        self.windows[name] = {'xml': xml, 'enabled': True, 'state': 3, 'last_result': 0,
+                              'last_run': '', 'next_run': ''}
+
+    def windows_remove(self, name):
+        self.calls.append(('windows', 'remove', name))
+        self.windows.pop(name, None)
 
     def launchctl(self, action, plist, *, allow_missing=False) -> None:
         from pathlib import Path
@@ -149,8 +171,13 @@ def os_scheduler(monkeypatch):
     finds the real functions in ``os_scheduler.real``."""
     from mnemos import cli
     from mnemos.setup import scheduler
+    from mnemos.setup import windows_tasks
 
     fake = FakeScheduler()
+    fake.real_windows = {name: getattr(windows_tasks, name) for name in ('query', 'register', 'remove')}
+    monkeypatch.setattr(windows_tasks, 'query', fake.windows_query)
+    monkeypatch.setattr(windows_tasks, 'register', fake.windows_register)
+    monkeypatch.setattr(windows_tasks, 'remove', fake.windows_remove)
     fake.real = {
         "_launchctl": cli._launchctl,
         "_systemctl": cli._systemctl,
