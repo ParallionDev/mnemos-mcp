@@ -1,5 +1,5 @@
 """The closed R24 quiet-hour contract, using only temporary homes and a fake."""
-import fcntl
+from mnemos import portable_flock as fcntl
 import hashlib
 import io
 import json
