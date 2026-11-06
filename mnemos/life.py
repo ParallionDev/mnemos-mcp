@@ -28,7 +28,7 @@ Mnemos's config names (``read_dirs``), spends what its budget allows
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import fcntl
+from . import portable_flock as fcntl
 import json
 import math
 import os
