@@ -1713,14 +1713,42 @@ def read_payload(stream: Any, *, deadline: float) -> bytes:
 
     received = bytearray()
     fd = stream.fileno()
+
+    # Windows select() handles sockets only; Codex sends hook JSON on a pipe.
+    # Use a daemon reader so a missing/unfinished payload cannot block a turn.
+    if sys.platform == "win32":
+        from queue import Empty, Queue
+
+        chunks: Queue[bytes | OSError] = Queue()
+
+        def _read_windows_pipe() -> None:
+            try:
+                while True:
+                    chunk = os.read(fd, 65536)
+                    chunks.put(chunk)
+                    if not chunk:
+                        break
+            except OSError as exc:
+                chunks.put(exc)
+
+        threading.Thread(target=_read_windows_pipe, daemon=True).start()
+
     while len(received) <= PAYLOAD_BYTES:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        ready, _, _ = select.select([fd], [], [], remaining)
-        if not ready:
-            break
-        chunk = os.read(fd, 65536)
+        if sys.platform == "win32":
+            try:
+                chunk = chunks.get(timeout=remaining)
+            except Empty:
+                break
+            if isinstance(chunk, OSError):
+                raise chunk
+        else:
+            ready, _, _ = select.select([fd], [], [], remaining)
+            if not ready:
+                break
+            chunk = os.read(fd, 65536)
         if not chunk:
             break
         received.extend(chunk)
