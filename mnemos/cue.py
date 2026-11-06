@@ -1777,6 +1777,7 @@ def read_payload(stream: Any, *, deadline: float) -> bytes:
                 continue
     return bytes(received[:PAYLOAD_BYTES])
 
+
 def record_briefing(
     session: str,
     *,

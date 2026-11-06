@@ -1023,8 +1023,8 @@ def _cmd_hook(args: argparse.Namespace) -> int:
     #
     # Drain any payload the harness passed on stdin, but never block on it. A
     # bare read() waits for EOF, so a harness that spawns the hook and leaves
-    # stdin open would hang session start forever. select() drains only what is
-    # already there and returns the moment there is nothing more to read.
+    # stdin open would hang session start forever. The shared reader waits
+    # briefly for a complete JSON payload, on Windows pipes as well as POSIX.
     #
     # The payload can name the model starting the session (Claude Code sends
     # `model` on SessionStart when it has one), always names the session
