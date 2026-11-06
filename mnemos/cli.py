@@ -1036,15 +1036,12 @@ def _cmd_hook(args: argparse.Namespace) -> int:
     # never chooses whose memory this is.
     received = bytearray()
     try:
-        import select
+        import time
+        from .cue import read_payload
 
-        fd = sys.stdin.fileno()
-        while select.select([fd], [], [], 0.0)[0]:
-            chunk = os.read(fd, 65536)
-            if not chunk:
-                break  # EOF — writer closed its end
-            if len(received) < 1_048_576:
-                received.extend(chunk)
+        # Both hooks use one bounded reader. A SessionStart payload may arrive
+        # shortly after process launch, rather than being immediately ready.
+        received.extend(read_payload(sys.stdin, deadline=time.monotonic() + 0.25))
     except Exception:
         pass
     wake = (getattr(args, "wake", None) or os.environ.get("MNEMOS_WAKE", "") or "full").strip().lower()
